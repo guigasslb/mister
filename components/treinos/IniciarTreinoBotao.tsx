@@ -32,7 +32,7 @@ export function IniciarTreinoBotao({
 
   // O localStorage só existe no cliente — lê no mount para evitar hydration mismatch.
   useEffect(() => {
-    setSuspenso(lerTreinoSuspenso(sessaoId));
+    setSuspenso(obterTreinoSuspenso(sessaoId));
   }, [sessaoId]);
 
   // Índice de retoma limitado ao intervalo válido (defensivo contra planos alterados).
@@ -58,7 +58,7 @@ export function IniciarTreinoBotao({
   function suspender() {
     setAberto(false);
     // Relê o estado guardado pelo ModoTreino para atualizar o rótulo do botão.
-    setSuspenso(lerTreinoSuspenso(sessaoId));
+    setSuspenso(obterTreinoSuspenso(sessaoId));
   }
 
   return (
