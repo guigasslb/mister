@@ -30,7 +30,14 @@ export const brandingSchema = z.object({
   nome: z.string().min(2).max(100),
   corPrimaria: corHex,
   corSecundaria: corHex,
-  logoUrl: z.string().url("URL inválido").optional().or(z.literal("")),
+  // Segurança: `z.string().url()` aceita esquemas perigosos (javascript:, data:).
+  // Restringir a http(s) — o URL alimenta um <img src> na UI.
+  logoUrl: z
+    .string()
+    .url("URL inválido")
+    .refine((url) => /^https?:\/\//i.test(url), { message: "URL inválido" })
+    .optional()
+    .or(z.literal("")),
   morada: z.string().max(200).optional(),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
   telefone: z.string().max(30).optional(),

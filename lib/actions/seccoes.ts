@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { exigirCapacidade, obterMembroAtual } from "@/lib/permissoes";
 import { ok, erro, erroDeValidacao, type Resultado } from "@/lib/utils";
 import { calcularPrecoLicenca } from "@/lib/billing";
+import { atualizarSeccaoSchema } from "@/lib/schemas/seccao";
 import { z } from "zod";
 import { Modalidade, PapelSeccao, type Seccao } from "@prisma/client";
 
@@ -265,4 +266,65 @@ export async function obterContextoSeccao(seccaoId: unknown): Promise<Resultado<
   if (!temAmbitoClube && !eCoordenador) return erro("Sem permissão nesta secção");
 
   return ok(seccao);
+}
+
+/**
+ * Atualiza o nome de uma secção (§8.1.1 — GAP-P2-10).
+ *
+ * Estrutural, de nível clube: exige `CLUBE_ESCALOES` (em coerência com
+ * `adicionarSeccaoAoClube`/`apagarSeccao`). A modalidade é fixa — só o `nome`
+ * personalizado é editável. Isolamento multi-tenant garantido pelo `clubeId`.
+ */
+export async function atualizarSeccao(
+  id: string,
+  dados: { nome: string },
+): Promise<Resultado<Seccao>> {
+  const perm = await exigirCapacidade("CLUBE_ESCALOES");
+  if (!perm.ok) return erro(perm.erro);
+
+  const parsed = atualizarSeccaoSchema.safeParse(dados);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const existe = await prisma.seccao.findFirst({
+    where: { id, clubeId: perm.ctx.clube.id },
+    select: { id: true },
+  });
+  if (!existe) return erro("Secção não encontrada");
+
+  const seccao = await prisma.seccao.update({
+    where: { id },
+    data: { nome: parsed.data.nome },
+  });
+
+  revalidatePath(PATH);
+  return ok(seccao);
+}
+
+/**
+ * Apaga uma secção do clube (§8.1.1 — GAP-P2-10).
+ *
+ * Estrutural, de nível clube: exige `CLUBE_ESCALOES`. Regra de negócio: bloqueia
+ * a remoção enquanto existirem escalões associados (evita orfanar escalões — a
+ * relação `Escalao.seccao` é opcional/SetNull, logo o guard é intencional, não
+ * mera prevenção de P2003). Isolamento multi-tenant pelo `clubeId`.
+ * `MembroSeccao` é Cascade, pelo que não bloqueia.
+ */
+export async function apagarSeccao(id: string): Promise<Resultado<void>> {
+  const perm = await exigirCapacidade("CLUBE_ESCALOES");
+  if (!perm.ok) return erro(perm.erro);
+
+  const existe = await prisma.seccao.findFirst({
+    where: { id, clubeId: perm.ctx.clube.id },
+    select: { id: true },
+  });
+  if (!existe) return erro("Secção não encontrada");
+
+  const totalEscaloes = await prisma.escalao.count({ where: { seccaoId: id } });
+  if (totalEscaloes > 0)
+    return erro("Não é possível apagar uma secção com escalões activos.");
+
+  await prisma.seccao.delete({ where: { id } });
+
+  revalidatePath(PATH);
+  return ok(undefined);
 }

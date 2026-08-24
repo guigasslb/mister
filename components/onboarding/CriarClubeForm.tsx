@@ -70,7 +70,7 @@ export function CriarClubeForm() {
   const [nome, setNome] = useState("");
   const [corPrimaria, setCorPrimaria] = useState("#1A2FD4");
   const [corSecundaria, setCorSecundaria] = useState("#FFD700");
-  const [tier, setTier] = useState<Tier>("PEQUENO");
+  const [tier, setTier] = useState<Tier>("INDIVIDUAL");
 
   function irParaPlano() {
     if (nome.trim().length < 2) {

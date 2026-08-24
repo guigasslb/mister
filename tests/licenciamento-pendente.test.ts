@@ -14,17 +14,28 @@ vi.mock("@/lib/db", () => ({
 
 import { obterLicencaPendente } from "@/lib/actions/licenciamento";
 import { prisma } from "@/lib/db";
+import { obterMembroAtual } from "@/lib/permissoes";
 import { PRECO_INDIVIDUAL_CENTIMOS, calcularPrecoLicenca } from "@/lib/billing";
 
 const mocked = <T,>(fn: T) =>
   fn as unknown as { mockResolvedValue: (v: unknown) => void };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Por omissão há sessão com clube ativo; o clubeId deriva SEMPRE daqui
+  // (nunca de um parâmetro externo — ver fix IDOR).
+  mocked(obterMembroAtual).mockResolvedValue({ clube: { id: "clube1" } });
+});
 
 describe("obterLicencaPendente (§8.1 / §17.1)", () => {
+  it("sem sessão/clube → null (IDOR: clubeId vem da sessão, não de input)", async () => {
+    mocked(obterMembroAtual).mockResolvedValue(null);
+    expect(await obterLicencaPendente()).toBeNull();
+  });
+
   it("sem licença → null", async () => {
     mocked(prisma.licenca.findUnique).mockResolvedValue(null);
-    expect(await obterLicencaPendente("clube1")).toBeNull();
+    expect(await obterLicencaPendente()).toBeNull();
   });
 
   it("licença ATIVA (não PENDENTE) → null", async () => {
@@ -34,7 +45,7 @@ describe("obterLicencaPendente (§8.1 / §17.1)", () => {
       tier: "PEQUENO",
       numSeccoes: 1,
     });
-    expect(await obterLicencaPendente("clube1")).toBeNull();
+    expect(await obterLicencaPendente()).toBeNull();
   });
 
   it("PENDENTE Individual → preço fixo (€4,99/mês, €49/ano)", async () => {
@@ -44,7 +55,7 @@ describe("obterLicencaPendente (§8.1 / §17.1)", () => {
       tier: null,
       numSeccoes: 1,
     });
-    const r = await obterLicencaPendente("clube1");
+    const r = await obterLicencaPendente();
     expect(r).toEqual({
       tier: "INDIVIDUAL",
       precoCentimos: PRECO_INDIVIDUAL_CENTIMOS.MENSAL,
@@ -61,7 +72,7 @@ describe("obterLicencaPendente (§8.1 / §17.1)", () => {
       tier: "MEDIO",
       numSeccoes: 1,
     });
-    const r = await obterLicencaPendente("clube1");
+    const r = await obterLicencaPendente();
     expect(r).toEqual({
       tier: "MEDIO",
       precoCentimos: calcularPrecoLicenca("MEDIO", 1, "MENSAL"),
@@ -78,7 +89,7 @@ describe("obterLicencaPendente (§8.1 / §17.1)", () => {
       tier: "PEQUENO",
       numSeccoes: 2,
     });
-    const r = await obterLicencaPendente("clube1");
+    const r = await obterLicencaPendente();
     // base €15,00 × 1.5 = €22,50
     expect(r?.precoCentimos).toBe(2250);
   });

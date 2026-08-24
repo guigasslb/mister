@@ -51,7 +51,12 @@ export default async function PlanosSemanaisPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1>Planos semanais</h1>
+        <div>
+          <h1>Planos semanais</h1>
+          <p className="mt-1 text-corpo-sec text-cinza-600">
+            Distribui os treinos da semana por dias e objetivos.
+          </p>
+        </div>
         <Button asChild>
           <Link href="/treinos/novo?modo=plano">
             <Plus className="h-4 w-4" />

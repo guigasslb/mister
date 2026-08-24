@@ -10,6 +10,7 @@ import { listarAtletas } from "@/lib/actions/atletas";
 import { obterEpocaAtiva } from "@/lib/epoca-context";
 import { GestorExercicios } from "@/components/treinos/GestorExercicios";
 import { resolverExercicioSessao } from "@/lib/snapshot-exercicio";
+import { mostrarCargaTreino } from "@/lib/utils";
 import {
   MarcadorPresencas,
   type PresencaInicial,
@@ -178,10 +179,13 @@ export default async function DetalheSessaoPage({
       />
 
       {/* P4.8 (§8.20): RPE da sessão — alimenta a análise de carga/ACWR do escalão.
-          `id` serve de âncora ao foco automático após terminar o modo treino. */}
-      <div id="carga-sessao">
-        <RegistoRpeSessao sessaoId={s.id} rpeInicial={s.rpeSessao} />
-      </div>
+          `id` serve de âncora ao foco automático após terminar o modo treino.
+          UX-P3-01: RPE/ACWR só em escalões de competição; oculto na formação jovem. */}
+      {mostrarCargaTreino(s.escalao.nome) && (
+        <div id="carga-sessao">
+          <RegistoRpeSessao sessaoId={s.id} rpeInicial={s.rpeSessao} />
+        </div>
+      )}
 
       {/* Melhoria 4.6 — notas sempre visíveis e editáveis inline. */}
       <NotasSessao sessaoId={s.id} notasIniciais={s.notas} />

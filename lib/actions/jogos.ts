@@ -12,6 +12,8 @@ import {
   registarEventoJogoSchema,
   planoTaticoSchema,
   isVideoUrlValido,
+  LIMITE_AMARELOS_SUSPENSAO,
+  type SuspensaoPendente,
 } from "@/lib/schemas/jogo";
 import { modalidadeEfetiva, filtroModalidadeJogo } from "@/lib/modalidade-escalao";
 import {
@@ -444,6 +446,9 @@ export async function guardarEstatisticas(
         defesas: e.defesas ?? null,
         golosSofridosGR: e.golosSofridosGR ?? null,
         faltasCometidas: e.faltasCometidas ?? null,
+        // Disciplina (§3.7): gravados sempre, independentemente da modalidade.
+        cartaoAmarelo: e.cartaoAmarelo,
+        cartaoVermelho: e.cartaoVermelho,
         // Núcleo estatístico de FUTEBOL (§10.8): só gravado em jogos de futebol.
         // Em futsal fica sempre a `null` (a grelha nem os mostra — 10.8).
         remates: eFutebol ? (e.remates ?? null) : null,
@@ -681,4 +686,105 @@ export async function listarEventosJogo(jogoId: string): Promise<Resultado<Event
     orderBy: ORDER_EVENTOS,
   });
   return ok(eventos);
+}
+
+// ─── Disciplina / suspensões (BUG-P1-04) ─────────────────────────────────────
+
+/**
+ * Suspensões pendentes para o PRÓXIMO jogo do escalão (na época ativa), a partir
+ * dos cartões registados por jogo (`EstatisticaAtleta`).
+ *
+ * Para cada atleta convocado ao próximo jogo, na época:
+ *  - Cartão vermelho: recebeu vermelho no ÚLTIMO jogo jogado → suspenso.
+ *  - Acumulação de amarelos: ≥ LIMITE_AMARELOS_SUSPENSAO amarelos na época
+ *    (simplificação: contam-se todos os amarelos da época, sem "purga" por jornada).
+ *
+ * Devolve apenas os atletas com suspensão pendente. Se não houver próximo jogo (ou
+ * sem convocados), devolve lista vazia. O vermelho tem prioridade sobre os amarelos.
+ */
+export async function obterSuspensoesPendentes(
+  escalaoId: string,
+): Promise<Resultado<SuspensaoPendente[]>> {
+  const ctx = await contexto();
+  if (ctx.estado === "erro") return erro(ctx.erro);
+
+  // 1. Isolamento multi-tenant + permissão de leitura do escalão.
+  const escalao = await prisma.escalao.findFirst({
+    where: { id: escalaoId, clubeId: ctx.clubeId },
+    select: { id: true },
+  });
+  if (!escalao) return erro("Escalão não encontrado");
+  if (!(await podeLerEscalao(escalaoId))) return erro("Sem permissão neste escalão");
+
+  const agora = new Date();
+
+  // 2. Próximo jogo do escalão (futuro, época ativa) + convocados.
+  const proximoJogo = await prisma.jogo.findFirst({
+    where: { escalaoId, epocaId: ctx.epoca.id, data: { gt: agora } },
+    orderBy: { data: "asc" },
+    select: {
+      id: true,
+      convocatorias: {
+        where: { convocado: true },
+        select: { atletaId: true, atleta: { select: { nome: true } } },
+      },
+    },
+  });
+  if (!proximoJogo || proximoJogo.convocatorias.length === 0) return ok([]);
+
+  const atletaIds = proximoJogo.convocatorias.map((c) => c.atletaId);
+  const nomePorAtleta = new Map(
+    proximoJogo.convocatorias.map((c) => [c.atletaId, c.atleta.nome]),
+  );
+
+  // 3. Cartões dos convocados em jogos JÁ jogados (data < agora) do escalão/época.
+  const estatisticas = await prisma.estatisticaAtleta.findMany({
+    where: {
+      atletaId: { in: atletaIds },
+      jogo: { escalaoId, epocaId: ctx.epoca.id, data: { lt: agora } },
+    },
+    select: {
+      atletaId: true,
+      cartaoAmarelo: true,
+      cartaoVermelho: true,
+      jogoId: true,
+      jogo: { select: { data: true } },
+    },
+  });
+
+  const suspensoes: SuspensaoPendente[] = [];
+
+  for (const atletaId of atletaIds) {
+    const stats = estatisticas.filter((e) => e.atletaId === atletaId);
+    if (stats.length === 0) continue;
+
+    const nome = nomePorAtleta.get(atletaId) ?? "Atleta";
+
+    // Cartão vermelho no último jogo jogado (o mais recente por data) → prioritário.
+    const ultimo = [...stats].sort(
+      (a, b) => b.jogo.data.getTime() - a.jogo.data.getTime(),
+    )[0];
+    if (ultimo && ultimo.cartaoVermelho > 0) {
+      suspensoes.push({
+        atletaId,
+        nome,
+        motivo: "CARTAO_VERMELHO",
+        cartaoVermelhoNoJogoId: ultimo.jogoId,
+      });
+      continue;
+    }
+
+    // Acumulação de amarelos na época (simplificação: todos os amarelos).
+    const amarelos = stats.reduce((acc, e) => acc + e.cartaoAmarelo, 0);
+    if (amarelos >= LIMITE_AMARELOS_SUSPENSAO) {
+      suspensoes.push({
+        atletaId,
+        nome,
+        motivo: "ACUMULACAO_AMARELOS",
+        amarelosAcumulados: amarelos,
+      });
+    }
+  }
+
+  return ok(suspensoes);
 }

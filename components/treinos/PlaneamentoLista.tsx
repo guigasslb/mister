@@ -365,7 +365,7 @@ export function PlaneamentoLista({
         <div>
           <h1>Periodização</h1>
           <p className="mt-1 text-corpo-sec text-cinza-600">
-            Planos por escalão, organizados por semana.
+            Organiza a época em mesociclos e microciclos de treino.
           </p>
         </div>
         <CriarDialog escaloes={escaloes} />

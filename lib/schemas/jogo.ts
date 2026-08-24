@@ -136,6 +136,10 @@ export const estatisticaSchema = z.object({
   defesas: z.number().int().min(0).nullable().optional(),
   golosSofridosGR: z.number().int().min(0).nullable().optional(),
   faltasCometidas: z.number().int().min(0).nullable().optional(),
+  // Disciplina (§3.7): cartões acumulados por jogo. Aplicam-se a futsal e
+  // futebol, pelo que são gravados sempre (não dependem da modalidade efetiva).
+  cartaoAmarelo: z.number().int().min(0).default(0),
+  cartaoVermelho: z.number().int().min(0).default(0),
   // 🔁 v7 (§3.7/§10.8): núcleo estatístico de FUTEBOL 🥅. Só é gravado em jogos de
   // futebol; em jogos de futsal estes campos são ignorados/postos a null pela action.
   remates: z.number().int().min(0).nullable().optional(),
@@ -162,4 +166,33 @@ export const LABEL_UTILIZACAO: Record<
 export const LABEL_CASA_FORA: Record<"CASA" | "FORA", string> = {
   CASA: "Casa",
   FORA: "Fora",
+};
+
+// ─── Disciplina / suspensões (BUG-P1-04) ──────────────────────────────────────
+
+/** Nº de amarelos acumulados na época que desencadeia suspensão (§ disciplina). */
+export const LIMITE_AMARELOS_SUSPENSAO = 3;
+
+/** Motivo pelo qual um atleta está suspenso para o próximo jogo. */
+export type SuspensaoMotivo = "ACUMULACAO_AMARELOS" | "CARTAO_VERMELHO";
+
+/**
+ * Suspensão pendente de um atleta para o próximo jogo do escalão. Tipo partilhado
+ * cliente/servidor (o cálculo vive em `obterSuspensoesPendentes`, a apresentação
+ * na convocatória do detalhe do jogo).
+ */
+export type SuspensaoPendente = {
+  atletaId: string;
+  nome: string;
+  motivo: SuspensaoMotivo;
+  /** Jogo onde recebeu o vermelho (só em CARTAO_VERMELHO). */
+  cartaoVermelhoNoJogoId?: string;
+  /** Amarelos acumulados na época (só em ACUMULACAO_AMARELOS). */
+  amarelosAcumulados?: number;
+};
+
+/** Rótulo PT-PT curto do motivo de suspensão (badge da convocatória). */
+export const LABEL_SUSPENSAO: Record<SuspensaoMotivo, string> = {
+  ACUMULACAO_AMARELOS: "Suspenso (amarelos)",
+  CARTAO_VERMELHO: "Suspenso (vermelho)",
 };

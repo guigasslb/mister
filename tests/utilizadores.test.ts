@@ -29,7 +29,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { listarMembros, alterarMinhaPassword, convidarMembro } from "@/lib/actions/utilizadores";
+import { listarMembros, listarMembrosBasico, alterarMinhaPassword, convidarMembro } from "@/lib/actions/utilizadores";
 import { auth } from "@/lib/auth";
 import { obterMembroAtual, exigirCapacidade } from "@/lib/permissoes";
 import { prisma } from "@/lib/db";
@@ -92,12 +92,18 @@ beforeEach(() => {
 
 // ─── listarMembros ────────────────────────────────────────────────────────────
 describe("listarMembros", () => {
-  it("retorna erro quando não autenticado (obterMembroAtual null)", async () => {
-    mocked(obterMembroAtual).mockResolvedValue(null);
+  it("rejeita membro sem capacidade CLUBE_UTILIZADORES (não enumera dados sensíveis)", async () => {
+    mocked(exigirCapacidade).mockResolvedValue({ ok: false, erro: "Sem permissão" });
     const r = await listarMembros();
     expect(r.sucesso).toBe(false);
-    if (!r.sucesso) expect(r.erro).toMatch(/sem acesso/i);
+    if (!r.sucesso) expect(r.erro).toMatch(/sem permissão/i);
     expect(prisma.membroClube.findMany).not.toHaveBeenCalled();
+  });
+
+  it("exige exatamente a capacidade CLUBE_UTILIZADORES", async () => {
+    mocked(prisma.membroClube.findMany).mockResolvedValue([]);
+    await listarMembros();
+    expect(calls(exigirCapacidade)[0][0]).toBe("CLUBE_UTILIZADORES");
   });
 
   it("filtra membros pelo clubeId do utilizador autenticado (isolamento multi-tenant)", async () => {
@@ -128,6 +134,44 @@ describe("listarMembros", () => {
     const r = await listarMembros();
     expect(r.sucesso).toBe(true);
     if (r.sucesso) expect(r.dados).toHaveLength(0);
+  });
+});
+
+// ─── listarMembrosBasico ──────────────────────────────────────────────────────
+describe("listarMembrosBasico", () => {
+  it("retorna erro quando não há adesão ativa (obterMembroAtual null)", async () => {
+    mocked(obterMembroAtual).mockResolvedValue(null);
+    const r = await listarMembrosBasico();
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/sem acesso/i);
+    expect(prisma.membroClube.findMany).not.toHaveBeenCalled();
+  });
+
+  it("legível por membro ativo sem CLUBE_UTILIZADORES (não chama exigirCapacidade)", async () => {
+    mocked(prisma.membroClube.findMany).mockResolvedValue([MEMBRO_BD] as never[]);
+    const r = await listarMembrosBasico();
+    expect(r.sucesso).toBe(true);
+    expect(exigirCapacidade).not.toHaveBeenCalled();
+  });
+
+  it("filtra pelo clubeId da adesão ativa (isolamento multi-tenant)", async () => {
+    mocked(prisma.membroClube.findMany).mockResolvedValue([MEMBRO_BD] as never[]);
+    await listarMembrosBasico();
+    const arg = calls(prisma.membroClube.findMany)[0][0] as { where: { clubeId: string } };
+    expect(arg.where.clubeId).toBe("clube1");
+  });
+
+  it("expõe apenas id + nome (sem email nem capacidades)", async () => {
+    mocked(prisma.membroClube.findMany).mockResolvedValue([MEMBRO_BD] as never[]);
+    const r = await listarMembrosBasico();
+    expect(r.sucesso).toBe(true);
+    if (r.sucesso) {
+      expect(r.dados[0]).toEqual({
+        membroId: MEMBRO_ID,
+        utilizadorId: USER_ID,
+        nome: "João Silva",
+      });
+    }
   });
 });
 

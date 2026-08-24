@@ -149,10 +149,15 @@ export const PERFIS_ARRANQUE: PerfilArranque[] = [
   },
   {
     nome: "Diretor Técnico",
-    descricao: "Escreve em todos os escalões; estrutura do clube configurável pelo admin.",
+    descricao:
+      "Escreve em todos os escalões e gere utilizadores/treinadores; estrutura do clube configurável pelo admin.",
     ambito: "TODO_CLUBE",
     capacidades: [
       ...CAPACIDADES_DADOS_EQUIPA,
+      // Gestão de pessoas: convidar e gerir treinadores/membros (§8.2).
+      // Sem CLUBE_PERFIS — a definição de perfis de permissão e o estatuto de
+      // administrador (ativar licenças, config de infra) continuam do Administrador.
+      "CLUBE_UTILIZADORES",
       "CATALOGO_METRICAS",
       "CATALOGO_HABILIDADES",
       "EXERCICIOS_GERIR",
@@ -193,5 +198,18 @@ export const PERFIS_ARRANQUE: PerfilArranque[] = [
     descricao: "Gere os escalões de uma secção do clube.",
     ambito: "SECCAO",
     capacidades: ["SECCAO_ESCALOES_GERIR"],
+  },
+  {
+    // Perfil de leitura para a direção do clube. RELATORIOS_VER é a única
+    // capacidade de leitura do catálogo; concede acesso a analíticos e
+    // relatórios. A licença é visível a qualquer membro (não é gated por
+    // capacidade — ver obterLicenca) e a configuração do clube fica em leitura
+    // pela AUSÊNCIA das capacidades CLUBE_* (que só permitem editar). Sem
+    // qualquer capacidade _GERIR: não gere membros, treinos, jogos nem plantel.
+    nome: "Presidente",
+    descricao:
+      "Direção do clube: consulta analíticos, relatórios, licença e configuração (só leitura).",
+    ambito: "TODO_CLUBE",
+    capacidades: ["RELATORIOS_VER"],
   },
 ];

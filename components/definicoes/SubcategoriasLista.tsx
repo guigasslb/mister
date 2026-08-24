@@ -135,7 +135,13 @@ function EditarDialog({ sub }: { sub: SubcategoriaExercicio }) {
   );
 }
 
-export function SubcategoriasLista({ subcategorias }: { subcategorias: SubcategoriaExercicio[] }) {
+export function SubcategoriasLista({
+  subcategorias,
+  podeGerir = false,
+}: {
+  subcategorias: SubcategoriaExercicio[];
+  podeGerir?: boolean;
+}) {
   const [pending, startTransition] = useTransition();
 
   function apagar(id: string) {
@@ -170,14 +176,16 @@ export function SubcategoriasLista({ subcategorias }: { subcategorias: Subcatego
             Classificação de segundo nível para a biblioteca de exercícios.
           </p>
         </div>
-        <div className="flex gap-2">
-          {subcategorias.length === 0 && (
-            <Button variant="outline" onClick={instalar} disabled={pending}>
-              {pending ? "A instalar…" : "Instalar predefinições"}
-            </Button>
-          )}
-          <CriarDialog />
-        </div>
+        {podeGerir && (
+          <div className="flex gap-2">
+            {subcategorias.length === 0 && (
+              <Button variant="outline" onClick={instalar} disabled={pending}>
+                {pending ? "A instalar…" : "Instalar predefinições"}
+              </Button>
+            )}
+            <CriarDialog />
+          </div>
+        )}
       </div>
 
       {subcategorias.length === 0 ? (
@@ -199,36 +207,40 @@ export function SubcategoriasLista({ subcategorias }: { subcategorias: Subcatego
                     {s.sistema && (
                       <span className="text-legenda text-cinza-400">Sistema</span>
                     )}
-                    <EditarDialog sub={s} />
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Apagar"
-                          disabled={pending || s.sistema}
-                        >
-                          <Trash2 className="h-4 w-4 text-vermelho-600" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Apagar «{s.nome}»?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Os exercícios associados perdem esta subcategoria mas mantêm-se na biblioteca.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => apagar(s.id)}
-                            className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
-                          >
-                            Apagar
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    {podeGerir && (
+                      <>
+                        <EditarDialog sub={s} />
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Apagar"
+                              disabled={pending || s.sistema}
+                            >
+                              <Trash2 className="h-4 w-4 text-vermelho-600" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Apagar «{s.nome}»?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Os exercícios associados perdem esta subcategoria mas mantêm-se na biblioteca.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => apagar(s.id)}
+                                className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
+                              >
+                                Apagar
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>

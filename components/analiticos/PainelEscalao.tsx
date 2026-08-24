@@ -14,6 +14,7 @@ import {
   Users,
   CalendarCheck,
   Percent,
+  Square,
 } from "lucide-react";
 import type { AnaliticoEscalao, CompeticaoOpcao } from "@/lib/actions/analise";
 import dynamic from "next/dynamic";
@@ -80,6 +81,13 @@ export function PainelEscalao({
   // campo — o default garante zero regressão na vista pública.
   const rankingsMetricas = dados.rankingsMetricas ?? [];
   const assiduidade = dados.rankingAssiduidade ?? [];
+
+  // Disciplina (§3.7): totais + top indisciplinados. Snapshots antigos não têm
+  // os campos — os defaults garantem zero regressão na vista pública.
+  const cartoes = dados.cartoes ?? { amarelos: 0, vermelhos: 0 };
+  const rankingDisciplina = (dados.rankingDisciplina ?? []).slice(0, 5);
+  const temDisciplina =
+    cartoes.amarelos > 0 || cartoes.vermelhos > 0 || rankingDisciplina.length > 0;
 
   const semJogos = dados.jogos === 0;
 
@@ -196,6 +204,49 @@ export function PainelEscalao({
       {/* Ranking por métrica configurável (§10.2) — só com métricas do clube. */}
       {rankingsMetricas.length > 0 && (
         <RankingsMetricas rankings={rankingsMetricas} />
+      )}
+
+      {/* Disciplina (§3.7) — totais de cartões + top 5 indisciplinados. */}
+      {temDisciplina && (
+        <section className="space-y-3">
+          <h2 className="text-titulo-seccao text-cinza-900">Disciplina</h2>
+          <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+            <CartaoKpi valor={cartoes.amarelos} label="amarelos" icon={Square} cor="ambar" />
+            <CartaoKpi valor={cartoes.vermelhos} label="vermelhos" icon={Square} cor="vermelho" />
+          </div>
+
+          {rankingDisciplina.length > 0 && (
+            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+              <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
+                Mais indisciplinados
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-corpo-sec">
+                  <thead>
+                    <tr className="text-left text-legenda uppercase tracking-wide text-cinza-500">
+                      <th className="py-2.5 pr-3 font-medium">Atleta</th>
+                      <th className="px-3 py-2.5 text-right font-medium">🟨 Amarelos</th>
+                      <th className="py-2.5 pl-3 text-right font-medium">🟥 Vermelhos</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cinza-100">
+                    {rankingDisciplina.map((a) => (
+                      <tr key={a.atletaId} className="text-cinza-900">
+                        <td className="py-3 pr-3 font-medium">{a.nome}</td>
+                        <td className="px-3 py-3 text-right tabular-nums text-ambar-600">
+                          {a.amarelos}
+                        </td>
+                        <td className="py-3 pl-3 text-right tabular-nums font-semibold text-vermelho-600">
+                          {a.vermelhos}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {/* Assiduidade mensal */}

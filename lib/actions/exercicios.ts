@@ -257,6 +257,58 @@ export async function apagarExercicio(id: string): Promise<Resultado<void>> {
   return ok(undefined);
 }
 
+/**
+ * Duplica um exercício visível (🎒 pessoal ou 🏛️ do clube) para a biblioteca
+ * pessoal do utilizador autenticado (UX-P3-06). A cópia fica sempre privada:
+ * `proprietario = TREINADOR`, sem contribuição no clube (partilhado = false),
+ * com o nome sufixado por " (cópia)". A duplicação não copia a `origemSeed`
+ * (uma cópia nunca é um item curado) nem as partilhas do original.
+ */
+export async function duplicarExercicio(id: string): Promise<Resultado<Exercicio>> {
+  const perm = await exigirCapacidade("EXERCICIOS_GERIR");
+  if (!perm.ok) return erro(perm.erro);
+  const clubeId = perm.ctx.clube.id;
+  const utilizadorId = perm.ctx.utilizadorId;
+
+  // O filtro de visibilidade garante que o utilizador vê o exercício no clube
+  // ativo (pessoal próprio ou biblioteca do clube) antes de o poder duplicar.
+  const original = await prisma.exercicio.findFirst({
+    where: { AND: [{ id }, filtroExerciciosVisiveis(clubeId, utilizadorId)] },
+  });
+  if (!original) return erro("Exercício não encontrado");
+
+  const copia = await prisma.exercicio.create({
+    data: {
+      nome: `${original.nome} (cópia)`,
+      descricao: original.descricao,
+      objetivo: original.objetivo,
+      duracaoMin: original.duracaoMin,
+      categoriaPrincipal: original.categoriaPrincipal,
+      subcategoriaId: original.subcategoriaId,
+      modalidade: original.modalidade,
+      parteTreino: original.parteTreino,
+      escalaoAlvo: original.escalaoAlvo,
+      // O diagrama nulo tem de passar como `undefined` (o Prisma rejeita `null`
+      // literal em campos Json — usaria JsonNull/DbNull).
+      diagrama:
+        original.diagrama == null
+          ? undefined
+          : (original.diagrama as Prisma.InputJsonValue),
+      // A cópia é sempre 🎒 pessoal do utilizador, independentemente da origem.
+      proprietario: "TREINADOR",
+      clubeProprietarioId: null,
+      autorId: utilizadorId,
+      origemSeed: false,
+      // Dual-write dos campos legados (fase expand).
+      clubeId,
+      criadorId: utilizadorId,
+    },
+  });
+
+  revalidatePath(PATH);
+  return ok(copia);
+}
+
 // ─── Partilha na biblioteca do clube (toggle explícito — secção 3.3) ─────────
 
 /**

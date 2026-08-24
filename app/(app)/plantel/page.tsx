@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
+import { escaloesLegiveis } from "@/lib/permissoes";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { CampoPesquisa } from "@/components/layout/CampoPesquisa";
 import { AvatarAtleta } from "@/components/plantel/AvatarAtleta";
@@ -54,17 +55,28 @@ export default async function PlantelPage({
   // saíram ou estão em período experimental (secção 8 — plantel).
   const incluirInativos = incluirInativosRaw === "1";
 
-  const [resEscaloes, resSeccoes, resAtletas] = await Promise.all([
+  const [resEscaloes, resSeccoes, resAtletas, legiveis] = await Promise.all([
     listarEscaloes(),
     obterSeccoes(),
     listarAtletas(escalaoId, undefined, undefined, incluirInativos),
+    escaloesLegiveis(),
   ]);
 
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
   if (!resAtletas.sucesso) return <EstadoErro mensagem={resAtletas.erro} />;
 
-  const escaloes = resEscaloes.dados;
+  // Tabs de escalão: mostrar só os escalões que o utilizador pode ler (§6.4).
+  // Âmbito TODO_CLUBE → "TODOS" (sem filtro); caso contrário, limita à lista
+  // legível. Isto filtra também os tabs de secção (derivados dos escalões).
+  const escaloes =
+    legiveis === "TODOS"
+      ? resEscaloes.dados
+      : resEscaloes.dados.filter((e) => legiveis.includes(e.id));
   const seccoes = resSeccoes.sucesso ? resSeccoes.dados : [];
+
+  // Escalão selecionado explicitamente mas fora do âmbito de leitura → sem acesso.
+  const semAcessoEscalao =
+    escalaoId != null && legiveis !== "TODOS" && !legiveis.includes(escalaoId);
 
   // Mapas de modalidade/secção por escalão (§3.2).
   const modalidadePorEscalao = mapaModalidadePorEscalao(escaloes, seccoes);
@@ -214,7 +226,12 @@ export default async function PlantelPage({
         <FiltroInativos />
       </div>
 
-      {atletas.length === 0 ? (
+      {semAcessoEscalao ? (
+        <EstadoVazio
+          titulo="Sem acesso a este escalão"
+          descricao="Não tens acesso aos atletas deste escalão."
+        />
+      ) : atletas.length === 0 ? (
         <EstadoVazio
           titulo={
             seccaoAtivaId

@@ -92,7 +92,13 @@ function CriarMetricaDialog() {
   );
 }
 
-export function MetricasLista({ metricas }: { metricas: MetricaConfig[] }) {
+export function MetricasLista({
+  metricas,
+  podeGerir = false,
+}: {
+  metricas: MetricaConfig[];
+  podeGerir?: boolean;
+}) {
   const [pending, startTransition] = useTransition();
 
   function alternar(id: string, ativa: boolean) {
@@ -118,7 +124,7 @@ export function MetricasLista({ metricas }: { metricas: MetricaConfig[] }) {
             As métricas ativas aparecem na grelha de estatísticas dos jogos.
           </p>
         </div>
-        <CriarMetricaDialog />
+        {podeGerir && <CriarMetricaDialog />}
       </div>
 
       {metricas.length === 0 ? (
@@ -133,24 +139,26 @@ export function MetricasLista({ metricas }: { metricas: MetricaConfig[] }) {
               className="flex items-center gap-3 rounded-md border border-cinza-200 bg-white p-3 shadow-card"
             >
               {/* Reordenar */}
-              <div className="flex flex-col gap-0.5">
-                <button
-                  onClick={() => mover(m.id, "subir")}
-                  disabled={idx === 0 || pending}
-                  className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                  aria-label="Subir"
-                >
-                  <ChevronUp className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => mover(m.id, "descer")}
-                  disabled={idx === metricas.length - 1 || pending}
-                  className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                  aria-label="Descer"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-              </div>
+              {podeGerir && (
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    onClick={() => mover(m.id, "subir")}
+                    disabled={idx === 0 || pending}
+                    className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                    aria-label="Subir"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => mover(m.id, "descer")}
+                    disabled={idx === metricas.length - 1 || pending}
+                    className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                    aria-label="Descer"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               {/* Dados */}
               <div className="flex-1">
@@ -170,12 +178,14 @@ export function MetricasLista({ metricas }: { metricas: MetricaConfig[] }) {
               </Badge>
 
               {/* Toggle */}
-              <Switch
-                checked={m.ativa}
-                disabled={pending}
-                onCheckedChange={(v) => alternar(m.id, v)}
-                aria-label={m.ativa ? "Desativar métrica" : "Ativar métrica"}
-              />
+              {podeGerir && (
+                <Switch
+                  checked={m.ativa}
+                  disabled={pending}
+                  onCheckedChange={(v) => alternar(m.id, v)}
+                  aria-label={m.ativa ? "Desativar métrica" : "Ativar métrica"}
+                />
+              )}
             </li>
           ))}
         </ul>

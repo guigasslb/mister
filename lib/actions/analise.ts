@@ -203,6 +203,9 @@ export async function obterPresencasMensal(
         epocaId: epoca.id,
         escalaoId: { in: escaloesAtivos },
         data: { gte: ingresso },
+        // Só sessões NORMAL contam para assiduidade — CAPTACAO/EVENTO/ABERTO
+        // não são treino regular e não devem inflar o denominador (BUG-P1-07).
+        tipoSessao: "NORMAL",
       },
       select: { id: true, data: true },
       orderBy: { data: "asc" },
@@ -211,7 +214,8 @@ export async function obterPresencasMensal(
       where: {
         atletaId,
         estado: { in: [...ESTADOS_PRESENTE] },
-        sessao: { epocaId: epoca.id },
+        // Simetria com o denominador (sessoes): só presenças em sessões NORMAL.
+        sessao: { epocaId: epoca.id, tipoSessao: "NORMAL" },
       },
       select: { sessaoId: true },
     }),
@@ -266,6 +270,14 @@ export interface AnaliticoAtleta {
   comparacaoEquipa: ComparacaoEquipa | null;
   /** Métricas configuráveis do clube agregadas para o atleta (default `[]`). */
   metricas: MetricaAgregadaAtleta[];
+  /** Cartões acumulados na época (disciplina — §3.7; default `{0,0}`). */
+  cartoes: CartoesAcumulados;
+}
+
+/** Cartões acumulados (disciplina — §3.7). */
+export interface CartoesAcumulados {
+  amarelos: number;
+  vermelhos: number;
 }
 
 /** Uma linha crua de `ValorMetrica` já com o tipo/ordem da métrica associada. */
@@ -402,6 +414,9 @@ export async function obterAnaliticoAtleta(
           assistencias: true,
           defesas: true,
           golosSofridosGR: true,
+          // Disciplina (§3.7): cartões acumulados na época.
+          cartaoAmarelo: true,
+          cartaoVermelho: true,
           // §10.8: o formato determina os minutos por bloco (tempo de jogo).
           jogo: { select: { data: true, adversario: true, formato: true } },
         },
@@ -412,6 +427,9 @@ export async function obterAnaliticoAtleta(
           epocaId: epoca.id,
           escalaoId: { in: escaloesCtx },
           data: { gte: ingresso },
+          // Só sessões NORMAL contam para assiduidade — CAPTACAO/EVENTO/ABERTO
+          // não são treino regular e não devem inflar o denominador (BUG-P1-07).
+          tipoSessao: "NORMAL",
         },
         select: { id: true, data: true },
         orderBy: { data: "asc" },
@@ -420,8 +438,9 @@ export async function obterAnaliticoAtleta(
         where: {
           atletaId,
           estado: { in: [...ESTADOS_PRESENTE] },
-          // Simetria com o denominador (sessoes): só presenças desde o ingresso (secção 22.3).
-          sessao: { epocaId: epoca.id, data: { gte: ingresso } },
+          // Simetria com o denominador (sessoes): só presenças desde o ingresso
+          // e só em sessões NORMAL (secção 22.3 / BUG-P1-07).
+          sessao: { epocaId: epoca.id, data: { gte: ingresso }, tipoSessao: "NORMAL" },
           escalaoId: { in: escaloesCtx },
         },
         select: { sessaoId: true },
@@ -483,6 +502,12 @@ export async function obterAnaliticoAtleta(
       ? await calcularComparacaoEquipa(escalaoContexto.id, epoca.id, parsed.data.modalidade)
       : null;
 
+  // Disciplina (§3.7): cartões acumulados na época.
+  const cartoes: CartoesAcumulados = {
+    amarelos: estatisticas.reduce((acc, e) => acc + e.cartaoAmarelo, 0),
+    vermelhos: estatisticas.reduce((acc, e) => acc + e.cartaoVermelho, 0),
+  };
+
   return ok({
     atleta: { id: atleta.id, nome: atleta.nome, posicoes: atleta.posicoes, eGR },
     epoca,
@@ -493,6 +518,7 @@ export async function obterAnaliticoAtleta(
     caderneta,
     comparacaoEquipa,
     metricas: agregarMetricasAtleta(valoresMetricas),
+    cartoes,
   });
 }
 
@@ -508,7 +534,9 @@ async function calcularComparacaoEquipa(
     prisma.atletaEscalao.count({
       where: { escalaoId, epocaId, estado: "ATIVO", atleta: { ativo: true } },
     }),
-    prisma.sessao.count({ where: { epocaId, escalaoId } }),
+    // Só sessões NORMAL contam para assiduidade (BUG-P1-07): simetria com a
+    // vista do atleta e com o numerador de presenças abaixo.
+    prisma.sessao.count({ where: { epocaId, escalaoId, tipoSessao: "NORMAL" } }),
     prisma.estatisticaAtleta.findMany({
       where: { jogo: filtroJogo },
       // §10.8: formato para o tempo por bloco correto (futebol ≠ futsal).
@@ -518,7 +546,8 @@ async function calcularComparacaoEquipa(
       where: {
         escalaoId,
         estado: { in: [...ESTADOS_PRESENTE] },
-        sessao: { epocaId },
+        // Simetria numerador/denominador: só presenças em sessões NORMAL.
+        sessao: { epocaId, tipoSessao: "NORMAL" },
       },
     }),
   ]);
@@ -578,6 +607,14 @@ export interface RankingMetrica {
   top: Array<{ atletaId: string; atletaNome: string; valor: number }>;
 }
 
+/** Disciplina por atleta (cartões acumulados no escalão/época — §3.7). */
+export interface RankingDisciplina {
+  atletaId: string;
+  nome: string;
+  amarelos: number;
+  vermelhos: number;
+}
+
 export interface AnaliticoEscalao {
   escalao: { id: string; nome: string };
   epoca: { id: string; nome: string };
@@ -603,6 +640,10 @@ export interface AnaliticoEscalao {
   resultados: ResultadoJogoResumo[];
   /** Rankings dos melhores atletas por cada métrica configurável (default `[]`). */
   rankingsMetricas: RankingMetrica[];
+  /** Totais de cartões do escalão na época (disciplina — §3.7; default `{0,0}`). */
+  cartoes: CartoesAcumulados;
+  /** Ranking de disciplina por atleta (mais cartões primeiro; default `[]`). */
+  rankingDisciplina: RankingDisciplina[];
 }
 
 /** Uma linha crua de `ValorMetrica` com métrica + atleta (vista de equipa). */
@@ -720,6 +761,9 @@ export async function obterAnaliticoEscalao(
         assistencias: true,
         blocoTempo: true,
         utilizacao: true,
+        // Disciplina (§3.7): cartões para totais + ranking de disciplina.
+        cartaoAmarelo: true,
+        cartaoVermelho: true,
         // §10.8: formato do jogo para o tempo por bloco (futebol ≠ futsal).
         jogo: { select: { formato: true } },
         atleta: { select: { nome: true } },
@@ -781,6 +825,8 @@ export async function obterAnaliticoEscalao(
   const golosMap = new Map<string, { nome: string; valor: number }>();
   const assistMap = new Map<string, { nome: string; valor: number }>();
   const utilMap = new Map<string, { nome: string; tempo: number; jogos: number }>();
+  // Disciplina (§3.7): cartões acumulados por atleta (para totais + ranking).
+  const disciplinaMap = new Map<string, { nome: string; amarelos: number; vermelhos: number }>();
   for (const e of estatisticas) {
     if (e.golos > 0) {
       const a = golosMap.get(e.atletaId) ?? { nome: e.atleta.nome, valor: 0 };
@@ -796,6 +842,13 @@ export async function obterAnaliticoEscalao(
     u.tempo += blocoParaMinutos(e.blocoTempo, e.jogo?.formato);
     if (e.utilizacao !== "NAO_UTILIZADO") u.jogos++;
     utilMap.set(e.atletaId, u);
+    if (e.cartaoAmarelo > 0 || e.cartaoVermelho > 0) {
+      const d =
+        disciplinaMap.get(e.atletaId) ?? { nome: e.atleta.nome, amarelos: 0, vermelhos: 0 };
+      d.amarelos += e.cartaoAmarelo;
+      d.vermelhos += e.cartaoVermelho;
+      disciplinaMap.set(e.atletaId, d);
+    }
   }
   const marcadores: RankingAtleta[] = [...golosMap.entries()]
     .map(([atletaId, v]) => ({ atletaId, nome: v.nome, valor: v.valor }))
@@ -813,6 +866,28 @@ export async function obterAnaliticoEscalao(
       jogosUtilizados: v.jogos,
     }))
     .sort((a, b) => b.tempoJogoAcumulado - a.tempoJogoAcumulado)
+    .slice(0, 10);
+
+  // Disciplina (§3.7): ranking por atleta (vermelhos pesam primeiro, depois
+  // amarelos) e totais do escalão na época. Os totais somam TODOS os atletas
+  // (não só o top 10 do ranking) para não subcontar.
+  const disciplinaTodos = [...disciplinaMap.entries()].map(([atletaId, v]) => ({
+    atletaId,
+    nome: v.nome,
+    amarelos: v.amarelos,
+    vermelhos: v.vermelhos,
+  }));
+  const cartoes: CartoesAcumulados = {
+    amarelos: disciplinaTodos.reduce((acc, d) => acc + d.amarelos, 0),
+    vermelhos: disciplinaTodos.reduce((acc, d) => acc + d.vermelhos, 0),
+  };
+  const rankingDisciplina: RankingDisciplina[] = [...disciplinaTodos]
+    .sort(
+      (a, b) =>
+        b.vermelhos - a.vermelhos ||
+        b.amarelos - a.amarelos ||
+        a.nome.localeCompare(b.nome, "pt"),
+    )
     .slice(0, 10);
 
   // Eventos por tipo (todas as chaves inicializadas a 0).
@@ -897,7 +972,10 @@ export async function obterAnaliticoEscalao(
     golosSofridosMedia: jogosComResultado > 0 ? golosSofridos / jogosComResultado : 0,
     sessoes: sessoes.length,
     nAtletas,
-    taxaPresencaMedia: slots > 0 ? presencas.length / slots : 0,
+    // Cap a 1 (100%): atletas que saíram a meio da época podem gerar presenças
+    // sem contribuir para o denominador de slots atual, o que inflaria a taxa
+    // acima de 100% (BUG-P1-06). Simetria com o ranking (Math.min acima).
+    taxaPresencaMedia: slots > 0 ? Math.min(presencas.length / slots, 1) : 0,
     marcadores,
     assistentes,
     maisUtilizados,
@@ -907,6 +985,8 @@ export async function obterAnaliticoEscalao(
     distribuicaoTipoTreino,
     resultados,
     rankingsMetricas: montarRankingsMetricas(valoresMetricas),
+    cartoes,
+    rankingDisciplina,
   });
 }
 
@@ -989,6 +1069,8 @@ const SESSAO_TIPOS: Record<TipoSessao, TipoSessao> = {
 export interface EscalaoResumoClube {
   escalaoId: string;
   nome: string;
+  /** Modalidade da secção do escalão (null = escalão sem secção). Filtro P2.4. */
+  modalidade: Modalidade | null;
   nAtletas: number;
   jogos: number;
   vitorias: number;
@@ -998,6 +1080,16 @@ export interface EscalaoResumoClube {
   golosSofridos: number;
   sessoes: number;
   taxaPresencaMedia: number;
+}
+
+/** Balanço de resultados agregado do clube na época (todos os escalões). */
+export interface BalancoEpocaClube {
+  vitorias: number;
+  empates: number;
+  derrotas: number;
+  jogos: number;
+  golosMarcados: number;
+  golosSofridos: number;
 }
 
 export interface AnaliticoClubeEpoca {
@@ -1015,6 +1107,13 @@ export interface AnaliticoClubeEpoca {
     sessoes: number;
     taxaPresencaMediaGlobal: number;
   };
+  /**
+   * Balanço de resultados do clube inteiro na época — soma os jogos de TODOS
+   * os escalões visíveis (campeonato, taça e amigáveis; sem distinção de tipo).
+   * Espelha os campos V/E/D + golos de `totais`, expostos como bloco autónomo
+   * para a secção "Resultados da época" do painel (P2-06).
+   */
+  balanco: BalancoEpocaClube;
 }
 
 export async function obterAnaliticoClubeEpoca(
@@ -1037,7 +1136,13 @@ export async function obterAnaliticoClubeEpoca(
       clubeId: clube.id,
       ...(legiveis === "TODOS" ? {} : { id: { in: legiveis } }),
     },
-    select: { id: true, nome: true, ordem: true },
+    select: {
+      id: true,
+      nome: true,
+      ordem: true,
+      // P2.4: modalidade da secção alimenta o filtro client-side no painel do clube.
+      seccao: { select: { modalidade: true } },
+    },
     orderBy: [{ ordem: "asc" }, { nome: "asc" }],
   });
   if (escaloes.length === 0) return erro("Sem escalões visíveis");
@@ -1118,6 +1223,7 @@ export async function obterAnaliticoClubeEpoca(
     return {
       escalaoId: e.id,
       nome: e.nome,
+      modalidade: e.seccao?.modalidade ?? null,
       nAtletas,
       jogos: j?.jogos ?? 0,
       vitorias: j?.vitorias ?? 0,
@@ -1150,6 +1256,17 @@ export async function obterAnaliticoClubeEpoca(
   const slotsGlobais = resumos.reduce((acc, r) => acc + r.nAtletas * r.sessoes, 0);
   const presencasGlobais = [...presencasPorEscalao.values()].reduce((a, b) => a + b, 0);
 
+  // Balanço de resultados (P2-06): mesma fonte que `totais` (soma de todos os
+  // jogos de todos os escalões visíveis), reexposta como bloco V/E/D + golos.
+  const balanco: BalancoEpocaClube = {
+    vitorias: totais.vitorias,
+    empates: totais.empates,
+    derrotas: totais.derrotas,
+    jogos: totais.jogos,
+    golosMarcados: totais.golosMarcados,
+    golosSofridos: totais.golosSofridos,
+  };
+
   return ok({
     clube: { id: clube.id, nome: clube.nome },
     epoca,
@@ -1158,6 +1275,7 @@ export async function obterAnaliticoClubeEpoca(
       ...totais,
       taxaPresencaMediaGlobal: slotsGlobais > 0 ? presencasGlobais / slotsGlobais : 0,
     },
+    balanco,
   });
 }
 
@@ -1283,10 +1401,15 @@ export async function obterRelatorioPorToken(
 ): Promise<Resultado<RelatorioPublico>> {
   if (!token || typeof token !== "string") return erro("Relatório não encontrado");
 
-  const registo = await prisma.relatorioPartilhado.findUnique({
-    where: { token },
-    select: { tipo: true, dadosSnapshot: true, expiraEm: true },
-  });
+  // A rota pública `/r/[token]` é acedida sem autenticação com tokens arbitrários.
+  // Qualquer erro da query (token malformado, falha de ligação) tem de resultar
+  // num "não encontrado" tratado — nunca num 500 não capturado na rota pública.
+  const registo = await prisma.relatorioPartilhado
+    .findUnique({
+      where: { token },
+      select: { tipo: true, dadosSnapshot: true, expiraEm: true },
+    })
+    .catch(() => null);
   if (!registo || registo.dadosSnapshot == null) return erro("Relatório não encontrado");
   if (registo.expiraEm && registo.expiraEm.getTime() < Date.now())
     return erro("Este relatório expirou");

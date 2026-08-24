@@ -91,9 +91,14 @@ export async function obterLicenca(): Promise<Resultado<LicencaComCarteira | nul
  * tabela completa de planos. Só considera licenças de tier de Clube (PARCEIRO
  * devolve preço 0, por ser negociado — ver calcularPrecoLicenca).
  */
-export async function obterLicencaPendente(
-  clubeId: string,
-): Promise<LicencaPendente | null> {
+export async function obterLicencaPendente(): Promise<LicencaPendente | null> {
+  // Segurança (IDOR): o clube deriva SEMPRE da sessão do utilizador autenticado,
+  // nunca de um parâmetro externo — caso contrário qualquer utilizador poderia
+  // consultar o plano pendente de outro clube passando um clubeId arbitrário.
+  const ctx = await obterMembroAtual();
+  if (!ctx) return null;
+  const clubeId = ctx.clube.id;
+
   const licenca = await prisma.licenca.findUnique({
     where: { clubeId },
     select: { estado: true, tipo: true, tier: true, numSeccoes: true },

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MessageSquarePlus, Pencil, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { EstadoErro } from "@/components/layout/EstadosUI";
+import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { InstalarModelosButton } from "@/components/comunicacoes/InstalarModelosButton";
 import { listarModelosComunicacao } from "@/lib/actions/comunicacao";
 import { obterMembroAtual } from "@/lib/permissoes";
@@ -15,9 +15,17 @@ import {
 export const metadata: Metadata = { title: "Comunicações" };
 
 export default async function ComunicacoesPage() {
+  // Perfis sem a capacidade de gerir comunicações (ex.: Presidente/visualização,
+  // que só tem RELATORIOS_VER) não têm acesso a esta área. Em vez de rebentar com
+  // um erro ("Algo correu mal"), mostramos um estado tratado e amigável.
   const membro = await obterMembroAtual();
   if (!membro?.capacidades.includes("COMUNICACOES_GERIR")) {
-    return <EstadoErro mensagem="Não tens permissão para gerir comunicações." />;
+    return (
+      <EstadoVazio
+        titulo="Sem acesso"
+        descricao="Não tens permissões para aceder às comunicações. Fala com o administrador do clube se precisares deste acesso."
+      />
+    );
   }
 
   const res = await listarModelosComunicacao();

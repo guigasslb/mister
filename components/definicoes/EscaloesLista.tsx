@@ -214,8 +214,17 @@ function EditarEscalaoDialog({ escalao }: { escalao: Escalao }) {
 
 // ─── Lista principal ──────────────────────────────────────────────────────────
 
-export function EscaloesLista({ escaloes }: { escaloes: Escalao[] }) {
+export function EscaloesLista({
+  escaloes,
+  podeCriar = false,
+  escaloesGeriveis = [],
+}: {
+  escaloes: Escalao[];
+  podeCriar?: boolean;
+  escaloesGeriveis?: string[];
+}) {
   const [pending, startTransition] = useTransition();
+  const geriveis = new Set(escaloesGeriveis);
 
   function apagar(id: string) {
     startTransition(async () => {
@@ -236,7 +245,7 @@ export function EscaloesLista({ escaloes }: { escaloes: Escalao[] }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1>Escalões</h1>
-        <CriarEscalaoDialog />
+        {podeCriar && <CriarEscalaoDialog />}
       </div>
 
       {escaloes.length === 0 ? (
@@ -251,24 +260,26 @@ export function EscaloesLista({ escaloes }: { escaloes: Escalao[] }) {
               className="flex items-center gap-3 rounded-md border border-cinza-200 bg-white p-3 shadow-card"
             >
               {/* Reordenar */}
-              <div className="flex flex-col gap-0.5">
-                <button
-                  onClick={() => mover(e.id, "subir")}
-                  disabled={idx === 0 || pending}
-                  className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                  aria-label="Subir"
-                >
-                  <ChevronUp className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => mover(e.id, "descer")}
-                  disabled={idx === escaloes.length - 1 || pending}
-                  className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                  aria-label="Descer"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-              </div>
+              {geriveis.has(e.id) && (
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    onClick={() => mover(e.id, "subir")}
+                    disabled={idx === 0 || pending}
+                    className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                    aria-label="Subir"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => mover(e.id, "descer")}
+                    disabled={idx === escaloes.length - 1 || pending}
+                    className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                    aria-label="Descer"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               {/* Dados */}
               <div className="flex-1">
@@ -285,33 +296,35 @@ export function EscaloesLista({ escaloes }: { escaloes: Escalao[] }) {
               </div>
 
               {/* Ações */}
-              <div className="flex items-center gap-1">
-                <EditarEscalaoDialog escalao={e} />
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label="Apagar escalão">
-                      <Trash2 className="h-4 w-4 text-vermelho-600" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Apagar «{e.nome}»?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Esta ação é irreversível. O escalão só pode ser apagado se não tiver atletas associados.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() => apagar(e.id)}
-                        className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
-                      >
-                        Apagar
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
+              {geriveis.has(e.id) && (
+                <div className="flex items-center gap-1">
+                  <EditarEscalaoDialog escalao={e} />
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label="Apagar escalão">
+                        <Trash2 className="h-4 w-4 text-vermelho-600" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Apagar «{e.nome}»?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta ação é irreversível. O escalão só pode ser apagado se não tiver atletas associados.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => apagar(e.id)}
+                          className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
+                        >
+                          Apagar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              )}
             </li>
           ))}
         </ul>

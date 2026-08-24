@@ -190,9 +190,11 @@ function EditarHabilidadeDialog({ habilidade }: { habilidade: Habilidade }) {
 function GrupoNivel({
   nivel,
   habilidades,
+  podeGerir,
 }: {
   nivel: NivelHabilidade;
   habilidades: Habilidade[];
+  podeGerir: boolean;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -215,7 +217,7 @@ function GrupoNivel({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h2>{LABEL_NIVEL[nivel]}</h2>
-        <CriarHabilidadeDialog nivel={nivel} />
+        {podeGerir && <CriarHabilidadeDialog nivel={nivel} />}
       </div>
 
       {habilidades.length === 0 ? (
@@ -227,24 +229,26 @@ function GrupoNivel({
               key={h.id}
               className="flex items-center gap-3 rounded-md border border-cinza-200 bg-white p-3 shadow-card"
             >
-              <div className="flex flex-col gap-0.5">
-                <button
-                  onClick={() => mover(h.id, "subir")}
-                  disabled={idx === 0 || pending}
-                  className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                  aria-label="Subir"
-                >
-                  <ChevronUp className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => mover(h.id, "descer")}
-                  disabled={idx === habilidades.length - 1 || pending}
-                  className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                  aria-label="Descer"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-              </div>
+              {podeGerir && (
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    onClick={() => mover(h.id, "subir")}
+                    disabled={idx === 0 || pending}
+                    className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                    aria-label="Subir"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => mover(h.id, "descer")}
+                    disabled={idx === habilidades.length - 1 || pending}
+                    className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                    aria-label="Descer"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               <div className="flex-1">
                 <p className="text-corpo font-medium text-cinza-900">{h.nome}</p>
@@ -253,33 +257,35 @@ function GrupoNivel({
                 )}
               </div>
 
-              <div className="flex items-center gap-1">
-                <EditarHabilidadeDialog habilidade={h} />
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label="Apagar habilidade">
-                      <Trash2 className="h-4 w-4 text-vermelho-600" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Apagar «{h.nome}»?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Esta ação é irreversível.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() => apagar(h.id)}
-                        className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
-                      >
-                        Apagar
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
+              {podeGerir && (
+                <div className="flex items-center gap-1">
+                  <EditarHabilidadeDialog habilidade={h} />
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label="Apagar habilidade">
+                        <Trash2 className="h-4 w-4 text-vermelho-600" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Apagar «{h.nome}»?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta ação é irreversível.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => apagar(h.id)}
+                          className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
+                        >
+                          Apagar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -288,7 +294,13 @@ function GrupoNivel({
   );
 }
 
-export function HabilidadesLista({ habilidades }: { habilidades: Habilidade[] }) {
+export function HabilidadesLista({
+  habilidades,
+  podeGerir = false,
+}: {
+  habilidades: Habilidade[];
+  podeGerir?: boolean;
+}) {
   const porNivel = (nivel: NivelHabilidade) =>
     habilidades.filter((h) => h.nivel === nivel);
 
@@ -298,7 +310,7 @@ export function HabilidadesLista({ habilidades }: { habilidades: Habilidade[] })
       {NIVEIS.map((nivel, i) => (
         <div key={nivel}>
           {i > 0 && <Separator className="mb-6" />}
-          <GrupoNivel nivel={nivel} habilidades={porNivel(nivel)} />
+          <GrupoNivel nivel={nivel} habilidades={porNivel(nivel)} podeGerir={podeGerir} />
         </div>
       ))}
     </div>

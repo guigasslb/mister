@@ -15,9 +15,17 @@ if (process.env.NODE_ENV === "production" && (!process.env.SEED_PASS_GONCALO || 
   );
 }
 
+// O admin de plataforma NUNCA tem password default (é conta privilegiada de backoffice):
+// exige-se SEED_PASS_ADMIN em qualquer ambiente, para nunca criar credencial pública.
+if (!process.env.SEED_PASS_ADMIN) {
+  throw new Error(
+    "Seed abortado: define SEED_PASS_ADMIN (sem password default para o admin de plataforma).",
+  );
+}
+
 const PASS_GONCALO = process.env.SEED_PASS_GONCALO || "futsal2026";
 const PASS_ADJUNTO = process.env.SEED_PASS_ADJUNTO || "futsal2026";
-const PASS_ADMIN = process.env.SEED_PASS_ADMIN || "M!st3r@Adm1n#2026";
+const PASS_ADMIN = process.env.SEED_PASS_ADMIN;
 const BCRYPT_COST = 12;
 
 async function main() {
@@ -33,7 +41,7 @@ async function main() {
       passwordHash: await bcrypt.hash(PASS_ADMIN, BCRYPT_COST),
     },
   });
-  console.log(`Admin de plataforma pronto: admin@mister.app / ${PASS_ADMIN}`);
+  console.log("Admin de plataforma pronto: admin@mister.app");
 
   const jaExiste = await prisma.clube.findFirst({
     where: { nome: "Juventude Sport Clube" },

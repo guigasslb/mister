@@ -17,6 +17,7 @@ import {
   gerarTextoComunicacaoSchema,
 } from "@/lib/schemas/comunicacao";
 import { MODELOS_COMUNICACAO_SEED } from "@/lib/comunicacao-modelos";
+import { relatorioParaTexto } from "@/lib/relatorio-jogo";
 import {
   formatarContagemPorAtleta,
   formatarData,
@@ -340,7 +341,7 @@ export async function obterContextoResultado(
     resultado: `${golosEquipa}-${golosAdversario}`,
     marcadores,
     assistencias,
-    comentarioTreinador: jogo.relatorio?.trim() || "",
+    comentarioTreinador: relatorioParaTexto(jogo.relatorio),
     nomeTreinador: await nomeDoTreinador(ctx.utilizadorId),
   };
 }

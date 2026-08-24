@@ -175,7 +175,13 @@ function EditarPerfilDialog({ perfil }: { perfil: Perfil }) {
   );
 }
 
-export function PerfisLista({ perfis }: { perfis: Perfil[] }) {
+export function PerfisLista({
+  perfis,
+  podeGerir = false,
+}: {
+  perfis: Perfil[];
+  podeGerir?: boolean;
+}) {
   const [pending, startTransition] = useTransition();
 
   function apagar(id: string) {
@@ -195,7 +201,7 @@ export function PerfisLista({ perfis }: { perfis: Perfil[] }) {
             Pacotes de permissões. Edita os de arranque ou cria os teus.
           </p>
         </div>
-        <CriarPerfilDialog />
+        {podeGerir && <CriarPerfilDialog />}
       </div>
 
       <ul className="space-y-2">
@@ -220,31 +226,35 @@ export function PerfisLista({ perfis }: { perfis: Perfil[] }) {
                 {LABEL_AMBITO[p.ambito]} · {p.capacidades.length} capacidade(s)
               </p>
             </div>
-            <EditarPerfilDialog perfil={p} />
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Apagar perfil">
-                  <Trash2 className="h-4 w-4 text-vermelho-600" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Apagar «{p.nome}»?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Só é possível apagar perfis que não estejam atribuídos a membros.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => apagar(p.id)}
-                    className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
-                  >
-                    Apagar
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            {podeGerir && (
+              <>
+                <EditarPerfilDialog perfil={p} />
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="Apagar perfil">
+                      <Trash2 className="h-4 w-4 text-vermelho-600" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Apagar «{p.nome}»?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Só é possível apagar perfis que não estejam atribuídos a membros.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => apagar(p.id)}
+                        className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
+                      >
+                        Apagar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            )}
           </li>
         ))}
       </ul>

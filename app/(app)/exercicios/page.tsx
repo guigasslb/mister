@@ -19,6 +19,12 @@ import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
 import { InstalarBibliotecaButton } from "@/components/exercicios/InstalarBibliotecaButton";
 import { FiltrosBiblioteca } from "@/components/exercicios/FiltrosBiblioteca";
 import { PartilhaExercicioButton } from "@/components/exercicios/PartilhaExercicioButton";
+import { FavoritosProvider } from "@/components/exercicios/FavoritosContext";
+import {
+  MostrarFavoritosToggle,
+  FavoritosVazio,
+} from "@/components/exercicios/MostrarFavoritosToggle";
+import { ExercicioCardCliente } from "@/components/exercicios/ExercicioCardCliente";
 import type { ExercicioBiblioteca } from "@/lib/actions/exercicios";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
 
@@ -56,7 +62,7 @@ function CartaoExercicio({
             <MiniaturaCampo diagrama={diag.data} largura={400} className="w-full" />
           </div>
         )}
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-2 pr-24">
           <p className="line-clamp-2 flex-1 text-corpo font-semibold text-cinza-900">
             {exercicio.nome}
           </p>
@@ -200,77 +206,96 @@ export default async function ExerciciosPage({
           : "🏛️ Biblioteca do clube, partilhada com toda a equipa técnica."}
       </p>
 
-      <div className="flex flex-wrap items-end gap-4">
-        <FiltrosBiblioteca parteTreino={parteTreino} categoria={categoria} />
-        <div className="space-y-1.5">
-          <CampoPesquisa placeholder="Pesquisar exercício por nome…" />
-        </div>
-      </div>
-
-      {lista.length === 0 ? (
-        <EstadoVazio
-          titulo={
-            temFiltros
-              ? "Nenhum exercício corresponde aos filtros"
-              : aba === "pessoal"
-                ? "A tua biblioteca pessoal está vazia"
-                : "A biblioteca do clube está vazia"
-          }
-          descricao={
-            temFiltros
-              ? "Ajusta os filtros ou a pesquisa para veres mais resultados."
-              : aba === "pessoal"
-                ? "Cria o primeiro exercício para começares a construir a tua biblioteca portátil."
-                : "Instala a biblioteca curada de arranque ou partilha exercícios pessoais no clube."
-          }
-          acao={
-            temFiltros ? (
-              <Button asChild variant="outline">
-                <Link href={href(aba, {})}>Limpar filtros</Link>
-              </Button>
-            ) : aba === "pessoal" ? (
-              <Button asChild>
-                <Link href="/exercicios/novo">
-                  <Plus className="h-4 w-4" />
-                  Criar exercício
-                </Link>
-              </Button>
-            ) : podeGerirBibliotecaClube ? (
-              <InstalarBibliotecaButton variant="default" />
-            ) : undefined
-          }
-        />
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {lista.map((e) => {
-              // Só o autor pode alternar a partilha (regra do backend, secção 3.3).
-              const podeAlternarPartilha =
-                podeGerirBibliotecaClube &&
-                e.proprietario === "TREINADOR" &&
-                e.autorId === utilizadorId;
-
-              return (
-                <CartaoExercicio
-                  key={e.id}
-                  exercicio={e}
-                  acao={
-                    podeAlternarPartilha ? (
-                      <PartilhaExercicioButton
-                        exercicioId={e.id}
-                        partilhado={e.naBibliotecaDoClube}
-                      />
-                    ) : undefined
-                  }
-                />
-              );
-            })}
+      <FavoritosProvider>
+        <div className="flex flex-wrap items-end gap-4">
+          <FiltrosBiblioteca parteTreino={parteTreino} categoria={categoria} />
+          <div className="space-y-1.5">
+            <CampoPesquisa placeholder="Pesquisar exercício por nome…" />
           </div>
-          <p className="text-corpo-sec text-cinza-600">
-            {lista.length} {lista.length === 1 ? "exercício" : "exercícios"}
-          </p>
-        </>
-      )}
+          <MostrarFavoritosToggle />
+        </div>
+
+        {lista.length === 0 ? (
+          <EstadoVazio
+            titulo={
+              temFiltros
+                ? "Nenhum exercício corresponde aos filtros"
+                : aba === "pessoal"
+                  ? "A tua biblioteca pessoal está vazia"
+                  : "A biblioteca do clube está vazia"
+            }
+            descricao={
+              temFiltros
+                ? "Ajusta os filtros ou a pesquisa para veres mais resultados."
+                : aba === "pessoal"
+                  ? "Cria o primeiro exercício para começares a construir a tua biblioteca portátil."
+                  : "Instala a biblioteca curada de arranque ou partilha exercícios pessoais no clube."
+            }
+            acao={
+              temFiltros ? (
+                <Button asChild variant="outline">
+                  <Link href={href(aba, {})}>Limpar filtros</Link>
+                </Button>
+              ) : aba === "pessoal" ? (
+                <Button asChild>
+                  <Link href="/exercicios/novo">
+                    <Plus className="h-4 w-4" />
+                    Criar exercício
+                  </Link>
+                </Button>
+              ) : podeGerirBibliotecaClube ? (
+                <InstalarBibliotecaButton variant="default" />
+              ) : undefined
+            }
+          />
+        ) : (
+          <>
+            <FavoritosVazio />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+              {lista.map((e) => {
+                // Só o autor pode alternar a partilha (regra do backend, secção 3.3).
+                const podeAlternarPartilha =
+                  podeGerirBibliotecaClube &&
+                  e.proprietario === "TREINADOR" &&
+                  e.autorId === utilizadorId;
+
+                // Editar segue as regras do backend: um exercício 🎒 pessoal só é
+                // editável pelo autor; um 🏛️ do clube por quem gere a biblioteca.
+                const podeEditar =
+                  e.proprietario === "TREINADOR"
+                    ? e.autorId === utilizadorId
+                    : podeGerirBibliotecaClube;
+                // Duplicar cria um exercício pessoal → exige EXERCICIOS_GERIR.
+                const podeDuplicar = podeGerirBibliotecaClube;
+
+                return (
+                  <ExercicioCardCliente
+                    key={e.id}
+                    exercicioId={e.id}
+                    podeEditar={podeEditar}
+                    podeDuplicar={podeDuplicar}
+                  >
+                    <CartaoExercicio
+                      exercicio={e}
+                      acao={
+                        podeAlternarPartilha ? (
+                          <PartilhaExercicioButton
+                            exercicioId={e.id}
+                            partilhado={e.naBibliotecaDoClube}
+                          />
+                        ) : undefined
+                      }
+                    />
+                  </ExercicioCardCliente>
+                );
+              })}
+            </div>
+            <p className="text-corpo-sec text-cinza-600">
+              {lista.length} {lista.length === 1 ? "exercício" : "exercícios"}
+            </p>
+          </>
+        )}
+      </FavoritosProvider>
     </div>
   );
 }

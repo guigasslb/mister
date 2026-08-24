@@ -36,7 +36,18 @@ const nextConfig = {
     optimizePackageImports: ["lucide-react"],
   },
   images: {
-    remotePatterns: [{ protocol: "https", hostname: "**" }],
+    // Lista restritiva de hosts permitidos (evita proxy de imagem aberto / SSRF).
+    // O Mister aceita URLs de fotos inseridas pelos utilizadores (fotoUrl/logo),
+    // por isso mantemos os hosts públicos comuns + o Supabase Storage do deploy.
+    remotePatterns: [
+      { protocol: "https", hostname: "*.supabase.co" },
+      { protocol: "https", hostname: "*.supabase.in" },
+      { protocol: "https", hostname: "lh3.googleusercontent.com" },
+      { protocol: "https", hostname: "*.googleusercontent.com" },
+      { protocol: "https", hostname: "avatars.githubusercontent.com" },
+      { protocol: "https", hostname: "res.cloudinary.com" },
+      { protocol: "https", hostname: "images.unsplash.com" },
+    ],
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 3600,
   },

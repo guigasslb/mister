@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Pencil, Home, Plane, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { obterJogo } from "@/lib/actions/jogos";
+import { obterJogo, obterSuspensoesPendentes } from "@/lib/actions/jogos";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { listarMetricas } from "@/lib/actions/metricas";
 import { prisma } from "@/lib/db";
@@ -86,6 +86,9 @@ export default async function DetalheJogoPage({
         defesas: e.defesas,
         golosSofridosGR: e.golosSofridosGR,
         faltasCometidas: e.faltasCometidas,
+        // Disciplina (§3.7): cartões acumulados no jogo (futsal e futebol).
+        cartaoAmarelo: e.cartaoAmarelo,
+        cartaoVermelho: e.cartaoVermelho,
         // 🔁 v7 (§10.8): núcleo de futebol (null em jogos de futsal).
         remates: e.remates,
         cantos: e.cantos,
@@ -117,6 +120,18 @@ export default async function DetalheJogoPage({
     atletaId: e.atletaId,
     atletaSecundarioId: e.atletaSecundarioId,
   }));
+
+  // BUG-P1-04: as suspensões referem-se ao PRÓXIMO jogo do escalão (aquele para o
+  // qual a convocatória está a ser preparada). Só as calculamos/mostramos quando o
+  // jogo aberto é esse próximo jogo — nunca em jogos já realizados ou noutros futuros.
+  const proximoJogo = await prisma.jogo.findFirst({
+    where: { escalaoId: j.escalaoId, epocaId: j.epocaId, data: { gt: new Date() } },
+    orderBy: { data: "asc" },
+    select: { id: true },
+  });
+  const resSuspensoes =
+    proximoJogo?.id === j.id ? await obterSuspensoesPendentes(j.escalaoId) : null;
+  const suspensoes = resSuspensoes?.sucesso ? resSuspensoes.dados : [];
 
   const temResultado = j.golosMarcados != null && j.golosSofridos != null;
 
@@ -222,6 +237,7 @@ export default async function DetalheJogoPage({
         adversario={j.adversario}
         modalidade={j.modalidade}
         formato={j.formato}
+        suspensoes={suspensoes}
       />
     </div>
   );

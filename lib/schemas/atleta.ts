@@ -22,7 +22,15 @@ export const atletaPessoalSchema = z.object({
   dataIngresso: z.coerce.date().optional(),
   posicoes: z.array(posicaoEnum).default([]),
   observacoes: z.string().max(1000).optional(),
-  fotoUrl: z.string().url("URL inválido").max(500).optional().or(z.literal("")),
+  // Segurança: `z.string().url()` aceita esquemas perigosos (javascript:, data:).
+  // Restringir a http(s) — o URL alimenta um <img src> na UI.
+  fotoUrl: z
+    .string()
+    .url("URL inválido")
+    .max(500)
+    .refine((url) => /^https?:\/\//i.test(url), { message: "URL inválido" })
+    .optional()
+    .or(z.literal("")),
   // Estado no plantel (secção 8): distingue quem está ativo de quem saiu ou
   // ainda está em período experimental. Opcional e SEM default de propósito: a
   // edição de dados pessoais (`atualizarAtleta`) não deve fazer reset do estado

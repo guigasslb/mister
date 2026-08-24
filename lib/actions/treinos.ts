@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { obterEpocaAtiva, obterClubeIdAtual } from "@/lib/epoca-context";
-import { exigirCapacidade, podeLerEscalao, escaloesLegiveis } from "@/lib/permissoes";
+import { exigirCapacidade, podeLerEscalao, escaloesLegiveis, obterMembroAtual } from "@/lib/permissoes";
 import { ok, erro, erroDeValidacao, type Resultado } from "@/lib/utils";
 import { sessaoSchema, marcarPresencasSchema, notasSessaoSchema } from "@/lib/schemas/treino";
 import { alcanceSchema } from "@/lib/schemas/planoSemanal";
@@ -549,6 +549,25 @@ export async function marcarPresencas(
   const parsed = marcarPresencasSchema.safeParse(presencas);
   if (!parsed.success) return erroDeValidacao(parsed.error);
 
+  // Segurança (cross-tenant): garantir que todos os atletaIds pertencem ao clube
+  // do utilizador autenticado antes de escrever. Impede que um atletaId forjado
+  // de outro clube seja gravado nas presenças desta sessão.
+  const ids = parsed.data.map((p) => p.atletaId);
+  if (ids.length > 0) {
+    const atletasDoClube = await prisma.atleta.findMany({
+      where: { id: { in: ids }, clubeId },
+      select: { id: true },
+    });
+    const idsValidos = new Set(atletasDoClube.map((a) => a.id));
+    const idsInvalidos = ids.filter((id) => !idsValidos.has(id));
+    if (idsInvalidos.length > 0) return erro("Atletas inválidos para este clube.");
+  }
+
+  // Auditoria: regista o membro que marcou a presença. Opcional — null se o
+  // utilizador não tiver adesão de clube ativa (modo individual).
+  const membro = await obterMembroAtual();
+  const marcadoPorId = membro?.membroId ?? null;
+
   // F1: a presença guarda o escalão da sessão (analytics por escalão) e o motivo da falta.
   await prisma.$transaction(
     parsed.data.map((p) =>
@@ -561,12 +580,14 @@ export async function marcarPresencas(
           estado: p.estado,
           motivo: p.motivo ?? null,
           justificacao: p.justificacao ?? null,
+          marcadoPorId,
         },
         update: {
           escalaoId: sessao.escalaoId,
           estado: p.estado,
           motivo: p.motivo ?? null,
           justificacao: p.justificacao ?? null,
+          marcadoPorId,
         },
       }),
     ),

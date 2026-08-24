@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
-import { obterClubeAtivo } from "@/lib/permissoes";
+import { obterMembroAtual } from "@/lib/permissoes";
 import { BrandingForm } from "@/components/definicoes/BrandingForm";
 import { EstadoErro } from "@/components/layout/EstadosUI";
 
 export const metadata: Metadata = { title: "Definições · Clube" };
 
 export default async function ClubePage() {
-  const clube = await obterClubeAtivo();
-  if (!clube) return <EstadoErro mensagem="Sem clube ativo." />;
+  const membro = await obterMembroAtual();
+  if (!membro) return <EstadoErro mensagem="Sem clube ativo." />;
+
+  // Gating de UI (§6.7): sem CLUBE_BRANDING a página fica em modo leitura
+  // (campos desativados, sem botão de guardar).
+  const podeEditar = membro.capacidades.includes("CLUBE_BRANDING");
 
   return (
     <div className="space-y-6">
@@ -17,7 +21,7 @@ export default async function ClubePage() {
           Identidade do clube: nome, cores e logótipo.
         </p>
       </div>
-      <BrandingForm clube={clube} />
+      <BrandingForm clube={membro.clube} podeEditar={podeEditar} />
     </div>
   );
 }

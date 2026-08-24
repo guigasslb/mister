@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { criarAtleta, atualizarAtleta } from "@/lib/actions/atletas";
+import { mostrarEncarregadoEducacao } from "@/lib/utils";
 import { LABEL_POSICAO, posicoesPorModalidade } from "@/lib/schemas/atleta";
 import { LABEL_TIPO_PARTICIPACAO, TIPOS_PARTICIPACAO } from "@/lib/schemas/participacao";
 import type { Escalao, Modalidade, Posicao, TipoParticipacao } from "@prisma/client";
@@ -69,9 +70,20 @@ export function AtletaForm({
 
   // Modalidade em contexto para o seletor de posições (§3.2): na criação deriva do
   // escalão selecionado; na edição não há escalão em contexto → mostra todas.
+  const escalaoSelecionado = escaloes.find((e) => e.id === escalaoId);
   const modalidadeContexto: Modalidade | null = emEdicao
     ? null
-    : (escaloes.find((e) => e.id === escalaoId)?.modalidade ?? null);
+    : (escalaoSelecionado?.modalidade ?? null);
+
+  // UX-P3-08: o encarregado de educação só é relevante para atletas menores. Na
+  // criação abrimos o bloco automaticamente quando o escalão é de formação jovem
+  // (Sub-N, N ≤ 16); em seniores/júniores ou na edição (sem escalão em contexto)
+  // fica colapsado por omissão. Os campos mantêm-se sempre no DOM (o `<details>`
+  // não os remove), pelo que a lógica de submit não é afetada.
+  const abrirEncarregado =
+    !emEdicao && escalaoSelecionado != null
+      ? mostrarEncarregadoEducacao(escalaoSelecionado.nome)
+      : false;
 
   // Posições a mostrar: as da modalidade em contexto + quaisquer já selecionadas
   // fora dessa modalidade (um atleta multi-desporto guarda todas — §3.2; assim
@@ -260,25 +272,32 @@ export function AtletaForm({
         </div>
       )}
 
-      {/* Encarregado de educação */}
-      <div className="space-y-4 border-t border-cinza-200 pt-5">
-        <p className="text-corpo font-semibold text-cinza-900">Encarregado de educação</p>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="encarregadoNome">Nome</Label>
-            <Input id="encarregadoNome" name="encarregadoNome" defaultValue={atleta?.encarregadoNome ?? ""} maxLength={100} />
+      {/* Encarregado de educação (UX-P3-08: colapsável; aberto só na formação jovem) */}
+      <details open={abrirEncarregado} className="group space-y-4 border-t border-cinza-200 pt-5">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-corpo font-semibold text-cinza-900">
+          <span>Encarregado de educação</span>
+          <span className="text-legenda font-normal text-cinza-400 group-open:hidden">
+            Mostrar
+          </span>
+        </summary>
+        <div className="space-y-4 pt-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="encarregadoNome">Nome</Label>
+              <Input id="encarregadoNome" name="encarregadoNome" defaultValue={atleta?.encarregadoNome ?? ""} maxLength={100} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="encarregadoContacto">Contacto</Label>
+              <Input id="encarregadoContacto" name="encarregadoContacto" defaultValue={atleta?.encarregadoContacto ?? ""} maxLength={40} placeholder="Telemóvel" />
+            </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="encarregadoContacto">Contacto</Label>
-            <Input id="encarregadoContacto" name="encarregadoContacto" defaultValue={atleta?.encarregadoContacto ?? ""} maxLength={40} placeholder="Telemóvel" />
+            <Label htmlFor="encarregadoEmail">Email</Label>
+            <Input id="encarregadoEmail" name="encarregadoEmail" type="email" defaultValue={atleta?.encarregadoEmail ?? ""} />
+            {erros.encarregadoEmail && <p className="text-legenda text-vermelho-600">{erros.encarregadoEmail}</p>}
           </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="encarregadoEmail">Email</Label>
-          <Input id="encarregadoEmail" name="encarregadoEmail" type="email" defaultValue={atleta?.encarregadoEmail ?? ""} />
-          {erros.encarregadoEmail && <p className="text-legenda text-vermelho-600">{erros.encarregadoEmail}</p>}
-        </div>
-      </div>
+      </details>
 
       {/* Observações */}
       <div className="space-y-1.5">

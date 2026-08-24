@@ -516,6 +516,15 @@ describe("obterAnaliticoClubeEpoca", () => {
     expect(r.dados.totais.vitorias).toBe(1);
     expect(r.dados.totais.derrotas).toBe(1);
     expect(r.dados.totais.nAtletas).toBe(18);
+    // Balanço agregado do clube (P2-06): soma de todos os escalões.
+    expect(r.dados.balanco).toEqual({
+      vitorias: 1,
+      empates: 0,
+      derrotas: 1,
+      jogos: 2,
+      golosMarcados: 3,
+      golosSofridos: 3,
+    });
   });
 
   it("nega sem escalões visíveis", async () => {

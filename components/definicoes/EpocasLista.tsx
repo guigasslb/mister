@@ -86,9 +86,11 @@ function CriarEpocaDialog() {
 export function EpocasLista({
   epocas,
   podeUsarWizard = false,
+  podeGerir = false,
 }: {
   epocas: Epoca[];
   podeUsarWizard?: boolean;
+  podeGerir?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -113,7 +115,7 @@ export function EpocasLista({
               </Link>
             </Button>
           )}
-          <CriarEpocaDialog />
+          {podeGerir && <CriarEpocaDialog />}
         </div>
       </div>
 
@@ -140,7 +142,7 @@ export function EpocasLista({
                   {format(ep.dataFim, "d MMM yyyy", { locale: pt })}
                 </p>
               </div>
-              {!ep.ativa && (
+              {podeGerir && !ep.ativa && (
                 <Button
                   variant="outline"
                   size="sm"

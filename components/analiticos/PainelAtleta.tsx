@@ -40,6 +40,8 @@ export function PainelAtleta({ dados }: { dados: AnaliticoAtleta }) {
     // Snapshots de relatórios antigos (pré-agregação de métricas) não têm o
     // campo — o default garante zero regressão na vista pública.
     metricas = [],
+    // Cartões acumulados (disciplina — §3.7); default para snapshots antigos.
+    cartoes = { amarelos: 0, vermelhos: 0 },
   } = dados;
   const eGR = atleta.eGR;
 
@@ -116,6 +118,18 @@ export function PainelAtleta({ dados }: { dados: AnaliticoAtleta }) {
         />
         <CartaoKpi valor={agregado.tempoJogoAcumulado} label="min" icon={Clock} cor="cinza" />
       </div>
+
+      {/* Disciplina — só se houver cartões (§3.7) */}
+      {(cartoes.amarelos > 0 || cartoes.vermelhos > 0) && (
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-corpo-sec text-cinza-600">
+          {cartoes.amarelos > 0 && (
+            <span>🟨 {cartoes.amarelos} {cartoes.amarelos === 1 ? "amarelo" : "amarelos"}</span>
+          )}
+          {cartoes.vermelhos > 0 && (
+            <span>🟥 {cartoes.vermelhos} {cartoes.vermelhos === 1 ? "vermelho" : "vermelhos"}</span>
+          )}
+        </p>
+      )}
 
       {/* Comparação com a média da equipa */}
       {comparacaoEquipa && (

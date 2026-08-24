@@ -22,7 +22,7 @@ export default async function AnaliticosClubePage() {
         <h1>Analytics</h1>
         {resClube.erro === "Sem permissão" ? (
           <EstadoVazio
-            titulo="Só disponível para Admin e Diretor Técnico"
+            titulo="Não tens permissão para ver os analíticos do clube"
             descricao="Os analytics do clube exigem a permissão «Ver relatórios». Pede ao administrador do clube para a atribuir."
           />
         ) : (

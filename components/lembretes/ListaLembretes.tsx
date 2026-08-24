@@ -1,6 +1,6 @@
 import { obterLembretes } from "@/lib/actions/lembretes";
 import { obterMembroAtual } from "@/lib/permissoes";
-import { listarMembros } from "@/lib/actions/utilizadores";
+import { listarMembrosBasico } from "@/lib/actions/utilizadores";
 import { LembretesPainel } from "./LembretesPainel";
 import type { MembroBasico } from "./CriarLembreteForm";
 
@@ -25,7 +25,7 @@ export async function ListaLembretes() {
 
   let membros: MembroBasico[] = [];
   if (podeGerir) {
-    const resMembros = await listarMembros();
+    const resMembros = await listarMembrosBasico();
     if (resMembros.sucesso) {
       membros = resMembros.dados
         .filter((m) => m.utilizadorId !== ctx.utilizadorId)

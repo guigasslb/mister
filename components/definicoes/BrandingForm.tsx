@@ -9,7 +9,13 @@ import { Label } from "@/components/ui/label";
 import { atualizarBrandingClube } from "@/lib/actions/clubes";
 import type { Clube } from "@prisma/client";
 
-export function BrandingForm({ clube }: { clube: Clube }) {
+export function BrandingForm({
+  clube,
+  podeEditar = false,
+}: {
+  clube: Clube;
+  podeEditar?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [erros, setErros] = useState<Record<string, string>>({});
@@ -49,6 +55,10 @@ export function BrandingForm({ clube }: { clube: Clube }) {
         <p className="text-corpo-sec text-vermelho-600">{erroGeral}</p>
       )}
 
+      {/* Modo leitura (§6.7): sem CLUBE_BRANDING, os campos ficam desativados e
+          o botão de guardar não aparece. `fieldset[disabled]` desativa todos os
+          controlos descendentes nativamente. */}
+      <fieldset disabled={!podeEditar} className="space-y-5 disabled:opacity-70">
       <div className="space-y-1.5">
         <Label htmlFor="nome">Nome do clube *</Label>
         <Input id="nome" name="nome" defaultValue={clube.nome} required minLength={2} maxLength={100} />
@@ -123,11 +133,15 @@ export function BrandingForm({ clube }: { clube: Clube }) {
         </div>
       </div>
 
-      <div className="flex justify-end pt-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "A guardar…" : "Guardar alterações"}
-        </Button>
-      </div>
+      </fieldset>
+
+      {podeEditar && (
+        <div className="flex justify-end pt-2">
+          <Button type="submit" disabled={pending}>
+            {pending ? "A guardar…" : "Guardar alterações"}
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, TriangleAlert } from "lucide-react";
+import { Ban, Check, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,7 +29,13 @@ import {
   guardarEstatisticas,
   guardarRelatorio,
 } from "@/lib/actions/jogos";
-import { LABEL_BLOCO_TEMPO, LABEL_UTILIZACAO } from "@/lib/schemas/jogo";
+import {
+  LABEL_BLOCO_TEMPO,
+  LABEL_UTILIZACAO,
+  LABEL_SUSPENSAO,
+  type SuspensaoPendente,
+} from "@/lib/schemas/jogo";
+import { parseRelatorio, serializarRelatorio } from "@/lib/relatorio-jogo";
 import { blocoParaMinutos } from "@/lib/modalidade-escalao";
 import { PlanoTatico } from "@/components/jogos/PlanoTatico";
 import { RegistoAoVivo } from "@/components/jogos/RegistoAoVivo";
@@ -76,6 +82,9 @@ type EstatLinha = {
   defesas: number | null;
   golosSofridosGR: number | null;
   faltasCometidas: number | null;
+  // Disciplina (§3.7): cartões acumulados por jogo. Aplicam-se a futsal e futebol.
+  cartaoAmarelo: number;
+  cartaoVermelho: number;
   // 🔁 v7 (§10.8): núcleo estatístico de futebol. Só editado/gravado em jogos de
   // futebol; em futsal fica sempre a null (a grelha nem os mostra).
   remates: number | null;
@@ -100,6 +109,7 @@ export function JogoDetalhe({
   adversario,
   modalidade,
   formato,
+  suspensoes = [],
 }: {
   jogoId: string;
   atletas: Atleta[];
@@ -117,15 +127,21 @@ export function JogoDetalhe({
   // exibido; `formato` alimenta a conversão bloco→minutos (tempo de jogo).
   modalidade: Modalidade;
   formato: FormatoJogo | null;
+  // BUG-P1-04: suspensões pendentes dos convocados (só preenchido quando este é o
+  // próximo jogo do escalão). Alimenta o badge/alerta na convocatória.
+  suspensoes?: SuspensaoPendente[];
 }) {
   const eFutebol = modalidade === "FUTEBOL";
+  const suspensaoPorAtleta = new Map(suspensoes.map((s) => [s.atletaId, s]));
   const [convocados, setConvocados] = useState<Set<string>>(
     () => new Set(convocadosIniciais),
   );
   const [estatisticas, setEstatisticas] = useState<Record<string, EstatLinha>>(
     estatisticasIniciais,
   );
-  const [relatorio, setRelatorio] = useState(relatorioInicial);
+  // UX-P3-07: relatório em 3 secções. Retrocompatível — texto puro legado é
+  // interpretado como "análise táctica" por `parseRelatorio`.
+  const [relatorio, setRelatorio] = useState(() => parseRelatorio(relatorioInicial));
   const [confirmarRemocao, setConfirmarRemocao] = useState<string[] | null>(null);
 
   const [pendingConv, startConv] = useTransition();
@@ -185,6 +201,8 @@ export function JogoDetalhe({
         defesas: null,
         golosSofridosGR: null,
         faltasCometidas: null,
+        cartaoAmarelo: 0,
+        cartaoVermelho: 0,
         remates: null,
         cantos: null,
         forasDeJogo: null,
@@ -231,7 +249,7 @@ export function JogoDetalhe({
 
   function guardarRel() {
     startRel(async () => {
-      const res = await guardarRelatorio(jogoId, relatorio);
+      const res = await guardarRelatorio(jogoId, serializarRelatorio(relatorio));
       if (res.sucesso) toast.success("Relatório guardado");
       else toast.error(res.erro);
     });
@@ -239,25 +257,57 @@ export function JogoDetalhe({
 
   return (
     <Tabs defaultValue="convocatoria">
+      {/* UX-P3-04: 4 separadores. Convocatória agrupa o plano de jogo; "Análise"
+          agrupa relatório e scouting. Os mais usados ficam primeiro. */}
       <TabsList className="flex-wrap">
         <TabsTrigger value="convocatoria">Convocatória</TabsTrigger>
-        <TabsTrigger value="plano">Plano</TabsTrigger>
-        <TabsTrigger value="aovivo">Ao Vivo</TabsTrigger>
         <TabsTrigger value="estatisticas">Estatísticas</TabsTrigger>
-        <TabsTrigger value="scouting">Scouting</TabsTrigger>
-        <TabsTrigger value="relatorio">Relatório</TabsTrigger>
+        <TabsTrigger value="aovivo">Ao Vivo</TabsTrigger>
+        <TabsTrigger value="analise">Análise</TabsTrigger>
       </TabsList>
 
-      {/* ─── Convocatória ─── */}
+      {/* ─── Convocatória (+ Plano de jogo) ─── */}
       <TabsContent value="convocatoria" className="space-y-4">
+        <Tabs defaultValue="convocados">
+          <TabsList className="flex-wrap">
+            <TabsTrigger value="convocados">Convocados</TabsTrigger>
+            <TabsTrigger value="plano">Plano de jogo</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="convocados" className="space-y-4">
         {atletas.length === 0 ? (
           <p className="rounded-md border border-dashed border-cinza-300 p-4 text-center text-corpo-sec text-cinza-500">
             Não há atletas neste escalão nesta época.
           </p>
         ) : (
           <>
+            {/* BUG-P1-04: aviso de atletas suspensos para este jogo. */}
+            {suspensoes.length > 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-vermelho-600/20 bg-vermelho-600/5 px-3 py-2 text-corpo-sec text-vermelho-600">
+                <Ban className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">
+                    {suspensoes.length === 1
+                      ? "1 atleta suspenso para este jogo:"
+                      : `${suspensoes.length} atletas suspensos para este jogo:`}
+                  </p>
+                  <ul className="mt-0.5 list-disc pl-5">
+                    {suspensoes.map((s) => (
+                      <li key={s.atletaId}>
+                        {s.nome} — {LABEL_SUSPENSAO[s.motivo]}
+                        {s.motivo === "ACUMULACAO_AMARELOS" && s.amarelosAcumulados != null
+                          ? ` (${s.amarelosAcumulados} 🟨)`
+                          : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
             <ul className="space-y-2">
-              {atletas.map((a) => (
+              {atletas.map((a) => {
+                const suspensao = suspensaoPorAtleta.get(a.id);
+                return (
                 <li
                   key={a.id}
                   className="flex items-center gap-3 rounded-md border border-cinza-200 bg-white p-2.5 shadow-card"
@@ -273,8 +323,23 @@ export function JogoDetalhe({
                     {a.numero != null && <span className="mr-1 text-cinza-400">#{a.numero}</span>}
                     {a.nome}
                   </label>
+                  {suspensao && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-vermelho-600/10 px-2 py-0.5 text-legenda font-medium text-vermelho-600"
+                      title={
+                        suspensao.motivo === "ACUMULACAO_AMARELOS" &&
+                        suspensao.amarelosAcumulados != null
+                          ? `${suspensao.amarelosAcumulados} cartões amarelos acumulados na época`
+                          : "Cartão vermelho no último jogo"
+                      }
+                    >
+                      <Ban className="h-3 w-3" />
+                      {LABEL_SUSPENSAO[suspensao.motivo]}
+                    </span>
+                  )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
             <div className="flex items-center justify-between">
               <p className="text-corpo-sec text-cinza-600">{convocados.size} convocado(s)</p>
@@ -287,20 +352,22 @@ export function JogoDetalhe({
         )}
       </TabsContent>
 
-      {/* ─── Plano (dia de jogo) ─── */}
-      <TabsContent value="plano" className="space-y-4">
-        <PlanoTatico
-          jogoId={jogoId}
-          convocados={convocadosSalvos.map((a) => ({
-            id: a.id,
-            nome: a.nome,
-            numero: a.numero,
-            posicoes: a.posicoes,
-          }))}
-          planoInicial={planoInicial}
-          modalidade={modalidade}
-          formato={formato}
-        />
+          {/* ─── Plano (dia de jogo) ─── */}
+          <TabsContent value="plano" className="space-y-4">
+            <PlanoTatico
+              jogoId={jogoId}
+              convocados={convocadosSalvos.map((a) => ({
+                id: a.id,
+                nome: a.nome,
+                numero: a.numero,
+                posicoes: a.posicoes,
+              }))}
+              planoInicial={planoInicial}
+              modalidade={modalidade}
+              formato={formato}
+            />
+          </TabsContent>
+        </Tabs>
       </TabsContent>
 
       {/* ─── Ao Vivo (registo de eventos) ─── */}
@@ -480,6 +547,19 @@ export function JogoDetalhe({
                           onChange={(n) => atualizarEstat(a.id, { faltasCometidas: n })}
                         />
                       )}
+                      {/* Disciplina (§3.7): cartões — comuns a futsal e futebol. */}
+                      <CampoNum
+                        label="🟨 Cartão amarelo"
+                        valor={e.cartaoAmarelo}
+                        max={5}
+                        onChange={(n) => atualizarEstat(a.id, { cartaoAmarelo: n ?? 0 })}
+                      />
+                      <CampoNum
+                        label="🟥 Cartão vermelho"
+                        valor={e.cartaoVermelho}
+                        max={2}
+                        onChange={(n) => atualizarEstat(a.id, { cartaoVermelho: n ?? 0 })}
+                      />
                     </div>
 
                     {/* Métricas configuráveis */}
@@ -509,41 +589,86 @@ export function JogoDetalhe({
         )}
       </TabsContent>
 
-      {/* ─── Scouting (no jogo) ─── */}
-      <TabsContent value="scouting" className="space-y-4">
-        <ScoutingJogo jogoId={jogoId} observacoes={observacoes} />
-      </TabsContent>
+      {/* ─── Análise (Relatório + Scouting) ─── */}
+      <TabsContent value="analise" className="space-y-4">
+        <Tabs defaultValue="relatorio">
+          <TabsList className="flex-wrap">
+            <TabsTrigger value="relatorio">Relatório</TabsTrigger>
+            <TabsTrigger value="scouting">Scouting</TabsTrigger>
+          </TabsList>
 
-      {/* ─── Relatório ─── */}
-      <TabsContent value="relatorio" className="space-y-6">
-        <div className="space-y-3">
-          <Textarea
-            value={relatorio}
-            onChange={(e) => setRelatorio(e.target.value)}
-            rows={8}
-            maxLength={5000}
-            placeholder="Reflexão pós-jogo…"
-          />
-          <div className="flex justify-end">
-            <Button onClick={guardarRel} disabled={pendingRel}>
-              <Check className="h-4 w-4" />
-              {pendingRel ? "A guardar…" : "Guardar relatório"}
-            </Button>
-          </div>
-        </div>
+          {/* Relatório estruturado (UX-P3-07) */}
+          <TabsContent value="relatorio" className="space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-corpo-sec font-medium text-cinza-900">
+                  Análise táctica
+                </label>
+                <Textarea
+                  value={relatorio.analiseTatica}
+                  onChange={(e) =>
+                    setRelatorio((r) => ({ ...r, analiseTatica: e.target.value }))
+                  }
+                  rows={5}
+                  maxLength={3000}
+                  placeholder="Como correu tacticamente…"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-corpo-sec font-medium text-cinza-900">
+                  Destaques
+                </label>
+                <Textarea
+                  value={relatorio.destaques}
+                  onChange={(e) =>
+                    setRelatorio((r) => ({ ...r, destaques: e.target.value }))
+                  }
+                  rows={4}
+                  maxLength={3000}
+                  placeholder="Jogadores em destaque, momentos decisivos…"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-corpo-sec font-medium text-cinza-900">
+                  Próximo jogo
+                </label>
+                <Textarea
+                  value={relatorio.proximoJogo}
+                  onChange={(e) =>
+                    setRelatorio((r) => ({ ...r, proximoJogo: e.target.value }))
+                  }
+                  rows={4}
+                  maxLength={3000}
+                  placeholder="Foco para o próximo jogo…"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={guardarRel} disabled={pendingRel}>
+                  <Check className="h-4 w-4" />
+                  {pendingRel ? "A guardar…" : "Guardar relatório"}
+                </Button>
+              </div>
+            </div>
 
-        {/* Cronologia dos eventos (§10.4) */}
-        <div className="space-y-2 border-t border-cinza-100 pt-4">
-          <h3 className="text-subtitulo text-cinza-900">Cronologia do jogo</h3>
-          <TimelineEventos
-            eventos={eventos}
-            atletas={convocadosSalvos.map((a) => ({
-              id: a.id,
-              nome: a.nome,
-              numero: a.numero,
-            }))}
-          />
-        </div>
+            {/* Cronologia dos eventos (§10.4) */}
+            <div className="space-y-2 border-t border-cinza-100 pt-4">
+              <h3 className="text-subtitulo text-cinza-900">Cronologia do jogo</h3>
+              <TimelineEventos
+                eventos={eventos}
+                atletas={convocadosSalvos.map((a) => ({
+                  id: a.id,
+                  nome: a.nome,
+                  numero: a.numero,
+                }))}
+              />
+            </div>
+          </TabsContent>
+
+          {/* Scouting (no jogo) */}
+          <TabsContent value="scouting" className="space-y-4">
+            <ScoutingJogo jogoId={jogoId} observacoes={observacoes} />
+          </TabsContent>
+        </Tabs>
       </TabsContent>
 
       {/* Confirmação de remoção com estatísticas (secção 22.4) */}
@@ -584,10 +709,12 @@ function CampoNum({
   label,
   valor,
   onChange,
+  max,
 }: {
   label: string;
   valor: number | null;
   onChange: (n: number | null) => void;
+  max?: number;
 }) {
   return (
     <div className="space-y-1">
@@ -595,10 +722,18 @@ function CampoNum({
       <Input
         type="number"
         min={0}
+        max={max}
         value={valor ?? ""}
         onChange={(e) => {
           const v = e.target.value.trim();
-          onChange(v === "" ? null : Number(v));
+          if (v === "") {
+            onChange(null);
+            return;
+          }
+          let n = Number(v);
+          if (max != null && n > max) n = max;
+          if (n < 0) n = 0;
+          onChange(n);
         }}
         className="h-9"
       />

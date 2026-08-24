@@ -23,6 +23,7 @@ import { segundaFeira, domingo, numeroSemana, semanaSobrepoePlaneamento } from "
 import { LABEL_MOMENTO_SEMANA, type MomentoSemana } from "@/lib/schemas/treino";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { CalendarioTreinos } from "@/components/treinos/CalendarioTreinos";
+import { AjudaPlaneamento } from "@/components/treinos/AjudaPlaneamento";
 
 const PRESENTES = new Set(["PRESENTE", "ATRASADO"]);
 
@@ -179,6 +180,7 @@ export default async function TreinosPage({
               Planos semanais
             </Link>
           </Button>
+          <AjudaPlaneamento />
           <Button asChild>
             <Link href="/treinos/novo">
               <Plus className="h-4 w-4" />

@@ -3,7 +3,7 @@ import type { Modalidade, PapelSeccao, Seccao } from "@prisma/client";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
 import { listarEscaloes } from "@/lib/actions/escaloes";
-import { listarMembros } from "@/lib/actions/utilizadores";
+import { listarMembrosBasico } from "@/lib/actions/utilizadores";
 import { EstadoErro } from "@/components/layout/EstadosUI";
 import { SeccoesLista } from "@/components/definicoes/SeccoesLista";
 
@@ -36,7 +36,7 @@ export default async function SeccoesPage() {
   const [resSeccoes, resEscaloes, resMembros] = await Promise.all([
     obterSeccoes(),
     listarEscaloes(),
-    listarMembros(),
+    listarMembrosBasico(),
   ]);
 
   if (!resSeccoes.sucesso) return <EstadoErro mensagem={resSeccoes.erro} />;

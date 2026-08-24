@@ -28,12 +28,27 @@ export interface MembroLista {
   capacidadesRevogadas: string[];
 }
 
+/** Identidade mínima de um membro (sem dados sensíveis). */
+export interface MembroBasicoLista {
+  membroId: string;
+  utilizadorId: string;
+  nome: string;
+}
+
+/**
+ * Lista COMPLETA de membros com dados sensíveis (email, perfil, capacidades
+ * efetivas, escalões). Requer `CLUBE_UTILIZADORES` (§6.7) — é a mesma capacidade
+ * que autoriza as mutações de gestão de membros. Um membro sem esta capacidade
+ * (ex.: Treinador Principal) NÃO pode enumerar os dados de todos os membros do
+ * clube. Para necessidades de identidade não sensíveis (nome + id) usar
+ * `listarMembrosBasico`.
+ */
 export async function listarMembros(): Promise<Resultado<MembroLista[]>> {
-  const ctx = await obterMembroAtual();
-  if (!ctx) return erro("Sem acesso a este clube");
+  const perm = await exigirCapacidade("CLUBE_UTILIZADORES");
+  if (!perm.ok) return erro(perm.erro);
 
   const membros = await prisma.membroClube.findMany({
-    where: { clubeId: ctx.clube.id },
+    where: { clubeId: perm.ctx.clube.id },
     include: {
       utilizador: { select: { id: true, nome: true, email: true } },
       perfil: { select: { id: true, nome: true, capacidades: true } },
@@ -55,6 +70,31 @@ export async function listarMembros(): Promise<Resultado<MembroLista[]>> {
       perfilCapacidades: m.perfil.capacidades,
       capacidadesExtra: m.capacidadesExtra,
       capacidadesRevogadas: m.capacidadesRevogadas,
+    })),
+  );
+}
+
+/**
+ * Lista MÍNIMA de membros (id + nome), sem dados sensíveis. Legível por qualquer
+ * membro ativo do clube — serve seletores de identidade (destinatários de
+ * lembretes §8.19, atribuição de coordenadores §8.22) sem expor emails,
+ * perfis ou capacidades. Filtra sempre pelo clube da adesão ativa.
+ */
+export async function listarMembrosBasico(): Promise<Resultado<MembroBasicoLista[]>> {
+  const ctx = await obterMembroAtual();
+  if (!ctx) return erro("Sem acesso a este clube");
+
+  const membros = await prisma.membroClube.findMany({
+    where: { clubeId: ctx.clube.id },
+    include: { utilizador: { select: { id: true, nome: true } } },
+    orderBy: { utilizador: { nome: "asc" } },
+  });
+
+  return ok(
+    membros.map((m) => ({
+      membroId: m.id,
+      utilizadorId: m.utilizadorId,
+      nome: m.utilizador.nome,
     })),
   );
 }

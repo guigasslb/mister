@@ -6,6 +6,7 @@ import { Check, ListChecks, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { marcarPresencas } from "@/lib/actions/treinos";
+import { MOTIVOS_FALTA, LABEL_MOTIVO_FALTA } from "@/lib/schemas/treino";
 import type { EstadoPresenca, MotivoFalta } from "@prisma/client";
 
 type Atleta = { id: string; nome: string; numero: number | null };
@@ -48,11 +49,16 @@ export function MarcadorPresencas({
   const construirInicial = useCallback((): Record<string, PresencaInicial> => {
     const inicial: Record<string, PresencaInicial> = {};
     for (const a of atletas) {
-      inicial[a.id] = presencasIniciais[a.id] ?? {
-        estado: "PRESENTE",
-        motivo: null,
-        justificacao: null,
-      };
+      const existente = presencasIniciais[a.id];
+      if (existente) {
+        // Registos antigos guardavam só texto livre (motivo a null). Mostram-se
+        // como "Outro" para o texto continuar visível e editável (UX-P3-02).
+        const motivo =
+          existente.motivo ?? (existente.justificacao?.trim() ? "OUTRO" : null);
+        inicial[a.id] = { ...existente, motivo };
+      } else {
+        inicial[a.id] = { estado: "PRESENTE", motivo: null, justificacao: null };
+      }
     }
     return inicial;
   }, [atletas, presencasIniciais]);
@@ -80,6 +86,25 @@ export function MarcadorPresencas({
       ...prev,
       [atletaId]: { ...prev[atletaId], justificacao: valor },
     }));
+  }
+
+  /**
+   * Seleciona (ou alterna) o motivo da falta a partir dos botões rápidos.
+   * O texto livre só faz sentido em "Outro" — noutros motivos limpa-se (UX-P3-02).
+   */
+  function mudarMotivo(atletaId: string, motivo: MotivoFalta) {
+    setRegistos((prev) => {
+      const atual = prev[atletaId];
+      const novoMotivo = atual.motivo === motivo ? null : motivo;
+      return {
+        ...prev,
+        [atletaId]: {
+          ...atual,
+          motivo: novoMotivo,
+          justificacao: novoMotivo === "OUTRO" ? atual.justificacao : null,
+        },
+      };
+    });
   }
 
   /** Marca todos os atletas como PRESENTE (limpa motivos/justificações). */
@@ -182,21 +207,55 @@ export function MarcadorPresencas({
               </div>
 
               {comJustificacao && (
-                <div className="mt-2 border-t border-cinza-100 pt-2">
-                  <label
-                    htmlFor={`motivo-${a.id}`}
-                    className="mb-1 block text-legenda text-cinza-500"
-                  >
+                <div className="mt-2 space-y-2 border-t border-cinza-100 pt-2">
+                  <span className="block text-legenda text-cinza-500">
                     Motivo (opcional)
-                  </label>
-                  <Input
-                    id={`motivo-${a.id}`}
-                    value={registo.justificacao ?? ""}
-                    onChange={(ev) => mudarJustificacao(a.id, ev.target.value)}
-                    maxLength={300}
-                    placeholder="Ex.: consulta médica, viagem…"
-                    className="h-11"
-                  />
+                  </span>
+                  {/* Botões rápidos — mais fáceis de usar no telemóvel que texto livre. */}
+                  <div
+                    role="group"
+                    aria-label={`Motivo da falta de ${a.nome}`}
+                    className="flex flex-wrap gap-1.5"
+                  >
+                    {MOTIVOS_FALTA.map((m) => {
+                      const ativo = registo.motivo === m;
+                      return (
+                        <Button
+                          key={m}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-pressed={ativo}
+                          onClick={() => mudarMotivo(a.id, m)}
+                          className={
+                            ativo ? "border-primary bg-primary/5 text-primary" : ""
+                          }
+                        >
+                          {LABEL_MOTIVO_FALTA[m]}
+                        </Button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Texto livre apenas em "Outro". */}
+                  {registo.motivo === "OUTRO" && (
+                    <div>
+                      <label
+                        htmlFor={`motivo-${a.id}`}
+                        className="mb-1 block text-legenda text-cinza-500"
+                      >
+                        Descreve o motivo
+                      </label>
+                      <Input
+                        id={`motivo-${a.id}`}
+                        value={registo.justificacao ?? ""}
+                        onChange={(ev) => mudarJustificacao(a.id, ev.target.value)}
+                        maxLength={300}
+                        placeholder="Ex.: consulta médica, viagem…"
+                        className="h-11"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </li>

@@ -305,6 +305,9 @@ model MembroClube {
   // 🔁 v7 (§3.1.1): secções que este membro coordena (scope de secção).
   seccoes     MembroSeccao[]
 
+  // GAP-P2-15: presenças marcadas por este membro (rastreio de autor).
+  presencasMarcadas Presenca[] @relation("PresencasMarcadas")
+
   @@unique([utilizadorId, clubeId])
   @@index([clubeId])
   @@index([utilizadorId])
@@ -907,6 +910,8 @@ model Sessao {
   @@index([escalaoId])
   @@index([planeamentoId])
   @@index([data])
+  @@index([planoSemanalDiaId])
+  @@index([planoSemanalId])
 }
 
 // P4.8 (§8.20): RPE individual do atleta para uma sessão (1-10). Permite carga
@@ -967,11 +972,17 @@ model Presenca {
   motivo       MotivoFalta?
   justificacao String?
 
+  // Rastreio do autor da marcação (GAP-P2-15): quem registou/alterou a presença.
+  // Nullable com SetNull — se o membro sair do clube, a presença preserva-se sem autor.
+  marcadoPorId String?
+  marcadoPor   MembroClube? @relation("PresencasMarcadas", fields: [marcadoPorId], references: [id], onDelete: SetNull)
+
   @@unique([sessaoId, atletaId])
   @@index([atletaId])
   @@index([escalaoId])
   @@index([escalaoId, estado])
   @@index([sessaoId, estado])
+  @@index([marcadoPorId])
 }
 
 enum EstadoPresenca {
@@ -1287,6 +1298,10 @@ model EstatisticaAtleta {
   cantos      Int?
   forasDeJogo Int?
   desarmes    Int?
+
+  // Disciplina (cartões)
+  cartaoAmarelo  Int @default(0)
+  cartaoVermelho Int @default(0)
 
   // Métricas configuráveis
   valoresMetricas ValorMetrica[]

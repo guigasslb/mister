@@ -35,9 +35,10 @@ const MAILTO = `mailto:${EMAIL_CONTACTO}?subject=${encodeURIComponent(
   "Subscrição Mister",
 )}`;
 
-// Dados de pagamento por transferência bancária. O IBAN ainda está por
-// definir — enquanto estiver vazio, a linha do IBAN é ocultada da UI.
-const IBAN = "";
+// Dados de pagamento por transferência bancária. O IBAN é configurado via
+// variável de ambiente (NEXT_PUBLIC_IBAN) — enquanto estiver vazio, a linha do
+// IBAN é ocultada da UI.
+const IBAN = process.env.NEXT_PUBLIC_IBAN ?? "";
 const EMAIL_COMPROVATIVO = "goncalo.pereira.1992@gmail.com";
 
 // Tabela de preços da licença de Clube (§3.11 / §17.1 da bíblia). Tiers por
@@ -99,7 +100,7 @@ export default async function SemLicencaPage() {
 
   // Plano escolhido no onboarding (licença PENDENTE). Se existir, o paywall
   // mostra só esse plano com o valor exato; caso contrário, a tabela completa.
-  const planoPendente = await obterLicencaPendente(membro.clube.id);
+  const planoPendente = await obterLicencaPendente();
   const planoNegociado = planoPendente?.tier === "PARCEIRO";
 
   return (

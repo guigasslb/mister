@@ -18,5 +18,13 @@ export default async function EpocasPage() {
   // valida no servidor — este flag apenas evita mostrar um botão inútil.
   const podeUsarWizard = membro?.capacidades.includes("CLUBE_EPOCAS") ?? false;
 
-  return <EpocasLista epocas={resultado.dados} podeUsarWizard={podeUsarWizard} />;
+  // Mesmo gate (CLUBE_EPOCAS) esconde os botões de escrita (criar época e
+  // definir época ativa) a quem não tem a capacidade — §6.7.
+  return (
+    <EpocasLista
+      epocas={resultado.dados}
+      podeUsarWizard={podeUsarWizard}
+      podeGerir={podeUsarWizard}
+    />
+  );
 }
