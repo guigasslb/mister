@@ -1,9 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, X, Clock, Pause, Play } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Clock,
+  Pause,
+  Play,
+  SlidersHorizontal,
+} from "lucide-react";
 import { LABEL_CATEGORIA, diagramaSchema } from "@/lib/schemas/exercicio";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
+import { AdaptarExercicioDialog } from "@/components/treinos/AdaptarExercicioDialog";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
 
 export type ExercicioModo = {
@@ -70,6 +79,7 @@ export function ModoTreino({
   const [indice, setIndice] = useState(0);
   const [segundos, setSegundos] = useState(0);
   const [pausado, setPausado] = useState(false);
+  const [adaptarAberto, setAdaptarAberto] = useState(false);
 
   // Cronómetro ascendente (tempo total decorrido na sessão). Não incrementa
   // enquanto estiver em pausa.
@@ -88,14 +98,15 @@ export function ModoTreino({
     };
   }, []);
 
-  // Escape termina o treino.
+  // Escape termina o treino — exceto quando o diálogo de adaptação está aberto
+  // (nesse caso o Escape deve apenas fechar o diálogo, não terminar a sessão).
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
-      if (ev.key === "Escape") onFinish();
+      if (ev.key === "Escape" && !adaptarAberto) onFinish();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onFinish]);
+  }, [onFinish, adaptarAberto]);
 
   const total = exercicios.length;
   const atual = exercicios[indice];
@@ -113,7 +124,7 @@ export function ModoTreino({
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true">
       {/* Topo: progresso + cronómetro + terminar */}
-      <header className="flex items-center justify-between gap-3 border-b border-cinza-200 px-4 py-3">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-cinza-200 px-4 py-3">
         <div className="flex items-center gap-1.5 text-corpo font-semibold text-cinza-900">
           <Clock className="h-5 w-5 text-primary" />
           <span
@@ -146,28 +157,40 @@ export function ModoTreino({
       </header>
 
       {/* Barra de progresso */}
-      <div className="h-1.5 w-full bg-cinza-100">
+      <div className="h-1.5 w-full shrink-0 bg-cinza-100">
         <div
           className="h-full bg-primary transition-all"
           style={{ width: `${total > 0 ? ((indice + 1) / total) * 100 : 0}%` }}
         />
       </div>
 
-      {/* Corpo: exercício atual */}
-      <div className="flex-1 overflow-y-auto px-4 py-5">
+      {/* Corpo: exercício atual (zona scrollável — min-h-0 é essencial para o
+          overflow funcionar dentro do flex-col e não empurrar o footer). */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
         {atual ? (
           <div className="mx-auto max-w-md space-y-4">
-            <div>
-              <h2 className="text-[24px] font-bold leading-tight text-cinza-900">
-                {atual.nome}
-              </h2>
-              <p className="mt-1 text-corpo-sec text-cinza-500">
-                {atual.categoriaPrincipal
-                  ? LABEL_CATEGORIA[atual.categoriaPrincipal]
-                  : "Sem categoria"}
-                {atual.duracaoMin ? ` · ${atual.duracaoMin} min` : ""}
-                {atual.series ? ` · ${atual.series} séries` : ""}
-              </p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-[24px] font-bold leading-tight text-cinza-900">
+                  {atual.nome}
+                </h2>
+                <p className="mt-1 text-corpo-sec text-cinza-500">
+                  {atual.categoriaPrincipal
+                    ? LABEL_CATEGORIA[atual.categoriaPrincipal]
+                    : "Sem categoria"}
+                  {atual.duracaoMin ? ` · ${atual.duracaoMin} min` : ""}
+                  {atual.series ? ` · ${atual.series} séries` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdaptarAberto(true)}
+                aria-label="Adaptar exercício para esta sessão"
+                className="flex h-11 shrink-0 items-center gap-1.5 rounded-md border border-cinza-200 px-3 text-corpo-sec font-medium text-cinza-700 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <SlidersHorizontal className="h-5 w-5" />
+                <span className="hidden sm:inline">Adaptar</span>
+              </button>
             </div>
 
             <DiagramaGrande diagrama={atual.diagrama} nome={atual.nome} />
@@ -217,26 +240,43 @@ export function ModoTreino({
         )}
       </div>
 
-      {/* Navegação */}
-      <footer className="flex items-center gap-3 border-t border-cinza-200 px-4 py-3">
+      {/* Navegação — fixa no fundo. "Anterior" subtil, "Próximo" proeminente. */}
+      <footer className="flex shrink-0 items-center gap-3 border-t border-cinza-200 px-4 py-3">
         <button
           type="button"
           onClick={anterior}
           disabled={indice === 0}
-          className="flex h-14 flex-1 items-center justify-center gap-1.5 rounded-lg border border-cinza-200 bg-white text-corpo font-semibold text-cinza-900 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+          aria-label="Exercício anterior"
+          className="flex h-14 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-cinza-200 bg-white px-4 text-corpo font-medium text-cinza-700 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
         >
           <ChevronLeft className="h-5 w-5" />
-          Anterior
+          <span className="hidden sm:inline">Anterior</span>
         </button>
         <button
           type="button"
           onClick={proximo}
-          className="flex h-14 flex-1 items-center justify-center gap-1.5 rounded-lg bg-laranja-600 text-corpo font-semibold text-white hover:bg-[#A8370C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="flex h-14 flex-1 items-center justify-center gap-2 rounded-lg bg-laranja-600 text-subtitulo font-semibold text-white hover:bg-[#A8370C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
-          {ultimo ? "Concluir" : "Próximo"}
+          {ultimo ? "Terminar treino" : "Próximo exercício"}
           <ChevronRight className="h-5 w-5" />
         </button>
       </footer>
+
+      {/* Adaptar exercício apenas para esta sessão (mesma ação do GestorExercicios). */}
+      {atual && (
+        <AdaptarExercicioDialog
+          sessaoExercicioId={atual.id}
+          exercicioNome={atual.nome}
+          valorActual={{
+            duracaoMin: atual.duracaoMin,
+            series: atual.series,
+            descricaoOverride: atual.descricaoOverride,
+            notas: atual.notas,
+          }}
+          aberto={adaptarAberto}
+          onFechar={() => setAdaptarAberto(false)}
+        />
+      )}
     </div>
   );
 }
