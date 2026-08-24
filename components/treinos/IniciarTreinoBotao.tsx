@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Play, RotateCcw } from "lucide-react";
 import { ModoTreino, type ExercicioModo } from "@/components/treinos/ModoTreino";
 import {
@@ -82,16 +83,19 @@ export function IniciarTreinoBotao({
         )}
       </button>
 
-      {aberto && (
-        <ModoTreino
-          exercicios={exercicios}
-          sessaoId={sessaoId}
-          indiceInicial={suspenso ? indiceRetoma : 0}
-          segundosIniciais={suspenso ? suspenso.segundos : 0}
-          onFinish={terminar}
-          onSuspend={suspender}
-        />
-      )}
+      {aberto && typeof document !== "undefined"
+        ? createPortal(
+            <ModoTreino
+              exercicios={exercicios}
+              sessaoId={sessaoId}
+              indiceInicial={suspenso ? indiceRetoma : 0}
+              segundosIniciais={suspenso ? suspenso.segundos : 0}
+              onFinish={terminar}
+              onSuspend={suspender}
+            />,
+            document.body,
+          )
+        : null}
     </>
   );
 }
