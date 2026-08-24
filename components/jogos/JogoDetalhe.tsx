@@ -110,6 +110,7 @@ export function JogoDetalhe({
   modalidade,
   formato,
   suspensoes = [],
+  escalaoJovem = false,
 }: {
   jogoId: string;
   atletas: Atleta[];
@@ -130,6 +131,8 @@ export function JogoDetalhe({
   // BUG-P1-04: suspensões pendentes dos convocados (só preenchido quando este é o
   // próximo jogo do escalão). Alimenta o badge/alerta na convocatória.
   suspensoes?: SuspensaoPendente[];
+  // Formação jovem (§3.7): oculta cartões e suspensões (não aplicáveis a menores).
+  escalaoJovem?: boolean;
 }) {
   const eFutebol = modalidade === "FUTEBOL";
   const suspensaoPorAtleta = new Map(suspensoes.map((s) => [s.atletaId, s]));
@@ -281,8 +284,9 @@ export function JogoDetalhe({
           </p>
         ) : (
           <>
-            {/* BUG-P1-04: aviso de atletas suspensos para este jogo. */}
-            {suspensoes.length > 0 && (
+            {/* BUG-P1-04: aviso de atletas suspensos para este jogo.
+                §3.7: sem suspensões na formação jovem. */}
+            {!escalaoJovem && suspensoes.length > 0 && (
               <div className="flex items-start gap-2 rounded-md border border-vermelho-600/20 bg-vermelho-600/5 px-3 py-2 text-corpo-sec text-vermelho-600">
                 <Ban className="mt-0.5 h-4 w-4 flex-shrink-0" />
                 <div>
@@ -306,7 +310,9 @@ export function JogoDetalhe({
             )}
             <ul className="space-y-2">
               {atletas.map((a) => {
-                const suspensao = suspensaoPorAtleta.get(a.id);
+                const suspensao = escalaoJovem
+                  ? undefined
+                  : suspensaoPorAtleta.get(a.id);
                 return (
                 <li
                   key={a.id}
@@ -547,19 +553,24 @@ export function JogoDetalhe({
                           onChange={(n) => atualizarEstat(a.id, { faltasCometidas: n })}
                         />
                       )}
-                      {/* Disciplina (§3.7): cartões — comuns a futsal e futebol. */}
-                      <CampoNum
-                        label="🟨 Cartão amarelo"
-                        valor={e.cartaoAmarelo}
-                        max={5}
-                        onChange={(n) => atualizarEstat(a.id, { cartaoAmarelo: n ?? 0 })}
-                      />
-                      <CampoNum
-                        label="🟥 Cartão vermelho"
-                        valor={e.cartaoVermelho}
-                        max={2}
-                        onChange={(n) => atualizarEstat(a.id, { cartaoVermelho: n ?? 0 })}
-                      />
+                      {/* Disciplina (§3.7): cartões — comuns a futsal e futebol,
+                          mas ocultos na formação jovem (não aplicáveis a menores). */}
+                      {!escalaoJovem && (
+                        <>
+                          <CampoNum
+                            label="🟨 Cartão amarelo"
+                            valor={e.cartaoAmarelo}
+                            max={5}
+                            onChange={(n) => atualizarEstat(a.id, { cartaoAmarelo: n ?? 0 })}
+                          />
+                          <CampoNum
+                            label="🟥 Cartão vermelho"
+                            valor={e.cartaoVermelho}
+                            max={2}
+                            onChange={(n) => atualizarEstat(a.id, { cartaoVermelho: n ?? 0 })}
+                          />
+                        </>
+                      )}
                     </div>
 
                     {/* Métricas configuráveis */}

@@ -48,6 +48,9 @@ export type AtletaParaEdicao = {
   encarregadoNome: string | null;
   encarregadoContacto: string | null;
   encarregadoEmail: string | null;
+  // Participações ativas na época (para derivar o escalão em contexto na edição —
+  // decide a abertura automática do bloco de encarregado de educação, UX-P3-08).
+  participacoes?: { escalaoNome: string }[];
 };
 
 export function AtletaForm({
@@ -75,15 +78,17 @@ export function AtletaForm({
     ? null
     : (escalaoSelecionado?.modalidade ?? null);
 
-  // UX-P3-08: o encarregado de educação só é relevante para atletas menores. Na
-  // criação abrimos o bloco automaticamente quando o escalão é de formação jovem
-  // (Sub-N, N ≤ 16); em seniores/júniores ou na edição (sem escalão em contexto)
-  // fica colapsado por omissão. Os campos mantêm-se sempre no DOM (o `<details>`
-  // não os remove), pelo que a lógica de submit não é afetada.
-  const abrirEncarregado =
-    !emEdicao && escalaoSelecionado != null
-      ? mostrarEncarregadoEducacao(escalaoSelecionado.nome)
-      : false;
+  // UX-P3-08: o encarregado de educação só é relevante para atletas menores. Abrimos
+  // o bloco automaticamente — tanto na criação como na edição — quando o escalão em
+  // contexto é de formação jovem (Sub-N, N ≤ 16, ou nome tradicional). Na criação o
+  // contexto vem do escalão selecionado; na edição, do escalão da participação ativa
+  // do atleta. Sem escalão em contexto fica colapsado por omissão. Os campos mantêm-se
+  // sempre no DOM (o `<details>` não os remove), pelo que o submit não é afetado.
+  const nomeEscalaoContexto =
+    escalaoSelecionado?.nome ?? atleta?.participacoes?.[0]?.escalaoNome ?? null;
+  const abrirEncarregado = nomeEscalaoContexto
+    ? mostrarEncarregadoEducacao(nomeEscalaoContexto)
+    : false;
 
   // Posições a mostrar: as da modalidade em contexto + quaisquer já selecionadas
   // fora dessa modalidade (um atleta multi-desporto guarda todas — §3.2; assim

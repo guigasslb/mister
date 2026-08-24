@@ -17,6 +17,7 @@ import { LABEL_CASA_FORA } from "@/lib/schemas/jogo";
 import { MINUTOS_POR_PARTE } from "@/lib/modalidade-escalao";
 import { BadgeModalidade } from "@/components/plantel/BadgeModalidade";
 import { eEscalaoFormacaoJovem } from "@/lib/schemas/social";
+import { mostrarCargaTreino } from "@/lib/utils";
 import { urlCard } from "@/lib/social/token";
 
 // 🔁 v7 (§3.7): rótulos PT-PT dos formatos de jogo (para o cabeçalho do detalhe).
@@ -135,6 +136,10 @@ export default async function DetalheJogoPage({
 
   const temResultado = j.golosMarcados != null && j.golosSofridos != null;
 
+  // Disciplina (§3.7): a formação jovem não regista cartões nem suspensões.
+  // Reutiliza a heurística de carga de treino (ambos ocultos na formação jovem).
+  const escalaoJovemDisciplina = !mostrarCargaTreino(j.escalao.nome);
+
   // P4.7: cards sociais. Bloqueados para escalões de formação jovem (RGPD).
   const escalaoJovem = eEscalaoFormacaoJovem(j.escalao.nome);
   const urlCardResultado =
@@ -238,6 +243,7 @@ export default async function DetalheJogoPage({
         modalidade={j.modalidade}
         formato={j.formato}
         suspensoes={suspensoes}
+        escalaoJovem={escalaoJovemDisciplina}
       />
     </div>
   );
