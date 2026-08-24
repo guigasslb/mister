@@ -159,6 +159,24 @@ describe("criarClube — semeia época ativa + escalão (P1.6)", () => {
     expect(prisma.epoca.create).not.toHaveBeenCalled();
   });
 
+  it("não cria um segundo clube se surgir uma adesão ativa durante a transação (anti-duplicação)", async () => {
+    // Simula a corrida TOCTOU: o check externo não vê adesão (1ª chamada → null),
+    // mas quando a transação corre já existe uma adesão ativa (2ª chamada → membro).
+    const ff = prisma.membroClube.findFirst as unknown as {
+      mockResolvedValueOnce: (v: unknown) => typeof ff;
+    };
+    ff.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "concorrente" });
+
+    const r = await criarClube({ nome: "Juventude SC", tier: "PEQUENO" });
+
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/adesão ativa/i);
+    // A transação abriu mas foi revertida antes de criar o clube ou o membro.
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(prisma.clube.create).not.toHaveBeenCalled();
+    expect(prisma.membroClube.create).not.toHaveBeenCalled();
+  });
+
   it("rejeita input inválido sem tocar na base de dados", async () => {
     const r = await criarClube({ nome: "" });
     expect(r.sucesso).toBe(false);

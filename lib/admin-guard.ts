@@ -4,40 +4,40 @@
 // SEPARADA da autenticação e da guarda de licença (segue o padrão de
 // `lib/guarda-licenca.ts` / `lib/permissoes.ts`): a auth continua intocável.
 // Um admin de plataforma é um operador do produto Mister (não um papel de
-// clube) — identificado por uma allowlist de emails em `ADMIN_EMAILS`.
-//
-// NÃO usa a diretiva `"use server"`: um módulo de Server Actions só pode
-// exportar funções `async`, e `eAdminPlataforma` é um predicado puro
-// (síncrono) reutilizável e testável. É o mesmo padrão de `permissoes.ts`,
-// que expõe helpers server-side sem essa diretiva.
+// clube) — identificado pelo campo persistente `Utilizador.isAdmin` na BD
+// (fonte de verdade), NÃO por uma variável de ambiente. Ver bíblia §21.1.
 // ─────────────────────────────────────────────
 
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 
 /**
- * Verdadeiro quando `email` consta na allowlist `ADMIN_EMAILS` (lista separada
- * por vírgulas). Predicado PURO — a comparação é case-insensitive e ignora
- * espaços e entradas vazias. Sem a variável definida, ninguém é admin.
+ * Verdadeiro quando existe um `Utilizador` com este `email` e `isAdmin = true`.
+ * A identificação de admin é persistida na BD (não depende de env vars). A
+ * comparação de email é case-insensitive (o email da sessão vem do próprio
+ * registo, mas a insensibilidade evita divergências por capitalização).
+ * Sem email, ou sem correspondência, ninguém é admin.
  */
-export function eAdminPlataforma(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const allowlist = process.env.ADMIN_EMAILS ?? "";
-  return allowlist
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-    .includes(email.trim().toLowerCase());
+export async function eAdminPlataforma(
+  email: string | null | undefined,
+): Promise<boolean> {
+  if (!email || !email.trim()) return false;
+  const utilizador = await prisma.utilizador.findFirst({
+    where: { email: { equals: email.trim(), mode: "insensitive" } },
+    select: { isAdmin: true },
+  });
+  return utilizador?.isAdmin ?? false;
 }
 
 /**
  * Guarda para Server Components / layouts do grupo (admin): redireciona para
- * /dashboard quem não seja admin de plataforma (sessão em falta ou email fora
- * da allowlist). Não expõe a existência do backoffice a não-admins.
+ * /dashboard quem não seja admin de plataforma (sessão em falta ou utilizador
+ * sem `isAdmin`). Não expõe a existência do backoffice a não-admins.
  */
 export async function exigirAdminPlataforma(): Promise<void> {
   const sessao = await auth();
-  if (!eAdminPlataforma(sessao?.user?.email)) {
+  if (!(await eAdminPlataforma(sessao?.user?.email))) {
     redirect("/dashboard");
   }
 }

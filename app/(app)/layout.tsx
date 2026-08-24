@@ -63,13 +63,13 @@ export default async function AppLayout({
     if (!utilizadorExiste) redirect("/login");
 
     // Sem clube ativo → onboarding (criar clube ou aceitar convite).
-    // Exceção: um admin de plataforma (allowlist ADMIN_EMAILS) não é um papel de
-    // clube — é um operador do produto e, por isso, não tem MembroClube. Sem esta
-    // exceção, o admin cairia no onboarding (/criar-clube). Enviá-lo para o
+    // Exceção: um admin de plataforma (`Utilizador.isAdmin` na BD) não é um papel
+    // de clube — é um operador do produto e, por isso, não tem MembroClube. Sem
+    // esta exceção, o admin cairia no onboarding (/criar-clube). Enviá-lo para o
     // backoffice interno (/admin). Routing puro — a autenticação fica intocada.
     const membro = await obterMembroAtual();
     if (!membro) {
-      if (eAdminPlataforma(session.user.email)) redirect("/admin");
+      if (await eAdminPlataforma(session.user.email)) redirect("/admin");
       redirect("/criar-clube");
     }
 

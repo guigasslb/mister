@@ -39,6 +39,7 @@ export const obterUtilizadorAtual = cache(async (): Promise<UtilizadorSemHash | 
       nome: true,
       email: true,
       telefone: true,
+      isAdmin: true,
       criadoEm: true,
       atualizadoEm: true,
     },

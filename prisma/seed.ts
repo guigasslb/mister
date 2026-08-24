@@ -29,16 +29,18 @@ const PASS_ADMIN = process.env.SEED_PASS_ADMIN;
 const BCRYPT_COST = 12;
 
 async function main() {
-  // Utilizador admin de plataforma (backoffice /admin via allowlist ADMIN_EMAILS,
-  // independente de qualquer papel de clube). Upsert idempotente: corre sempre,
-  // mesmo quando o restante seed do clube já foi aplicado.
+  // Utilizador admin de plataforma (backoffice /admin via `Utilizador.isAdmin`
+  // na BD, independente de qualquer papel de clube). Upsert idempotente: corre
+  // sempre, mesmo quando o restante seed do clube já foi aplicado — e garante o
+  // flag `isAdmin` mesmo em bases já semeadas antes deste campo existir.
   await prisma.utilizador.upsert({
     where: { email: "admin@mister.app" },
-    update: {},
+    update: { isAdmin: true },
     create: {
       nome: "Admin",
       email: "admin@mister.app",
       passwordHash: await bcrypt.hash(PASS_ADMIN, BCRYPT_COST),
+      isAdmin: true,
     },
   });
   console.log("Admin de plataforma pronto: admin@mister.app");

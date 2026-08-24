@@ -158,6 +158,11 @@ model Utilizador {
   email        String   @unique
   passwordHash String
   telefone     String?
+  // Admin de plataforma (backoffice /admin). Persistido na BD (fonte de verdade),
+  // NÃO em variável de ambiente. Um admin é um operador do produto Mister,
+  // independente de qualquer papel de clube (não tem MembroClube). Ver §21.1 e
+  // `lib/admin-guard.ts`. Aditivo, default false (ninguém é admin por omissão).
+  isAdmin      Boolean  @default(false)
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 

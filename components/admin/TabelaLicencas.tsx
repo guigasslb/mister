@@ -1,9 +1,16 @@
 "use client";
 
-import { useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, PauseCircle, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  PauseCircle,
+  Users,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { alterarEstadoLicenca } from "@/lib/actions/admin-licencas";
@@ -16,7 +23,11 @@ import {
   formatarEuros,
 } from "@/lib/schemas/licenciamento";
 import { DialogEditarDataFim } from "@/components/admin/DialogEditarDataFim";
+import { GestaoMembrosClube } from "@/components/admin/GestaoMembrosClube";
 import type { EstadoLicenca } from "@prisma/client";
+
+// Nº de colunas da tabela — usado no colSpan da linha de drill-down de membros.
+const NUM_COLUNAS = 8;
 
 // Classes de badge por estado (fundo suave + texto com contraste AA).
 const ESTILO_ESTADO: Record<EstadoLicenca, string> = {
@@ -46,6 +57,8 @@ function formatarDataFim(d: Date | null): string {
 export function TabelaLicencas({ licencas }: { licencas: LicencaAdmin[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  // Id da licença cujo drill-down de membros está expandido (só uma de cada vez).
+  const [expandida, setExpandida] = useState<string | null>(null);
 
   function alterarEstado(licencaId: string, estado: EstadoLicenca) {
     startTransition(async () => {
@@ -89,21 +102,45 @@ export function TabelaLicencas({ licencas }: { licencas: LicencaAdmin[] }) {
             const podeSuspender = estado === "ATIVA";
             const podeCancelar =
               estado === "ATIVA" || estado === "SUSPENSA" || estado === "PENDENTE";
+            // Só licenças de Clube com clube resolvido têm gestão de membros.
+            const clubeId = l.tipo === "CLUBE" ? l.clube?.id ?? null : null;
+            const estaExpandida = expandida === l.id;
 
             return (
-              <tr
-                key={l.id}
-                className="border-b border-cinza-100 last:border-0 align-middle"
-              >
+              <Fragment key={l.id}>
+              <tr className="border-b border-cinza-100 last:border-0 align-middle">
                 <td className="px-4 py-3">
                   {l.tipo === "CLUBE" ? (
-                    <div className="flex flex-col">
-                      <span className="font-medium text-cinza-900">
-                        {l.clube?.nome ?? "Clube sem nome"}
-                      </span>
-                      <span className="text-legenda text-cinza-500">
-                        {l.clube?.adminEmail ?? "Sem administrador"}
-                      </span>
+                    <div className="flex items-start gap-2">
+                      {clubeId && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandida(estaExpandida ? null : l.id)
+                          }
+                          className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-cinza-500 transition-colors hover:bg-cinza-100 hover:text-cinza-900"
+                          aria-expanded={estaExpandida}
+                          aria-label={
+                            estaExpandida
+                              ? "Ocultar contas do clube"
+                              : "Ver contas do clube"
+                          }
+                        >
+                          {estaExpandida ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
+                      )}
+                      <div className="flex flex-col">
+                        <span className="font-medium text-cinza-900">
+                          {l.clube?.nome ?? "Clube sem nome"}
+                        </span>
+                        <span className="text-legenda text-cinza-500">
+                          {l.clube?.adminEmail ?? "Sem administrador"}
+                        </span>
+                      </div>
                     </div>
                   ) : (
                     <span className="font-medium text-cinza-900">
@@ -176,9 +213,30 @@ export function TabelaLicencas({ licencas }: { licencas: LicencaAdmin[] }) {
                       titular={titularDe(l)}
                       dataFimInicial={l.dataFim}
                     />
+                    {clubeId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setExpandida(estaExpandida ? null : l.id)
+                        }
+                        aria-expanded={estaExpandida}
+                      >
+                        <Users className="h-4 w-4" />
+                        {estaExpandida ? "Ocultar contas" : "Contas"}
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>
+              {estaExpandida && clubeId && (
+                <tr className="border-b border-cinza-100 bg-cinza-50/50">
+                  <td colSpan={NUM_COLUNAS} className="px-4 py-3">
+                    <GestaoMembrosClube clubeId={clubeId} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             );
           })}
         </tbody>

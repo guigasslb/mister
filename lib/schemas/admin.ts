@@ -27,3 +27,34 @@ export const EditarDataFimLicencaSchema = z.object({
 });
 
 export type EditarDataFimLicencaInput = z.infer<typeof EditarDataFimLicencaSchema>;
+
+// ─────────────────────────────────────────────
+// Gestão de contas/membros dentro de uma licença de clube (§21.2)
+// ─────────────────────────────────────────────
+
+/** Identificador de clube (cuid) — usado para listar os membros de um clube. */
+export const ClubeIdSchema = z.string().cuid("Clube inválido");
+
+/**
+ * Edição de dados básicos de uma conta (nome + email), pelo admin de plataforma.
+ * O email é normalizado (trim + lowercase), como nos restantes schemas de conta.
+ */
+export const EditarUtilizadorSchema = z.object({
+  utilizadorId: z.string().cuid("Utilizador inválido"),
+  nome: z.string().trim().min(1, "O nome é obrigatório").max(120, "Nome demasiado longo"),
+  email: z.string().trim().email("Email inválido").toLowerCase(),
+});
+
+export type EditarUtilizadorInput = z.infer<typeof EditarUtilizadorSchema>;
+
+/**
+ * Suspender / reativar a adesão de uma conta a um clube (não o clube inteiro).
+ * `INATIVO` = suspensa, `ATIVO` = reativada. `CONVIDADO` é excluído de propósito
+ * (é um estado do fluxo de convite, não uma operação manual do admin).
+ */
+export const AlterarEstadoMembroSchema = z.object({
+  membroId: z.string().cuid("Membro inválido"),
+  estado: z.enum(["ATIVO", "INATIVO"]),
+});
+
+export type AlterarEstadoMembroInput = z.infer<typeof AlterarEstadoMembroSchema>;

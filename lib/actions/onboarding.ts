@@ -18,6 +18,12 @@ const ROTULO_MODALIDADE: Record<"FUTSAL" | "FUTEBOL", string> = {
 
 const BCRYPT_COST = 12;
 
+/**
+ * Sinaliza, de dentro da transação de `criarClube`, que o utilizador já tem uma
+ * adesão ATIVA — usado para abortar a transação e devolver um erro limpo (§5.4).
+ */
+class AdesaoAtivaError extends Error {}
+
 /** Registo de um novo utilizador (modo individual, sem clube). */
 export async function registar(dados: unknown): Promise<Resultado<void>> {
   const parsed = registarSchema.safeParse(dados);
@@ -67,7 +73,20 @@ export async function criarClube(dados: unknown): Promise<Resultado<{ clubeId: s
 
   const modalidade = parsed.data.modalidade;
 
-  const resultado = await prisma.$transaction(async (tx) => {
+  let resultado: { clubeId: string };
+  try {
+    resultado = await prisma.$transaction(async (tx) => {
+    // 🔒 Guarda anti-duplicação re-verificada DENTRO da transação (§5.4): fecha a
+    // janela TOCTOU entre o `jaAtivo` externo (acima) e a escrita do MembroClube.
+    // Sem isto, dois pedidos concorrentes (duplo-submit, ou o formulário aberto
+    // num separador enquanto outro já criou o clube) podiam ambos passar o check
+    // externo e criar DOIS clubes para o mesmo utilizador. É a defesa em
+    // profundidade que garante a regra "uma adesão ativa de cada vez".
+    const adesaoConcorrente = await tx.membroClube.findFirst({
+      where: { utilizadorId: session.user!.id!, estado: "ATIVO" },
+    });
+    if (adesaoConcorrente) throw new AdesaoAtivaError();
+
     const clube = await tx.clube.create({
       data: {
         nome: parsed.data.nome,
@@ -158,7 +177,15 @@ export async function criarClube(dados: unknown): Promise<Resultado<{ clubeId: s
     });
 
     return { clubeId: clube.id };
-  });
+    });
+  } catch (e) {
+    // Adesão ativa detetada dentro da transação → aborta e devolve erro limpo
+    // (a transação foi revertida, nenhum clube foi criado). Outros erros sobem.
+    if (e instanceof AdesaoAtivaError) {
+      return erro("Já tens uma adesão ativa a um clube. Sai desse clube primeiro.");
+    }
+    throw e;
+  }
 
   // 🔁 v7 (§8.1.1): instala o conteúdo curado da modalidade escolhida para que a
   // secção inicial nunca comece vazia. Corre APÓS a transação (o membro admin já
