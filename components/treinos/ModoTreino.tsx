@@ -9,10 +9,12 @@ import {
   Pause,
   Play,
   SlidersHorizontal,
+  LogOut,
 } from "lucide-react";
 import { LABEL_CATEGORIA, diagramaSchema } from "@/lib/schemas/exercicio";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
 import { AdaptarExercicioDialog } from "@/components/treinos/AdaptarExercicioDialog";
+import { guardarTreinoSuspenso, limparTreinoSuspenso } from "@/lib/treino-suspenso";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
 
 export type ExercicioModo = {
@@ -71,13 +73,25 @@ function DiagramaGrande({ diagrama, nome }: { diagrama: unknown; nome: string })
  */
 export function ModoTreino({
   exercicios,
+  sessaoId,
+  indiceInicial = 0,
+  segundosIniciais = 0,
   onFinish,
+  onSuspend,
 }: {
   exercicios: ExercicioModo[];
+  sessaoId: string;
+  /** Exercício onde arrancar (0-based) — usado ao retomar uma sessão suspensa. */
+  indiceInicial?: number;
+  /** Segundos já decorridos — usado ao retomar uma sessão suspensa. */
+  segundosIniciais?: number;
+  /** Termina definitivamente a sessão. */
   onFinish: () => void;
+  /** Sai do modo treino sem terminar, mantendo o estado guardado localmente. */
+  onSuspend: () => void;
 }) {
-  const [indice, setIndice] = useState(0);
-  const [segundos, setSegundos] = useState(0);
+  const [indice, setIndice] = useState(indiceInicial);
+  const [segundos, setSegundos] = useState(segundosIniciais);
   const [pausado, setPausado] = useState(false);
   const [adaptarAberto, setAdaptarAberto] = useState(false);
 
@@ -102,22 +116,36 @@ export function ModoTreino({
   // (nesse caso o Escape deve apenas fechar o diálogo, não terminar a sessão).
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
-      if (ev.key === "Escape" && !adaptarAberto) onFinish();
+      if (ev.key === "Escape" && !adaptarAberto) {
+        // Escape termina definitivamente — limpa o estado suspenso, se existir.
+        limparTreinoSuspenso(sessaoId);
+        onFinish();
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onFinish, adaptarAberto]);
+  }, [onFinish, adaptarAberto, sessaoId]);
 
   const total = exercicios.length;
   const atual = exercicios[indice];
   const ultimo = indice >= total - 1;
+
+  function terminarDefinitivo() {
+    limparTreinoSuspenso(sessaoId);
+    onFinish();
+  }
+
+  function suspender() {
+    guardarTreinoSuspenso(sessaoId, indice, segundos);
+    onSuspend();
+  }
 
   function anterior() {
     setIndice((i) => Math.max(0, i - 1));
   }
 
   function proximo() {
-    if (ultimo) onFinish();
+    if (ultimo) terminarDefinitivo();
     else setIndice((i) => Math.min(total - 1, i + 1));
   }
 
@@ -143,17 +171,29 @@ export function ModoTreino({
             {pausado ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
           </button>
         </div>
-        <span className="text-corpo-sec font-medium text-cinza-600">
+        <span className="hidden text-corpo-sec font-medium text-cinza-600 sm:inline">
           Exercício {Math.min(indice + 1, total)}/{total}
         </span>
-        <button
-          type="button"
-          onClick={onFinish}
-          className="flex h-11 items-center gap-1.5 rounded-md px-3 text-corpo-sec font-medium text-vermelho-600 hover:bg-vermelho-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          <X className="h-5 w-5" />
-          Terminar treino
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={suspender}
+            aria-label="Suspender treino"
+            className="flex h-11 items-center gap-1.5 rounded-md border border-cinza-200 px-3 text-corpo-sec font-medium text-cinza-700 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <LogOut className="h-5 w-5" />
+            <span className="hidden sm:inline">Suspender</span>
+          </button>
+          <button
+            type="button"
+            onClick={terminarDefinitivo}
+            aria-label="Terminar treino"
+            className="flex h-11 items-center gap-1.5 rounded-md px-3 text-corpo-sec font-medium text-vermelho-600 hover:bg-vermelho-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <X className="h-5 w-5" />
+            <span className="hidden sm:inline">Terminar</span>
+          </button>
+        </div>
       </header>
 
       {/* Barra de progresso */}

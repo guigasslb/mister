@@ -135,6 +135,7 @@ export default async function DetalheSessaoPage({
 
       {/* Melhoria 3/4.2 — arranque do modo treino (condução em campo). */}
       <IniciarTreinoBotao
+        sessaoId={s.id}
         exercicios={exerciciosResolvidos.map((e) => ({
           id: e.id,
           nome: e.nome,
