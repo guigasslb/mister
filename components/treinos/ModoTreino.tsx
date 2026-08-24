@@ -150,7 +150,11 @@ export function ModoTreino({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-50 flex h-[100dvh] flex-col bg-white"
+      role="dialog"
+      aria-modal="true"
+    >
       {/* Topo: progresso + cronómetro + terminar */}
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-cinza-200 px-4 py-3">
         <div className="flex items-center gap-1.5 text-corpo font-semibold text-cinza-900">
@@ -205,8 +209,9 @@ export function ModoTreino({
       </div>
 
       {/* Corpo: exercício atual (zona scrollável — min-h-0 é essencial para o
-          overflow funcionar dentro do flex-col e não empurrar o footer). */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+          overflow funcionar dentro do flex-col e não empurrar o footer; o pb-24
+          garante folga para o último parágrafo não ficar atrás do footer). */}
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-5 pb-24">
         {atual ? (
           <div className="mx-auto max-w-md space-y-4">
             <div className="flex items-start justify-between gap-3">
@@ -278,7 +283,7 @@ export function ModoTreino({
             Esta sessão não tem exercícios.
           </p>
         )}
-      </div>
+      </main>
 
       {/* Navegação — fixa no fundo. "Anterior" subtil, "Próximo" proeminente. */}
       <footer className="flex shrink-0 items-center gap-3 border-t border-cinza-200 px-4 py-3">
