@@ -8,6 +8,7 @@ import {
   Clock,
   Pause,
   Play,
+  RotateCcw,
   SlidersHorizontal,
   LogOut,
 } from "lucide-react";
@@ -142,11 +143,15 @@ export function ModoTreino({
 
   function anterior() {
     setIndice((i) => Math.max(0, i - 1));
+    setSegundos(0);
   }
 
   function proximo() {
     if (ultimo) terminarDefinitivo();
-    else setIndice((i) => Math.min(total - 1, i + 1));
+    else {
+      setIndice((i) => Math.min(total - 1, i + 1));
+      setSegundos(0);
+    }
   }
 
   return (
@@ -173,6 +178,14 @@ export function ModoTreino({
             className="flex h-11 w-11 items-center justify-center rounded-md text-cinza-600 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             {pausado ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSegundos(0)}
+            aria-label="Reiniciar cronómetro"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-cinza-600 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <RotateCcw className="h-5 w-5" />
           </button>
         </div>
         <span className="hidden text-corpo-sec font-medium text-cinza-600 sm:inline">
