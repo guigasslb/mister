@@ -2621,6 +2621,264 @@ A tab degrada graciosamente: se `SENTRY_DSN` ou as URLs relevantes não estivere
 
 ---
 
+## 22. Mano-a-Mano (duelos 1×1)
+
+> **Estatuto:** especificação da feature **Mano-a-Mano** — competições de **duelos 1×1** entre atletas. Corresponde à **Fase 33** (secção 16). Migração **aditiva** (Apêndice C). **Não toca em auth.**
+> **Nota de numeração:** esta secção é a **22** (as secções 20 e 21 já estavam ocupadas por «Arquitetura multi-desporto» e «Backoffice Interno»); a designação interna da feature é «Mano-a-Mano».
+
+### 22.1 Visão e âmbito
+
+O **Mano-a-Mano** organiza **duelos 1×1** entre atletas em torno de uma **competição** (nunca duelos soltos): uma **liga anual** (todos-contra-todos ao longo da época) ou um **torneio** (eliminatório ou round-robin). É uma camada leve e competitiva que aproveita os treinos existentes — os duelos são **distribuídos automaticamente pelos treinos disponíveis** — e alimenta o desenvolvimento do atleta com um registo de confrontos diretos.
+
+**Princípios (fechados):**
+- **Formato por defeito:** primeiro a marcar **2 golos** — resultados possíveis **2–0** ou **2–1**, **sem empate**. Configurável por competição (secção 22.4).
+- **Todo o duelo pertence a uma competição** (liga ou torneio). Não há duelos avulsos sem prova associada.
+- **Inter-clubes sem contas externas:** um clube adversário é registado como **`ClubeExterno`** (nome + localidade, sem conta Mister) e os seus atletas como **participantes externos** — sem qualquer acesso à plataforma.
+- **Distribuição automática:** os duelos são espalhados pelos treinos futuros disponíveis, **sem número fixo** por treino.
+- **Formatos de torneio:** apenas **`ELIMINATORIO`** e **`ROUND_ROBIN`** (não há fase de grupos + eliminatória nesta versão).
+- **Gamificação (badges, pontos de XP, celebrações dedicadas): FUTURO** — não implementar agora (ver secção 18).
+
+**Modalidade:** cada competição 1×1 pertence a um **escalão anfitrião** e herda a **modalidade** da secção desse escalão (secção 1.7.1). Não há campo de modalidade próprio.
+
+### 22.2 Glossário da feature
+
+- **Competição Mano-a-Mano** — a prova (liga anual ou torneio) que agrupa participantes e duelos.
+- **Participante** — um competidor da prova: um **atleta** do clube ou um **atleta externo** (de um `ClubeExterno`).
+- **Duelo (match)** — um confronto 1×1 entre dois participantes (um dos lados pode ser **bye**).
+- **Bye** — passagem automática à ronda seguinte quando um participante não tem adversário (bracket ou N ímpar em round-robin).
+- **Fixtures** — o conjunto de duelos gerado automaticamente (jornadas de liga ou bracket de torneio).
+- **Classificação** — tabela **calculada** (não persistida) a partir dos duelos `REALIZADO`.
+
+### 22.3 Modelo de dados
+
+Stack de persistência conforme secção 3 (Prisma + PostgreSQL, `id` = `cuid`). Todas as entidades são **multi-tenant** (isoladas por `clubeId`) e, quando aplicável, por `epocaId`.
+
+```prisma
+// A prova 1×1 (liga anual ou torneio). Herda a modalidade da secção do escalão anfitrião.
+model CompeticaoManoMano {
+  id              String                   @id @default(cuid())
+  clubeId         String                   // scope multi-tenant
+  clube           Clube                    @relation(fields: [clubeId], references: [id], onDelete: Cascade)
+  epocaId         String                   // isolamento por época
+  epoca           Epoca                    @relation(fields: [epocaId], references: [id], onDelete: Cascade)
+  escalaoId       String?                  // anfitrião; nullable só para torneios inter-escalões
+  escalao         Escalao?                 @relation(fields: [escalaoId], references: [id], onDelete: SetNull)
+  nome            String                   // ex.: "Liga 1×1 Sub-13 2025/26"
+  tipo            TipoManoMano             // LIGA_ANUAL | TORNEIO
+  ambito          AmbitoManoMano           @default(INTRA_CLUBE) // INTRA_CLUBE | INTER_CLUBES
+  formatoTorneio  FormatoTorneioManoMano?  // só se tipo=TORNEIO: ELIMINATORIO | ROUND_ROBIN
+  formatoDuelo    FormatoDuelo             @default(PRIMEIRO_A_DOIS)
+  golosParaVencer Int                      @default(2)
+  duracaoLimiteMin Int?                    // só FormatoDuelo.TEMPO_LIMITE
+  pontosVitoria   Int                      @default(3)
+  pontosEmpate    Int                      @default(1)
+  pontosDerrota   Int                      @default(0)
+  criteriosDesempate Json?                 // lista ordenada; default em 22.5
+  integraTreinos  Boolean                  @default(false)
+  estado          EstadoManoMano           @default(ATIVA) // ATIVA | CONCLUIDA | ARQUIVADA
+  criadorId       String
+  criador         Utilizador               @relation(fields: [criadorId], references: [id])
+  criadoEm        DateTime                 @default(now())
+  atualizadoEm    DateTime                 @updatedAt
+
+  participantes   ParticipanteManoMano[]
+  matches         MatchManoMano[]
+
+  @@index([clubeId])
+  @@index([epocaId, escalaoId])
+  @@index([estado])
+}
+
+// Clube adversário sem conta Mister (modo inter-clubes). Só identificação.
+model ClubeExterno {
+  id                 String                 @id @default(cuid())
+  nome               String
+  localidade         String?
+  criadoPorClubeId   String                 // clube que criou este registo
+  criadoPorClube     Clube                  @relation(fields: [criadoPorClubeId], references: [id], onDelete: Cascade)
+  criadoEm           DateTime               @default(now())
+
+  participantes      ParticipanteManoMano[]
+
+  @@index([criadoPorClubeId])
+}
+
+// Um competidor da prova: atleta do clube OU atleta externo.
+model ParticipanteManoMano {
+  id                String              @id @default(cuid())
+  competicaoId      String
+  competicao        CompeticaoManoMano  @relation(fields: [competicaoId], references: [id], onDelete: Cascade)
+  tipo              TipoParticipante    // ATLETA | EXTERNO
+  atletaId          String?             // preenchido se tipo=ATLETA
+  atleta            Atleta?             @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+  atletaExternoNome String?             // nome se tipo=EXTERNO
+  clubeExternoId    String?             // clube externo se tipo=EXTERNO
+  clubeExterno      ClubeExterno?       @relation(fields: [clubeExternoId], references: [id], onDelete: SetNull)
+  seed              Int?                // cabeça de série (bracket)
+  grupo             String?             // fase de grupos (FUTURO)
+  ativo             Boolean             @default(true)
+  criadoEm          DateTime            @default(now())
+
+  matchesA          MatchManoMano[]     @relation("ParticipanteA")
+  matchesB          MatchManoMano[]     @relation("ParticipanteB")
+  vitoriasEm        MatchManoMano[]     @relation("VencedorMatch")
+
+  @@unique([competicaoId, atletaId]) // um atleta por competição
+  @@index([competicaoId])
+}
+
+// Um duelo 1×1. O lado B pode ser null (bye). O vencedor é derivado do resultado.
+model MatchManoMano {
+  id                     String                @id @default(cuid())
+  competicaoId           String
+  competicao             CompeticaoManoMano    @relation(fields: [competicaoId], references: [id], onDelete: Cascade)
+  participanteAId        String
+  participanteA          ParticipanteManoMano  @relation("ParticipanteA", fields: [participanteAId], references: [id], onDelete: Cascade)
+  participanteBId        String?               // null = bye
+  participanteB          ParticipanteManoMano? @relation("ParticipanteB", fields: [participanteBId], references: [id], onDelete: Cascade)
+  ronda                  Int?                  // jornada (liga) ou fase codificada (bracket: 1=final, 2=meias, 4=quartos…)
+  ordemNaRonda           Int?
+  chaveBracket           String?               // posição no bracket para progressão
+  proximoMatchId         String?               // self-FK: avanço do vencedor (eliminatória)
+  proximoMatch           MatchManoMano?        @relation("ProgressaoBracket", fields: [proximoMatchId], references: [id], onDelete: SetNull)
+  origemProximo          MatchManoMano[]       @relation("ProgressaoBracket")
+  data                   DateTime?             // agendamento (null = por definir)
+  local                  String?
+  sessaoId               String?               // duelo agendado num treino
+  sessao                 Sessao?               @relation(fields: [sessaoId], references: [id], onDelete: SetNull)
+  estado                 EstadoMatch           @default(AGENDADO) // AGENDADO | REALIZADO | ADIADO | ANULADO
+  golosA                 Int?
+  golosB                 Int?
+  vencedorParticipanteId String?               // derivado automaticamente
+  vencedor               ParticipanteManoMano? @relation("VencedorMatch", fields: [vencedorParticipanteId], references: [id], onDelete: SetNull)
+  empate                 Boolean               @default(false)
+  registadoPorId         String?
+  registadoPor           MembroClube?          @relation(fields: [registadoPorId], references: [id], onDelete: SetNull)
+  criadoEm               DateTime              @default(now())
+  atualizadoEm           DateTime              @updatedAt
+
+  @@index([competicaoId, ronda])
+  @@index([sessaoId])
+  @@index([estado])
+}
+
+enum TipoManoMano {
+  LIGA_ANUAL
+  TORNEIO
+}
+
+enum AmbitoManoMano {
+  INTRA_CLUBE
+  INTER_CLUBES
+}
+
+// Só ELIMINATORIO e ROUND_ROBIN (sem fase de grupos + eliminatória nesta versão).
+enum FormatoTorneioManoMano {
+  ELIMINATORIO
+  ROUND_ROBIN
+}
+
+enum FormatoDuelo {
+  PRIMEIRO_A_DOIS   // por defeito: primeiro a marcar 2 golos (2–0 ou 2–1)
+  MELHOR_DE_2_JOGOS
+  TEMPO_LIMITE      // usa duracaoLimiteMin
+}
+
+enum EstadoManoMano {
+  ATIVA
+  CONCLUIDA
+  ARQUIVADA
+}
+
+enum EstadoMatch {
+  AGENDADO
+  REALIZADO
+  ADIADO
+  ANULADO
+}
+
+enum TipoParticipante {
+  ATLETA
+  EXTERNO
+}
+```
+
+> **Classificação — calculada, não persistida:** não há tabela de classificação. A função `obterClassificacaoManoMano` (secção 22.6) computa a tabela a partir dos `MatchManoMano` em estado `REALIZADO`, aplicando pontos e a ordem de desempate (secção 22.5). Isto segue o mesmo princípio de `obterClassificacao` das competições (secção 3.7/10.9).
+
+> **Relações inversas (DEVE):** as coleções acima (`Clube.competicoesManoMano`, `Clube.clubesExternos`, `Epoca.competicoesManoMano`, `Escalao.competicoesManoMano`, `Atleta.participacoesManoMano`, `Utilizador.competicoesManoManoCriadas`, `Sessao.duelosManoMano`, `MembroClube.duelosRegistados`) DEVEM ser declaradas nos modelos-alvo aquando da migração (aditivas — Apêndice C).
+
+### 22.4 Configuração da competição
+
+- **`tipo`** — `LIGA_ANUAL` (todos-contra-todos ao longo da época; classificação por pontos) ou `TORNEIO` (prova pontual).
+- **`formatoTorneio`** (só torneios) — `ELIMINATORIO` (bracket com byes) ou `ROUND_ROBIN` (todos-contra-todos numa janela curta).
+- **`ambito`** — `INTRA_CLUBE` (atletas do próprio clube; por defeito) ou `INTER_CLUBES` (mistura atletas do clube com participantes externos de `ClubeExterno`).
+- **`formatoDuelo`** — `PRIMEIRO_A_DOIS` (por defeito), `MELHOR_DE_2_JOGOS` ou `TEMPO_LIMITE` (com `duracaoLimiteMin`).
+- **`golosParaVencer`** — por defeito **2** (usado por `PRIMEIRO_A_DOIS`).
+- **Pontuação** — `pontosVitoria`/`pontosEmpate`/`pontosDerrota` (por defeito 3/1/0). No formato por defeito não há empates, mas os campos suportam formatos alternativos.
+- **`integraTreinos`** — quando `true`, a geração distribui os duelos pelos treinos futuros disponíveis (secção 22.5/22.7).
+
+### 22.5 Regras de negócio
+
+1. **Validação de resultado (`PRIMEIRO_A_DOIS`):** o único marcador válido é **2–0** ou **2–1** (o vencedor tem exatamente `golosParaVencer` golos; o perdedor tem menos). Qualquer outro marcador é **rejeitado por Zod** (secção 22.6). `TEMPO_LIMITE` admite empate; `MELHOR_DE_2_JOGOS` decide por soma/critério da competição.
+2. **Vencedor derivado (DEVE):** `vencedorParticipanteId` e `empate` são **calculados automaticamente** a partir de `golosA`/`golosB` no registo do resultado — **nunca** introduzidos à mão.
+3. **Ordem de desempate (default de `criteriosDesempate`):** `pontos → vitórias → diferença de golos → golos marcados → confronto direto → ordem alfabética`. Configurável por competição (lista ordenada em `criteriosDesempate`).
+4. **Geração round-robin:** **algoritmo do círculo**; com **N ímpar**, introduz-se um **bye rotativo** (cada participante folga uma jornada). N participantes → **N×(N−1)/2** duelos (uma volta). Distribuição automática pelos **treinos futuros disponíveis** quando `integraTreinos = true`.
+5. **Bracket eliminatório:** **byes atribuídos aos primeiros seeds** para completar até à potência de 2; o vencedor de cada duelo avança para `proximoMatchId`; a **ronda é codificada** (1 = final, 2 = meias, 4 = quartos…). **Regenerar o bracket é bloqueado** se já existirem resultados registados.
+6. **Participante elegível (registo em treino):** atleta **ativo** no escalão **e presente** na sessão (a marcação de presença é a fonte de elegibilidade — secção 22.7).
+7. **Atleta que sai:** os seus duelos **futuros** passam a `ANULADO`; o **histórico** (duelos `REALIZADO`) é **preservado**; o participante fica `ativo = false`.
+8. **Todo o duelo pertence a uma competição** — não é possível criar um `MatchManoMano` sem `competicaoId` (mesmo o duelo ad-hoc, secção 22.6, exige `competicaoId`).
+9. **Isolamento:** todas as leituras/escritas filtram por `clubeId` e, quando aplicável, `epocaId` (época ativa via `obterEpocaAtiva`).
+
+### 22.6 Server Actions e rotas
+
+**Server Actions (`lib/actions/mano-a-mano.ts`)** — padrão da secção 7.1 (Zod → `obterMembroAtual` → `exigirCapacidade` → época → operar filtrando por clube+época → `revalidatePath` → `Resultado<T>`). Capacidade **`MANOAMANO_GERIR`** para escrita (exceto o registo de duelo em sessão, que aceita `TREINOS_GERIR` — secção 22.7). Schemas Zod em `lib/schemas/mano-a-mano.ts`.
+
+```
+listarCompeticoesManoMano(escalaoId?)          // leitura, filtrada por época + escalões legíveis
+obterCompeticaoManoMano(id)
+criarCompeticaoManoMano(dados)                 // transacional: competição + participantes + fixtures
+atualizarCompeticaoManoMano(id, dados)
+concluirCompeticaoManoMano(id)                 // estado → CONCLUIDA
+arquivarCompeticaoManoMano(id)                 // estado → ARQUIVADA
+apagarCompeticaoManoMano(id)
+adicionarParticipante(competicaoId, dados)     // ATLETA ou EXTERNO
+removerParticipante(participanteId)            // aplica a regra do atleta que sai (22.5.7)
+preverFixturesManoMano(competicaoId, opcoes)   // dry-run (pré-visualização, sem gravar)
+gerarFixturesManoMano(competicaoId)            // round-robin (liga / round-robin)
+gerarBracketManoMano(competicaoId)             // bracket eliminatório (bloqueado se há resultados)
+agendarDuelo(matchId, { data?, local?, sessaoId? })
+registarResultadoManoMano(matchId, { golosA, golosB }) // deriva vencedor/empate
+anularDuelo(matchId)                           // estado → ANULADO
+reabrirDuelo(matchId)                          // REALIZADO → AGENDADO (limpa resultado)
+criarDueloAdHoc(dados)                         // competicaoId OBRIGATÓRIO
+obterClassificacaoManoMano(competicaoId)       // CALCULADA a partir dos REALIZADO
+obterDuelosDaSessao(sessaoId)                  // bloco Mano-a-Mano no detalhe do treino
+criarClubeExterno(dados)                       // { nome, localidade? }
+listarClubesExternos()
+```
+
+**Rotas (App Router):**
+- `/mano-a-mano` — lista de competições, **tabs por escalão**.
+- `/mano-a-mano/novo` — **wizard de criação** (tipo/formato/âmbito → participantes → pré-visualização de fixtures → gravação transacional).
+- `/mano-a-mano/[id]` — detalhe da competição + **calendário** (liga) ou **bracket** (torneio), com agendamento e registo de resultados.
+- `/mano-a-mano/[id]/classificacao` — **tabela de classificação** calculada.
+
+### 22.7 Integração com features existentes
+
+- **Sessões de treino (§8.8):** o detalhe da sessão ganha um bloco **«Mano-a-Mano»** com os duelos agendados para esse treino (`obterDuelosDaSessao`) e o **registo de resultado** in-loco. Este registo é gated por **`TREINOS_GERIR`** (além de `MANOAMANO_GERIR`), para que o adjunto que conduz o treino possa fechar os duelos. A elegibilidade dos participantes segue as presenças da sessão (secção 22.5.6).
+- **Dashboard (§8.13):** card **«Próximo duelo Mano-a-Mano»** associado ao próximo treino, quando existem duelos agendados.
+- **Plantel (§8.5):** a ficha do atleta pode mostrar o **registo 1×1 da época** (vitórias/derrotas, confrontos) — **FUTURO**.
+- **Analytics / Relatório de época (§10, §8.16):** a **classificação final** e o **campeão 1×1** entram no relatório de fim de época partilhável, visíveis via `RELATORIOS_VER`.
+
+### 22.8 Testes (Vitest)
+
+- **Funções puras de geração** (`lib/mano-a-mano.ts`): round-robin (algoritmo do círculo, N par e N ímpar com bye rotativo, nº correto de duelos), bracket eliminatório (byes aos primeiros seeds, codificação de ronda, avanço via `proximoMatchId`).
+- **Ordem de desempate:** pontos → vitórias → DG → GM → confronto direto → alfabético.
+- **Validação Zod do resultado:** `PRIMEIRO_A_DOIS` aceita só 2–0/2–1 e rejeita o resto; derivação de `vencedorParticipanteId`/`empate`.
+- **Actions:** isolamento multi-tenant, capacidade `MANOAMANO_GERIR`, transacionalidade de `criarCompeticaoManoMano`, regra do atleta que sai (futuros `ANULADO`, histórico preservado), bloqueio de regeneração com resultados existentes, `criarDueloAdHoc` exige `competicaoId`.
+
+---
+
 ## Apêndice A — Configuração de Futsal ⚽
 
 Referência da entrada `CONFIG_MODALIDADE.FUTSAL` (registry — 20.3). Reflete o comportamento já existente (v6), agora explicitado como configuração.
@@ -2712,6 +2970,24 @@ Todas as alterações são **aditivas** (colunas/tabelas novas, nullable ou com 
 - Nenhuma query existente quebra: os filtros por `clubeId`/`epocaId`/`escalaoId` mantêm-se; `seccaoId` é um filtro adicional opcional.
 - Diagramas, estatísticas e jogos legados permanecem válidos e legíveis.
 - **Rollback de código** possível sem migração inversa enquanto as colunas novas forem nullable e o código antigo as ignorar (exceto `Escalao.seccaoId` NOT NULL, que exige o backfill aplicado — recomenda-se manter `seccaoId` nullable durante uma fase *expand* e torná-lo NOT NULL numa fase *contract*, como no padrão `AtletaEscalao` da v6).
+
+### C.6 Migração aditiva da feature Mano-a-Mano (Fase 33 — §22)
+
+> Alterações **posteriores** à matriz v6→v7 acima, introduzidas pela **Fase 33** (2026-08-24). Todas **aditivas** (tabelas/enums novos + relações inversas), **sem backfill** (a feature nasce vazia) e **sem tocar em dados existentes nem em auth**.
+
+**Tabelas novas:**
+| Tabela | Descrição | Notas |
+|---|---|---|
+| `CompeticaoManoMano` | Prova 1×1 (liga anual ou torneio) | `@@index([clubeId])`, `@@index([epocaId, escalaoId])`, `@@index([estado])` |
+| `ClubeExterno` | Clube adversário sem conta Mister (inter-clubes) | `@@index([criadoPorClubeId])` |
+| `ParticipanteManoMano` | Competidor da prova (atleta ou externo) | `@@unique([competicaoId, atletaId])`, `@@index([competicaoId])` |
+| `MatchManoMano` | Duelo 1×1 (lado B nullable = bye) | `@@index([competicaoId, ronda])`, `@@index([sessaoId])`, `@@index([estado])`; self-FK `proximoMatchId` |
+
+**Enums novos:** `TipoManoMano`, `AmbitoManoMano`, `FormatoTorneioManoMano`, `FormatoDuelo`, `EstadoManoMano`, `EstadoMatch`, `TipoParticipante` (§22.3).
+
+**Relações inversas (aditivas nos modelos existentes):** `Clube.competicoesManoMano`/`Clube.clubesExternos`, `Epoca.competicoesManoMano`, `Escalao.competicoesManoMano` (FK `SetNull`), `Atleta.participacoesManoMano`, `Utilizador.competicoesManoManoCriadas`, `Sessao.duelosManoMano` (FK `SetNull`), `MembroClube.duelosRegistados` (FK `SetNull`).
+
+**Garantias:** nenhuma coluna alterada em tabelas existentes (só relações inversas); a classificação é **calculada** (não há tabela nova de classificação); rollback de código possível sem migração inversa (as tabelas novas são ignoradas pelo código antigo).
 
 ---
 

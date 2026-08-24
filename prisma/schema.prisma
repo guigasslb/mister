@@ -69,6 +69,10 @@ model Clube {
 
   // Fase 31 (§3.5/§8.8.1): planos semanais de treino do clube.
   planosSemanais PlanoSemanal[]
+
+  // Mano-a-Mano (§3.16): competições de duelos 1×1 do clube e clubes externos criados.
+  competicoesManoMano   CompeticaoManoMano[]
+  clubesExternosCriados ClubeExterno[]
 }
 
 // ─────────────────────────────────────────────
@@ -190,6 +194,9 @@ model Utilizador {
 
   // Fase 31 (§3.5/§8.8.1): planos semanais criados por este utilizador.
   planosSemanaisComoCriador PlanoSemanal[] @relation("PlanoSemanalCriador")
+
+  // Mano-a-Mano (§3.16): competições de duelos 1×1 criadas por este utilizador.
+  competicoesManoManoCriadas CompeticaoManoMano[]
 }
 
 // ─────────────────────────────────────────────
@@ -308,6 +315,9 @@ model MembroClube {
   // GAP-P2-15: presenças marcadas por este membro (rastreio de autor).
   presencasMarcadas Presenca[] @relation("PresencasMarcadas")
 
+  // Mano-a-Mano (§3.16): resultados de duelos 1×1 registados por este membro.
+  duelosRegistados MatchManoMano[]
+
   @@unique([utilizadorId, clubeId])
   @@index([clubeId])
   @@index([utilizadorId])
@@ -380,6 +390,9 @@ model Epoca {
 
   // Fase 31 (§3.5/§8.8.1): planos semanais de treino desta época.
   planosSemanais PlanoSemanal[]
+
+  // Mano-a-Mano (§3.16): competições de duelos 1×1 desta época.
+  competicoesManoMano CompeticaoManoMano[]
 
   @@index([clubeId])
 }
@@ -463,6 +476,9 @@ model Escalao {
   // Fase 31 (§3.5/§8.8.1): planos semanais de treino deste escalão.
   planosSemanais PlanoSemanal[]
 
+  // Mano-a-Mano (§3.16): competições de duelos 1×1 deste escalão.
+  competicoesManoMano CompeticaoManoMano[]
+
   @@index([clubeId])
   @@index([seccaoId])
 }
@@ -491,16 +507,18 @@ model Atleta {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  presencas      Presenca[]
-  convocatorias  Convocatoria[]
-  estatisticas   EstatisticaAtleta[]
-  progressos     ProgressoHabilidade[]
-  consentimentos Consentimento[]
-  participacoes  AtletaEscalao[]
+  presencas             Presenca[]
+  convocatorias         Convocatoria[]
+  estatisticas          EstatisticaAtleta[]
+  progressos            ProgressoHabilidade[]
+  consentimentos        Consentimento[]
+  participacoes         AtletaEscalao[]
   // P1.5: eventos de jogo (ao vivo) associados ao atleta.
-  eventosJogo    EventoJogo[]
+  eventosJogo           EventoJogo[]
   // P4.8 (§8.20): RPE individual reportado pelo atleta por sessão.
-  rpesAtletas    RpeAtleta[]
+  rpesAtletas           RpeAtleta[]
+  // Mano-a-Mano (§3.16): participações do atleta em competições de duelos 1×1.
+  participacoesManoMano ParticipanteManoMano[]
 
   @@index([clubeId])
   @@index([clubeId, ativo])
@@ -901,10 +919,12 @@ model Sessao {
   // F8 (§3.12): id do evento correspondente no Google Calendar (idempotência da sincronização).
   googleEventId String?
 
-  exercicios  SessaoExercicio[]
-  presencas   Presenca[]
+  exercicios     SessaoExercicio[]
+  presencas      Presenca[]
   // P4.8 (§8.20): RPE individual reportado por cada atleta para esta sessão.
-  rpesAtletas RpeAtleta[]
+  rpesAtletas    RpeAtleta[]
+  // Mano-a-Mano (§3.16): duelos 1×1 disputados no âmbito desta sessão de treino.
+  duelosManoMano MatchManoMano[]
 
   @@index([epocaId, escalaoId, data])
   @@index([escalaoId])
@@ -1617,4 +1637,195 @@ model PasswordResetToken {
 
   @@index([email])
   @@index([token])
+}
+
+// ─────────────────────────────────────────────
+// MANO-A-MANO — DUELOS 1×1 (§3.16)
+// ─────────────────────────────────────────────
+
+// Liga anual (todos-contra-todos ao longo da época) ou torneio pontual.
+enum TipoManoMano {
+  LIGA_ANUAL
+  TORNEIO
+}
+
+// Âmbito dos participantes: só atletas do clube, ou também atletas/clubes externos.
+enum AmbitoManoMano {
+  INTRA_CLUBE
+  INTER_CLUBES
+}
+
+// Formato do quadro competitivo de um torneio Mano-a-Mano.
+enum FormatoTorneioManoMano {
+  ELIMINATORIO
+  ROUND_ROBIN
+}
+
+// Formato de cada duelo individual.
+enum FormatoDuelo {
+  PRIMEIRO_A_DOIS
+  MELHOR_DE_2_JOGOS
+  TEMPO_LIMITE
+}
+
+// Estado do ciclo de vida de uma competição Mano-a-Mano.
+enum EstadoManoMano {
+  ATIVA
+  CONCLUIDA
+  ARQUIVADA
+}
+
+// Estado de um duelo (match) individual.
+enum EstadoMatch {
+  AGENDADO
+  REALIZADO
+  ADIADO
+  ANULADO
+}
+
+// Natureza de um participante: atleta do sistema ou externo (texto livre / clube externo).
+enum TipoParticipante {
+  ATLETA
+  EXTERNO
+}
+
+// Clube adversário externo (fora do sistema), criado por um clube para registar
+// participantes externos em competições Mano-a-Mano de âmbito INTER_CLUBES.
+model ClubeExterno {
+  id               String  @id @default(cuid())
+  nome             String
+  localidade       String?
+  criadoPorClubeId String
+  criadoPorClube   Clube   @relation(fields: [criadoPorClubeId], references: [id], onDelete: Cascade)
+
+  participantes ParticipanteManoMano[]
+
+  criadoEm DateTime @default(now())
+
+  @@index([criadoPorClubeId])
+}
+
+// Competição de duelos 1×1: liga anual ou torneio. Scoped ao clube/época e,
+// opcionalmente, a um escalão. Reúne participantes e matches (§3.16).
+model CompeticaoManoMano {
+  id        String   @id @default(cuid())
+  clubeId   String
+  clube     Clube    @relation(fields: [clubeId], references: [id], onDelete: Cascade)
+  epocaId   String
+  epoca     Epoca    @relation(fields: [epocaId], references: [id], onDelete: Cascade)
+  escalaoId String?
+  escalao   Escalao? @relation(fields: [escalaoId], references: [id], onDelete: SetNull)
+
+  nome   String
+  tipo   TipoManoMano
+  ambito AmbitoManoMano @default(INTRA_CLUBE)
+
+  // Só relevante quando tipo = TORNEIO.
+  formatoTorneio FormatoTorneioManoMano?
+
+  formatoDuelo     FormatoDuelo @default(PRIMEIRO_A_DOIS)
+  golosParaVencer  Int          @default(2)
+  // Só relevante quando formatoDuelo = TEMPO_LIMITE.
+  duracaoLimiteMin Int?
+
+  pontosVitoria Int @default(3)
+  pontosEmpate  Int @default(1)
+  pontosDerrota Int @default(0)
+
+  // Ordem/config de critérios de desempate (ex: ["confronto_direto","diferenca_golos"]).
+  criteriosDesempate Json?
+
+  // Integra os duelos no fluxo de treinos (agendáveis dentro de sessões).
+  integraTreinos Boolean @default(false)
+
+  estado EstadoManoMano @default(ATIVA)
+
+  criadorId String
+  criador   Utilizador @relation(fields: [criadorId], references: [id])
+
+  participantes ParticipanteManoMano[]
+  matches       MatchManoMano[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clubeId])
+  @@index([epocaId, escalaoId])
+}
+
+// Participante numa competição Mano-a-Mano: atleta do sistema ou participante externo.
+model ParticipanteManoMano {
+  id           String             @id @default(cuid())
+  competicaoId String
+  competicao   CompeticaoManoMano @relation(fields: [competicaoId], references: [id], onDelete: Cascade)
+
+  tipo TipoParticipante
+
+  // Preenchido quando tipo = ATLETA.
+  atletaId String?
+  atleta   Atleta? @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+
+  // Preenchidos quando tipo = EXTERNO.
+  atletaExternoNome String?
+  clubeExternoId    String?
+  clubeExterno      ClubeExterno? @relation(fields: [clubeExternoId], references: [id], onDelete: SetNull)
+
+  seed  Int?
+  ativo Boolean @default(true)
+
+  matchesA        MatchManoMano[] @relation("MatchParticipanteA")
+  matchesB        MatchManoMano[] @relation("MatchParticipanteB")
+  matchesVencidos MatchManoMano[] @relation("MatchVencedor")
+
+  @@unique([competicaoId, atletaId])
+  @@index([competicaoId])
+  @@index([atletaId])
+}
+
+// Duelo individual (match) entre dois participantes. Suporta liga (ronda/jornada)
+// e torneio eliminatório (bracket via proximoMatch). Pode ser disputado no âmbito
+// de uma sessão de treino (§3.16).
+model MatchManoMano {
+  id           String             @id @default(cuid())
+  competicaoId String
+  competicao   CompeticaoManoMano @relation(fields: [competicaoId], references: [id], onDelete: Cascade)
+
+  participanteAId String?
+  participanteA   ParticipanteManoMano? @relation("MatchParticipanteA", fields: [participanteAId], references: [id], onDelete: SetNull)
+  participanteBId String?
+  participanteB   ParticipanteManoMano? @relation("MatchParticipanteB", fields: [participanteBId], references: [id], onDelete: SetNull)
+
+  ronda        Int?
+  ordemNaRonda Int?
+
+  // Bracket de eliminatória: chave da posição e progressão para o match seguinte.
+  chaveBracket      String?
+  proximoMatchId    String?
+  proximoMatch      MatchManoMano?  @relation("BracketProgression", fields: [proximoMatchId], references: [id], onDelete: SetNull)
+  matchesAnteriores MatchManoMano[] @relation("BracketProgression")
+
+  data     DateTime?
+  local    String?
+  sessaoId String?
+  sessao   Sessao?   @relation(fields: [sessaoId], references: [id], onDelete: SetNull)
+
+  estado EstadoMatch @default(AGENDADO)
+
+  golosA Int?
+  golosB Int?
+
+  vencedorParticipanteId String?
+  vencedor               ParticipanteManoMano? @relation("MatchVencedor", fields: [vencedorParticipanteId], references: [id], onDelete: SetNull)
+  empate                 Boolean               @default(false)
+
+  registadoPorId String?
+  registadoPor   MembroClube? @relation(fields: [registadoPorId], references: [id], onDelete: SetNull)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([competicaoId])
+  @@index([sessaoId])
+  @@index([estado])
+  @@index([competicaoId, ronda])
 }

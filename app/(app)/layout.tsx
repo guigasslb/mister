@@ -7,6 +7,7 @@ import { listarEpocas } from "@/lib/actions/epocas";
 import { obterSeccoes } from "@/lib/actions/seccoes";
 import { obterEpocaAtiva } from "@/lib/epoca-context";
 import { obterMembroAtual } from "@/lib/permissoes";
+import { eAdminPlataforma } from "@/lib/admin-guard";
 import { temLicencaValida } from "@/lib/licenca";
 import { BarraTopo } from "@/components/layout/BarraTopo";
 import { Navegacao } from "@/components/layout/Navegacao";
@@ -62,8 +63,15 @@ export default async function AppLayout({
     if (!utilizadorExiste) redirect("/login");
 
     // Sem clube ativo → onboarding (criar clube ou aceitar convite).
+    // Exceção: um admin de plataforma (allowlist ADMIN_EMAILS) não é um papel de
+    // clube — é um operador do produto e, por isso, não tem MembroClube. Sem esta
+    // exceção, o admin cairia no onboarding (/criar-clube). Enviá-lo para o
+    // backoffice interno (/admin). Routing puro — a autenticação fica intocada.
     const membro = await obterMembroAtual();
-    if (!membro) redirect("/criar-clube");
+    if (!membro) {
+      if (eAdminPlataforma(session.user.email)) redirect("/admin");
+      redirect("/criar-clube");
+    }
 
     // Guarda de licença (§3.11) — SEPARADA da autenticação: só entra na área da
     // app quem tem subscrição válida (licença do clube OU Individual). Sem
