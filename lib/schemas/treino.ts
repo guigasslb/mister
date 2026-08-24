@@ -105,3 +105,11 @@ export const LABEL_PRESENCA: Record<(typeof ESTADOS_PRESENCA)[number], string> =
   LESIONADO: "Lesionado",
   ATRASADO: "Atrasado",
 };
+
+export const sessaoExercicioOverrideSchema = z.object({
+  duracaoMin:        z.number().int().min(1).max(180).nullable().optional(),
+  series:            z.number().int().min(1).max(99).nullable().optional(),
+  descricaoOverride: z.string().max(2000).nullable().optional(),
+  notas:             z.string().max(2000).nullable().optional(),
+});
+export type SessaoExercicioOverrideInput = z.infer<typeof sessaoExercicioOverrideSchema>;

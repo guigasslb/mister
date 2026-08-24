@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,8 +16,16 @@ import {
   CalendarRange,
   MoreHorizontal,
   Rocket,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Chave de persistência da preferência manual de colapso da sidebar.
+const CHAVE_COLAPSO = "mister:sidebar-colapsada";
+// Acima deste limite consideramos "desktop" → sidebar expandida por defeito.
+// Abaixo (tablet, incl. iPad em paisagem a 1024/1194px) → colapsada por defeito.
+const MQ_DESKTOP = "(min-width: 1280px)";
 
 const ITEM_COMECAR = { href: "/vitoria-rapida", label: "Começar", icon: Rocket };
 // Agenda agregada de todos os escalões — visível a todos os treinadores; o
@@ -55,6 +63,66 @@ export function Navegacao({
   const pathname = usePathname();
   const [maisAberto, setMaisAberto] = useState(false);
 
+  // Estado de colapso da sidebar (só tablet/PC; a bottom-nav móvel não é afetada).
+  //  - `override === null`  → segue o comportamento responsivo por defeito
+  //    (colapsada em tablet md–xl, expandida em desktop ≥xl) via classes CSS.
+  //    É este o estado renderizado no servidor e na 1.ª pintura → sem flash nem
+  //    divergência de hidratação.
+  //  - `override === true/false` → preferência manual do utilizador (persistida),
+  //    que vence em todos os tamanhos ≥ md.
+  const [override, setOverride] = useState<boolean | null>(null);
+  const [ehDesktop, setEhDesktop] = useState(false);
+
+  useEffect(() => {
+    try {
+      const guardado = window.localStorage.getItem(CHAVE_COLAPSO);
+      if (guardado === "1") setOverride(true);
+      else if (guardado === "0") setOverride(false);
+    } catch {
+      /* localStorage indisponível — mantém o default responsivo */
+    }
+    const mq = window.matchMedia(MQ_DESKTOP);
+    setEhDesktop(mq.matches);
+    const aoMudar = (e: MediaQueryListEvent) => setEhDesktop(e.matches);
+    mq.addEventListener("change", aoMudar);
+    return () => mq.removeEventListener("change", aoMudar);
+  }, []);
+
+  // Estado efetivo (resolvido) — usado só para o ícone do botão de alternância.
+  const colapsadaEfetiva = override === null ? !ehDesktop : override;
+
+  const alternarColapso = () => {
+    const nova = !colapsadaEfetiva;
+    setOverride(nova);
+    try {
+      window.localStorage.setItem(CHAVE_COLAPSO, nova ? "1" : "0");
+    } catch {
+      /* ignora falhas de persistência */
+    }
+  };
+
+  // Classes derivadas do estado de colapso. Quando não há preferência manual
+  // (override === null) usamos utilitários responsivos: colapsada em md–xl,
+  // expandida a partir de xl.
+  const larguraNav =
+    override === null ? "w-16 xl:w-[224px]" : override ? "w-16" : "w-[224px]";
+  const labelCls =
+    override === null ? "hidden xl:inline" : override ? "hidden" : "inline";
+  const itemAlinhamento =
+    override === null
+      ? "justify-center xl:justify-start"
+      : override
+        ? "justify-center"
+        : "justify-start";
+  const cabecalhoCls =
+    override === null ? "hidden xl:block" : override ? "hidden" : "block";
+  const botaoAlinhamento =
+    override === null
+      ? "justify-center xl:justify-end"
+      : override
+        ? "justify-center"
+        : "justify-end";
+
   // Base + "Agenda" (Admin/DT): a Agenda entra a seguir a Jogos, junto às vistas
   // transversais do clube (Analíticos, Comunicações…).
   const ITENS_COM_AGENDA = mostrarAgenda
@@ -77,11 +145,39 @@ export function Navegacao({
 
   return (
     <>
-      {/* ── Sidebar (tablet / PC) ── */}
-      <nav className="hidden md:flex w-[224px] flex-shrink-0 flex-col border-r border-cinza-200/70 bg-white/60 print:hidden">
-        <p className="px-5 pt-5 pb-2 text-legenda font-semibold uppercase tracking-wider text-cinza-400">
-          Menu
-        </p>
+      {/* ── Sidebar (tablet / PC) ──
+          Colapsada (só ícones) por defeito em tablet (md–xl); expandida em
+          desktop (≥xl). O utilizador pode alternar e a preferência é guardada. */}
+      <nav
+        className={cn(
+          "hidden md:flex flex-shrink-0 flex-col border-r border-cinza-200/70 bg-white/60 transition-[width] duration-200 ease-out print:hidden",
+          larguraNav,
+        )}
+      >
+        <div className={cn("flex items-center px-3 pt-4 pb-2", botaoAlinhamento)}>
+          <p
+            className={cn(
+              "flex-1 px-2 text-legenda font-semibold uppercase tracking-wider text-cinza-400",
+              cabecalhoCls,
+            )}
+          >
+            Menu
+          </p>
+          <button
+            type="button"
+            onClick={alternarColapso}
+            aria-label={colapsadaEfetiva ? "Expandir menu" : "Minimizar menu"}
+            aria-pressed={colapsadaEfetiva}
+            title={colapsadaEfetiva ? "Expandir menu" : "Minimizar menu"}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-cinza-400 transition-colors hover:bg-cinza-100 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            {colapsadaEfetiva ? (
+              <PanelLeftOpen className="h-5 w-5" />
+            ) : (
+              <PanelLeftClose className="h-5 w-5" />
+            )}
+          </button>
+        </div>
         <ul className="flex flex-col gap-1 px-3">
           {ITENS.map(({ href, label, icon: Icon }) => {
             const on = ativo(href);
@@ -90,13 +186,15 @@ export function Navegacao({
                 <Link
                   href={href}
                   aria-current={on ? "page" : undefined}
-                  className={cn("nav-item", on && "nav-item-active")}
+                  aria-label={label}
+                  title={label}
+                  className={cn("nav-item", itemAlinhamento, on && "nav-item-active")}
                 >
                   <Icon
                     className={cn("h-5 w-5 flex-shrink-0", !on && "text-cinza-400")}
                     style={on ? { color: "var(--cor-primaria, #1A2FD4)" } : undefined}
                   />
-                  <span>{label}</span>
+                  <span className={labelCls}>{label}</span>
                 </Link>
               </li>
             );

@@ -37,8 +37,10 @@ export default async function LoginPage() {
             Criar conta
           </Link>
         </p>
-        <p className="mt-2 text-legenda text-cinza-400">
-          Esqueceste a password? Pede a um administrador do clube para a repor.
+        <p className="mt-2 text-center text-legenda text-cinza-500">
+          <Link href="/esqueci-password" className="font-medium text-laranja-600 underline">
+            Esqueceste a password?
+          </Link>
         </p>
       </CardContent>
     </Card>

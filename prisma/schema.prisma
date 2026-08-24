@@ -931,14 +931,16 @@ model RpeAtleta {
 }
 
 model SessaoExercicio {
-  id          String    @id @default(cuid())
-  sessaoId    String
-  sessao      Sessao    @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
-  exercicioId String
-  exercicio   Exercicio @relation(fields: [exercicioId], references: [id])
-  ordem       Int       @default(0)
-  duracaoMin  Int?
-  notas       String?   @db.Text
+  id                String    @id @default(cuid())
+  sessaoId          String
+  sessao            Sessao    @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
+  exercicioId       String
+  exercicio         Exercicio @relation(fields: [exercicioId], references: [id])
+  ordem             Int       @default(0)
+  duracaoMin        Int?
+  notas             String?   @db.Text
+  series            Int?
+  descricaoOverride String?   @db.Text
 
   // Snapshot só-de-leitura (mecanismo em §4.2.1). Preenchido AUTOMATICAMENTE quando se
   // adiciona à sessão do clube um exercício com proprietario = TREINADOR: congela os dados
@@ -1600,4 +1602,19 @@ model LembreteDestinatario {
 
   @@unique([lembreteId, utilizadorId])
   @@index([utilizadorId])
+}
+
+// Token de recuperação de password (§6.2). De vida curta (expira em 1h), de uso
+// único e sem relação com o Utilizador — a associação é apenas por `email`, para
+// não expor a existência da conta. Os tokens são apagados após uso e a cada novo
+// pedido do mesmo email.
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  criadoEm  DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
 }

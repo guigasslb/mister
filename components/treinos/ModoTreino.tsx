@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, X, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Clock, Pause, Play } from "lucide-react";
 import { LABEL_CATEGORIA, diagramaSchema } from "@/lib/schemas/exercicio";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
@@ -14,6 +14,10 @@ export type ExercicioModo = {
   descricao: string | null;
   duracaoMin: number | null;
   diagrama: unknown;
+  // Overrides por sessão (Fase 2): adaptações que só valem para esta sessão.
+  series: number | null;
+  descricaoOverride: string | null;
+  notas: string | null;
 };
 
 function formatarTempo(segundos: number): string {
@@ -65,12 +69,15 @@ export function ModoTreino({
 }) {
   const [indice, setIndice] = useState(0);
   const [segundos, setSegundos] = useState(0);
+  const [pausado, setPausado] = useState(false);
 
-  // Cronómetro ascendente (tempo total decorrido na sessão).
+  // Cronómetro ascendente (tempo total decorrido na sessão). Não incrementa
+  // enquanto estiver em pausa.
   useEffect(() => {
+    if (pausado) return;
     const t = setInterval(() => setSegundos((s) => s + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [pausado]);
 
   // Bloqueia o scroll do body enquanto o overlay está aberto.
   useEffect(() => {
@@ -107,11 +114,23 @@ export function ModoTreino({
     <div className="fixed inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true">
       {/* Topo: progresso + cronómetro + terminar */}
       <header className="flex items-center justify-between gap-3 border-b border-cinza-200 px-4 py-3">
-        <div className="flex items-center gap-2 text-corpo font-semibold text-cinza-900">
+        <div className="flex items-center gap-1.5 text-corpo font-semibold text-cinza-900">
           <Clock className="h-5 w-5 text-primary" />
-          <span className="tabular-nums" aria-label="Tempo decorrido">
+          <span
+            className={`tabular-nums transition-opacity ${pausado ? "opacity-60" : ""}`}
+            aria-label={pausado ? "Tempo decorrido (em pausa)" : "Tempo decorrido"}
+          >
             {formatarTempo(segundos)}
           </span>
+          <button
+            type="button"
+            onClick={() => setPausado((p) => !p)}
+            aria-label={pausado ? "Retomar cronómetro" : "Pausar cronómetro"}
+            aria-pressed={pausado}
+            className="flex h-11 w-11 items-center justify-center rounded-md text-cinza-600 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            {pausado ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+          </button>
         </div>
         <span className="text-corpo-sec font-medium text-cinza-600">
           Exercício {Math.min(indice + 1, total)}/{total}
@@ -147,6 +166,7 @@ export function ModoTreino({
                   ? LABEL_CATEGORIA[atual.categoriaPrincipal]
                   : "Sem categoria"}
                 {atual.duracaoMin ? ` · ${atual.duracaoMin} min` : ""}
+                {atual.series ? ` · ${atual.series} séries` : ""}
               </p>
             </div>
 
@@ -161,13 +181,31 @@ export function ModoTreino({
               </div>
             )}
 
-            {atual.descricao && (
-              <div>
-                <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
-                  Descrição / montagem
+            {(() => {
+              // Override da sessão substitui a descrição da biblioteca quando presente.
+              const descricaoAExibir =
+                atual.descricaoOverride && atual.descricaoOverride.trim() !== ""
+                  ? atual.descricaoOverride
+                  : atual.descricao;
+              return descricaoAExibir ? (
+                <div>
+                  <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+                    Descrição / montagem
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-corpo text-cinza-900">
+                    {descricaoAExibir}
+                  </p>
+                </div>
+              ) : null;
+            })()}
+
+            {atual.notas && atual.notas.trim() !== "" && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+                <p className="text-legenda font-medium uppercase tracking-wide text-primary">
+                  Notas do treinador
                 </p>
-                <p className="mt-1 whitespace-pre-wrap text-corpo text-cinza-900">
-                  {atual.descricao}
+                <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
+                  {atual.notas}
                 </p>
               </div>
             )}

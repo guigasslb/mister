@@ -77,6 +77,10 @@ export default async function DetalheSessaoPage({
       descricao: r.descricao,
       objetivo: r.objetivo,
       diagrama: r.diagrama,
+      // Overrides por sessão (Fase 2) — lidos diretamente da linha SessaoExercicio.
+      notas: se.notas ?? null,
+      series: se.series ?? null,
+      descricaoOverride: se.descricaoOverride ?? null,
     };
   });
 
@@ -139,6 +143,9 @@ export default async function DetalheSessaoPage({
           descricao: e.descricao,
           duracaoMin: e.duracaoMin,
           diagrama: e.diagrama,
+          series: e.series,
+          descricaoOverride: e.descricaoOverride,
+          notas: e.notas,
         }))}
       />
 
@@ -161,6 +168,9 @@ export default async function DetalheSessaoPage({
           id: e.id,
           ordem: e.ordem,
           duracaoMin: e.duracaoMin,
+          series: e.series,
+          descricaoOverride: e.descricaoOverride,
+          notas: e.notas,
           exercicio: {
             id: e.exercicioId,
             nome: e.nome,

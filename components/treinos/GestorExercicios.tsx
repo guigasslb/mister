@@ -11,6 +11,7 @@ import {
   ListOrdered,
   Check,
   ChevronRight,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,12 +28,18 @@ import {
 } from "@/lib/actions/treinos";
 import { LABEL_CATEGORIA, diagramaSchema } from "@/lib/schemas/exercicio";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
+import { ModalDiagramaExercicio } from "@/components/treinos/ModalDiagramaExercicio";
+import { AdaptarExercicioDialog } from "@/components/treinos/AdaptarExercicioDialog";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
 
 type ExercicioSessao = {
   id: string;
   ordem: number;
   duracaoMin: number | null;
+  // Overrides por sessão (Fase 2) — vivem no SessaoExercicio, não no exercício-base.
+  series: number | null;
+  descricaoOverride: string | null;
+  notas: string | null;
   exercicio: {
     id: string;
     nome: string;
@@ -98,6 +105,12 @@ export function GestorExercicios({
   const [dialogAberto, setDialogAberto] = useState(false);
   const [modoEdicao, setModoEdicao] = useState(false);
   const [expandido, setExpandido] = useState<string | null>(null);
+  const [exercicioModal, setExercicioModal] = useState<
+    ExercicioSessao["exercicio"] | null
+  >(null);
+  const [exercicioAdaptar, setExercicioAdaptar] = useState<
+    (typeof exercicios)[0] | null
+  >(null);
 
   const total = exercicios.reduce((acc, e) => acc + (e.duracaoMin ?? 0), 0);
   const jaAdicionados = new Set(exercicios.map((e) => e.exercicio.id));
@@ -245,7 +258,15 @@ export function GestorExercicios({
                       </div>
                     )}
 
-                    <DiagramaCartao diagrama={e.exercicio.diagrama} nome={e.exercicio.nome} />
+                    <button
+                      type="button"
+                      onClick={() => setExercicioModal(e.exercicio)}
+                      title="Ver diagrama em grande"
+                      aria-label="Ver diagrama em grande"
+                      className="flex-shrink-0 cursor-pointer rounded transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      <DiagramaCartao diagrama={e.exercicio.diagrama} nome={e.exercicio.nome} />
+                    </button>
 
                     <button
                       type="button"
@@ -283,6 +304,18 @@ export function GestorExercicios({
                       )}
                     </button>
 
+                    {!modoEdicao && (
+                      <button
+                        type="button"
+                        onClick={() => setExercicioAdaptar(e)}
+                        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-cinza-400 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label="Adaptar para esta sessão"
+                        title="Adaptar para esta sessão"
+                      >
+                        <SlidersHorizontal className="h-4 w-4" />
+                      </button>
+                    )}
+
                     {modoEdicao && (
                       <button
                         type="button"
@@ -317,6 +350,34 @@ export function GestorExercicios({
             </p>
           )}
         </>
+      )}
+
+      <ModalDiagramaExercicio
+        aberto={exercicioModal !== null}
+        onFechar={() => setExercicioModal(null)}
+        exercicio={
+          exercicioModal ?? {
+            nome: "",
+            diagrama: null,
+            objetivo: null,
+            descricao: null,
+          }
+        }
+      />
+
+      {exercicioAdaptar && (
+        <AdaptarExercicioDialog
+          sessaoExercicioId={exercicioAdaptar.id}
+          exercicioNome={exercicioAdaptar.exercicio.nome}
+          valorActual={{
+            duracaoMin: exercicioAdaptar.duracaoMin ?? null,
+            series: exercicioAdaptar.series ?? null,
+            descricaoOverride: exercicioAdaptar.descricaoOverride ?? null,
+            notas: exercicioAdaptar.notas ?? null,
+          }}
+          aberto={true}
+          onFechar={() => setExercicioAdaptar(null)}
+        />
       )}
     </section>
   );

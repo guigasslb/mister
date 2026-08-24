@@ -6,7 +6,12 @@ import { auth } from "@/lib/auth";
 import { obterEpocaAtiva, obterClubeIdAtual } from "@/lib/epoca-context";
 import { exigirCapacidade, podeLerEscalao, escaloesLegiveis, obterMembroAtual } from "@/lib/permissoes";
 import { ok, erro, erroDeValidacao, type Resultado } from "@/lib/utils";
-import { sessaoSchema, marcarPresencasSchema, notasSessaoSchema } from "@/lib/schemas/treino";
+import {
+  sessaoSchema,
+  marcarPresencasSchema,
+  notasSessaoSchema,
+  sessaoExercicioOverrideSchema,
+} from "@/lib/schemas/treino";
 import { alcanceSchema } from "@/lib/schemas/planoSemanal";
 import { construirSnapshotExercicio } from "@/lib/snapshot-exercicio";
 import { combinarDataHora, duracaoEntreHoras, horaDeData, somarMinutos } from "@/lib/plano-semanal";
@@ -490,6 +495,39 @@ export async function removerExercicioSessao(
   if (!perm.ok) return erro(perm.erro);
 
   await prisma.sessaoExercicio.delete({ where: { id: sessaoExercicioId } });
+  revalidatePath(`${PATH}/${se.sessaoId}`);
+  return ok(undefined);
+}
+
+/**
+ * Atualiza os campos de personalização (override) de um exercício da sessão:
+ * duração, séries, descrição própria e notas. Segue o padrão de autorização das
+ * restantes actions de exercícios da sessão (clube do utilizador + capacidade
+ * TREINOS_GERIR no escalão da sessão). Não toca no exercício-base nem no snapshot.
+ */
+export async function atualizarExercicioSessao(
+  sessaoExercicioId: string,
+  dados: unknown,
+): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const se = await prisma.sessaoExercicio.findFirst({
+    where: { id: sessaoExercicioId, sessao: { escalao: { clubeId } } },
+    select: { id: true, sessaoId: true, sessao: { select: { escalaoId: true } } },
+  });
+  if (!se) return erro("Exercício da sessão não encontrado");
+
+  const perm = await exigirCapacidade("TREINOS_GERIR", se.sessao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const parsed = sessaoExercicioOverrideSchema.safeParse(dados);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  await prisma.sessaoExercicio.update({
+    where: { id: sessaoExercicioId },
+    data: parsed.data,
+  });
   revalidatePath(`${PATH}/${se.sessaoId}`);
   return ok(undefined);
 }
