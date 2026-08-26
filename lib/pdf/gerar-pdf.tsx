@@ -7,7 +7,8 @@
 // Server Actions existentes (Regra Nº 6: os números batem com os painéis/CSV).
 
 import "server-only";
-import { renderToBuffer } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { obterMembroAtual } from "@/lib/permissoes";
 import {
   obterAnaliticoEscalao,
@@ -70,6 +71,26 @@ async function carregarLogo(url: string | null): Promise<string | null> {
   }
 }
 
+/**
+ * Renderiza um documento react-pdf num Buffer, isolando qualquer falha do motor
+ * de PDF (Yoga/reconciler/fontkit) num erro tratável. Sem este isolamento, uma
+ * exceção do `renderToBuffer` propagava como 500 não capturado (HTML), que o
+ * cliente mostrava como o genérico "Erro ao gerar o PDF" sem qualquer detalhe.
+ */
+async function renderizarPdf(
+  elemento: ReactElement<DocumentProps>,
+  contexto: string,
+): Promise<{ ok: true; buffer: Buffer } | { ok: false; status: number; erro: string }> {
+  try {
+    const buffer = await renderToBuffer(elemento);
+    return { ok: true, buffer };
+  } catch (e) {
+    // Log server-side com a causa real (não exposta ao cliente por segurança).
+    console.error(`[pdf] Falha ao renderizar o PDF (${contexto}):`, e);
+    return { ok: false, status: 500, erro: "Não foi possível gerar o PDF" };
+  }
+}
+
 export async function gerarPdfAnalitico(params: ParamsPdf): Promise<ResultadoPdf> {
   const ctx = await obterMembroAtual();
   if (!ctx) return { ok: false, status: 401, erro: "Não autenticado" };
@@ -88,11 +109,13 @@ export async function gerarPdfAnalitico(params: ParamsPdf): Promise<ResultadoPdf
       corPrimaria: ctx.clube.corPrimaria,
       logo: await carregarLogo(ctx.clube.logoUrl),
     };
-    const buffer = await renderToBuffer(
+    const render = await renderizarPdf(
       <PdfEstatisticaIndividual dados={res.dados} marca={marca} />,
+      `escalao ${params.escalaoId}`,
     );
+    if (!render.ok) return render;
     const nomeFicheiro = `estatistica-${slugificar(res.dados.escalao.nome)}-${carimboData()}.pdf`;
-    return { ok: true, buffer, nomeFicheiro };
+    return { ok: true, buffer: render.buffer, nomeFicheiro };
   }
 
   const res = await obterAnaliticoClubeEpoca();
@@ -104,9 +127,11 @@ export async function gerarPdfAnalitico(params: ParamsPdf): Promise<ResultadoPdf
     corPrimaria: ctx.clube.corPrimaria,
     logo: await carregarLogo(ctx.clube.logoUrl),
   };
-  const buffer = await renderToBuffer(
+  const render = await renderizarPdf(
     <PdfEstatisticaGeral dados={res.dados} marca={marca} />,
+    "clube",
   );
+  if (!render.ok) return render;
   const nomeFicheiro = `estatisticas-gerais-${slugificar(ctx.clube.nome)}-${carimboData()}.pdf`;
-  return { ok: true, buffer, nomeFicheiro };
+  return { ok: true, buffer: render.buffer, nomeFicheiro };
 }

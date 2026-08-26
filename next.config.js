@@ -32,6 +32,14 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  // `@react-pdf/renderer` (geração de PDF dos analíticos) usa seleção dinâmica do
+  // react-reconciler e carrega o motor de layout Yoga (WASM via `yoga-layout/load`).
+  // Se o Next tentar empacotá-lo no bundle do servidor, esses requires dinâmicos e
+  // o WASM partem-se em runtime (falha "Erro ao gerar o PDF"), sobretudo em
+  // deploys serverless/standalone. Mantê-lo como dependência externa do servidor
+  // garante um `require` de node_modules estável. Só é usado server-side
+  // (route handler `/api/pdf` com `runtime = "nodejs"`).
+  serverExternalPackages: ["@react-pdf/renderer"],
   experimental: {
     optimizePackageImports: ["lucide-react"],
   },

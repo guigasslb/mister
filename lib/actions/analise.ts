@@ -104,9 +104,14 @@ function montarPresencasMensais(
   sessoes: { id: string; data: Date }[],
   presencaSessaoIds: Set<string>,
 ): PresencaMensal[] {
+  // Só entram meses com sessões JÁ REALIZADAS (`data < agora`): a grelha mensal
+  // nunca deve mostrar meses futuros (sessões programadas), que apareceriam com
+  // 0% de assiduidade por ainda não terem presenças (BUG-P1-08).
+  const agora = Date.now();
   const mesMap = new Map<string, { total: number; presentes: number; mesIdx: number }>();
   for (const s of sessoes) {
     const d = new Date(s.data);
+    if (d.getTime() >= agora) continue;
     const mesIdx = d.getMonth();
     const key = `${d.getFullYear()}-${String(mesIdx + 1).padStart(2, "0")}`;
     const atual = mesMap.get(key) ?? { total: 0, presentes: 0, mesIdx };
@@ -931,6 +936,10 @@ export async function obterAnaliticoEscalao(
   const mesEquipa = new Map<string, { sessoes: number; presentes: number; mesIdx: number }>();
   for (const s of sessoes) {
     const d = new Date(s.data);
+    // Só meses com sessões JÁ REALIZADAS (`data < agora`): a grelha mensal de
+    // treinos/assiduidade nunca mostra meses futuros (programados), que dariam
+    // 0% por ainda não terem presenças (BUG-P1-08). `agora` já definido acima.
+    if (d.getTime() >= agora) continue;
     const mesIdx = d.getMonth();
     const key = `${d.getFullYear()}-${String(mesIdx + 1).padStart(2, "0")}`;
     const atual = mesEquipa.get(key) ?? { sessoes: 0, presentes: 0, mesIdx };
