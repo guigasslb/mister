@@ -123,9 +123,13 @@ function analiticoClube() {
   };
 }
 
-/** Um PDF válido começa sempre pelos bytes "%PDF". */
-function ePdf(buffer: Buffer): boolean {
-  return buffer.byteLength > 100 && buffer.subarray(0, 4).toString("latin1") === "%PDF";
+/** Um relatório imprimível válido é um documento HTML auto-contido. */
+function eHtmlImprimivel(html: string): boolean {
+  return (
+    html.length > 100 &&
+    html.trimStart().startsWith("<!DOCTYPE html>") &&
+    html.includes("window.print()")
+  );
 }
 
 beforeEach(() => {
@@ -134,24 +138,32 @@ beforeEach(() => {
 });
 
 describe("gerarPdfAnalitico", () => {
-  it("gera um PDF válido do escalão (estatística individual)", async () => {
+  it("gera um relatório HTML válido do escalão (estatística individual)", async () => {
     m(obterAnaliticoEscalao).mockResolvedValue(analiticoEscalao());
 
     const r = await gerarPdfAnalitico({ tipo: "escalao", escalaoId: "esc1" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(ePdf(r.buffer)).toBe(true);
-    expect(r.nomeFicheiro).toMatch(/^estatistica-sub-13-\d{4}-\d{2}-\d{2}\.pdf$/);
+    expect(eHtmlImprimivel(r.html)).toBe(true);
+    expect(r.titulo).toBe("Estatística individual — Sub-13");
+    // Dados do analítico refletidos no documento (paridade com os painéis/CSV).
+    expect(r.html).toContain("Sub-13");
+    expect(r.html).toContain("Sport Clube");
+    expect(r.html).toContain("João");
+    // Escapamento de HTML aplicado a texto dinâmico (segurança).
+    expect(r.html).not.toMatch(/<script[^>]*>[^<]*João/);
   });
 
-  it("gera um PDF válido do clube (estatísticas gerais)", async () => {
+  it("gera um relatório HTML válido do clube (estatísticas gerais)", async () => {
     m(obterAnaliticoClubeEpoca).mockResolvedValue(analiticoClube());
 
     const r = await gerarPdfAnalitico({ tipo: "clube" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(ePdf(r.buffer)).toBe(true);
-    expect(r.nomeFicheiro).toMatch(/^estatisticas-gerais-sport-clube-\d{4}-\d{2}-\d{2}\.pdf$/);
+    expect(eHtmlImprimivel(r.html)).toBe(true);
+    expect(r.titulo).toBe("Estatísticas gerais — Sport Clube");
+    expect(r.html).toContain("Sport Clube");
+    expect(r.html).toContain("Geral do clube");
   });
 
   it("propaga «Sem permissão» como 403", async () => {

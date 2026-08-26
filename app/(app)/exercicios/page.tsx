@@ -143,9 +143,17 @@ export default async function ExerciciosPage({
   const utilizadorId = membro?.utilizadorId ?? null;
   const podeGerirBibliotecaClube = membro?.capacidades.includes("EXERCICIOS_GERIR") ?? false;
 
-  // 🎒 Pessoal: exercícios do próprio (portáteis). 🏛️ Clube: tudo o que está na
-  // biblioteca do clube ativo — inclui os pessoais que o próprio partilhou lá.
-  const pessoais = res.dados.filter((e) => e.origem === "PESSOAL");
+  // 🎒 Pessoal: biblioteca pessoal visível (§8.6) — os exercícios do próprio
+  // (portáteis) E os exercícios pessoais de treinadores que partilham ≥1 escalão
+  // com o utilizador (§3.3, modo leitura). O filtro de visibilidade do servidor
+  // (`filtroExerciciosVisiveis`) já limita `res.dados` ao que o membro pode ver,
+  // pelo que qualquer item `proprietario = TREINADOR` presente é um exercício de
+  // biblioteca pessoal legitimamente visível. Filtrar por `origem === "PESSOAL"`
+  // (equivalente a `autorId === utilizador`) escondia os exercícios dos colegas,
+  // que não são do próprio (origem "CLUBE") nem estão na biblioteca do clube.
+  // 🏛️ Clube: tudo o que está na biblioteca do clube ativo — inclui os pessoais
+  // que o próprio partilhou lá.
+  const pessoais = res.dados.filter((e) => e.proprietario === "TREINADOR");
   const doClube = res.dados.filter((e) => e.naBibliotecaDoClube);
   const lista = aba === "pessoal" ? pessoais : doClube;
 

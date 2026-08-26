@@ -1,11 +1,12 @@
 "use client";
 
-// Botão de download PDF dos analíticos (Dossier do Treinador).
+// Botão de exportação PDF dos analíticos (Dossier do Treinador).
 //
-// Faz fetch ao route handler `/api/pdf` (que devolve o PDF já autenticado e com
-// scope ao clube/escalão), transforma a resposta num Blob e força o download.
-// UX espelha o ExportarCsvBotao (loading + toast). `print:hidden` para não sair
-// no próprio PDF/impressão.
+// Abre o route handler `/api/pdf` (que devolve um relatório HTML imprimível já
+// autenticado e com scope ao clube/escalão) num novo separador; o documento
+// abre o diálogo de impressão automaticamente, onde o utilizador escolhe
+// "Guardar como PDF". Abordagem serverless-safe (sem motor nativo/WASM).
+// `print:hidden` para não sair no próprio relatório/impressão.
 
 import { useState } from "react";
 import { FileDown, Loader2 } from "lucide-react";
@@ -29,42 +30,21 @@ function construirUrl(params: Props["params"]): string {
   return `/api/pdf?${sp.toString()}`;
 }
 
-/** Lê o nome de ficheiro do Content-Disposition (fallback estável). */
-function nomeFicheiro(resposta: Response, omissao: string): string {
-  const cd = resposta.headers.get("content-disposition") ?? "";
-  const m = /filename="?([^"]+)"?/.exec(cd);
-  return m?.[1] ?? omissao;
-}
+export function DescarregarPdfBotao({ params, rotulo = "Guardar PDF" }: Props) {
+  const [aAbrir, setAAbrir] = useState(false);
 
-export function DescarregarPdfBotao({ params, rotulo = "Download PDF" }: Props) {
-  const [aGerar, setAGerar] = useState(false);
-
-  async function descarregar() {
-    setAGerar(true);
-    let url: string | null = null;
+  function abrir() {
+    setAAbrir(true);
     try {
-      const resposta = await fetch(construirUrl(params));
-      if (!resposta.ok) {
-        const corpo = await resposta.json().catch(() => null);
-        toast.error(corpo?.erro ?? "Erro ao gerar o PDF");
-        return;
+      const janela = window.open(construirUrl(params), "_blank", "noopener,noreferrer");
+      if (!janela) {
+        toast.error("Permite janelas de pop-up para gerar o PDF.");
       }
-
-      const blob = await resposta.blob();
-      url = URL.createObjectURL(blob);
-      const nome = nomeFicheiro(resposta, "estatistica.pdf");
-      const ancora = document.createElement("a");
-      ancora.href = url;
-      ancora.download = nome;
-      document.body.appendChild(ancora);
-      ancora.click();
-      ancora.remove();
-      toast.success(`"${nome}" descarregado`);
     } catch {
-      toast.error("Erro ao gerar o PDF");
+      toast.error("Não foi possível abrir o relatório.");
     } finally {
-      if (url) URL.revokeObjectURL(url);
-      setAGerar(false);
+      // O documento abre noutro separador; libertamos o estado de imediato.
+      setAAbrir(false);
     }
   }
 
@@ -73,16 +53,16 @@ export function DescarregarPdfBotao({ params, rotulo = "Download PDF" }: Props) 
       type="button"
       variant="outline"
       size="sm"
-      onClick={descarregar}
-      disabled={aGerar}
+      onClick={abrir}
+      disabled={aAbrir}
       className="print:hidden"
     >
-      {aGerar ? (
+      {aAbrir ? (
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
       ) : (
         <FileDown className="h-4 w-4" aria-hidden />
       )}
-      {aGerar ? "A gerar…" : rotulo}
+      {rotulo}
     </Button>
   );
 }

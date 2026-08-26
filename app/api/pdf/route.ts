@@ -1,15 +1,17 @@
-// Route Handler — download dos PDFs de analíticos (Dossier do Treinador).
+// Route Handler — relatórios imprimíveis de analíticos (Dossier do Treinador).
 //
-// Único ponto REST permitido (além do Auth.js) por servir binário (PDF), que uma
-// Server Action não devolve com streaming/attachment. A autenticação, a
-// capacidade RELATORIOS_VER e o scoping ao clube/escalão são garantidos dentro
-// de `gerarPdfAnalitico` (que delega nas Server Actions dos analíticos).
+// Único ponto REST permitido (além do Auth.js) por servir um documento HTML
+// imprimível (o browser converte em PDF via "Guardar como PDF"), que uma Server
+// Action não devolve. Abordagem serverless-safe: sem motor nativo/WASM (ver
+// `lib/pdf/gerar-pdf.ts`). A autenticação, a capacidade RELATORIOS_VER e o
+// scoping ao clube/escalão são garantidos dentro de `gerarPdfAnalitico` (que
+// delega nas Server Actions dos analíticos).
 
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { gerarPdfAnalitico, type ParamsPdf } from "@/lib/pdf/gerar-pdf";
 
-// `@react-pdf/renderer` precisa do runtime Node (não Edge); o PDF é sempre dinâmico.
+// Corre no runtime Node (acede a Prisma/auth via Server Actions); sempre dinâmico.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -47,11 +49,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ erro: resultado.erro }, { status: resultado.status });
   }
 
-  return new NextResponse(new Uint8Array(resultado.buffer), {
+  return new NextResponse(resultado.html, {
     status: 200,
     headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${resultado.nomeFicheiro}"`,
+      "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     },
   });
