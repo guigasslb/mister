@@ -4,6 +4,7 @@ import {
   listarRelatoriosPartilhados,
 } from "@/lib/actions/analise";
 import { PainelClube } from "@/components/analiticos/PainelClube";
+import { DescarregarPdfBotao } from "@/components/analiticos/DescarregarPdfBotao";
 import { GerarRelatorioBotao } from "@/components/relatorios/GerarRelatorioBotao";
 import { GerirRelatorios } from "@/components/relatorios/GerirRelatorios";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
@@ -41,7 +42,10 @@ export default async function AnaliticosClubePage() {
             {resClube.dados.clube.nome} · {resClube.dados.epoca.nome}
           </p>
         </div>
-        <GerarRelatorioBotao tipo="EPOCA_CLUBE" />
+        <div className="flex flex-wrap gap-2">
+          <DescarregarPdfBotao params={{ tipo: "clube" }} />
+          <GerarRelatorioBotao tipo="EPOCA_CLUBE" />
+        </div>
       </div>
 
       <PainelClube dados={resClube.dados} linkEscaloes />

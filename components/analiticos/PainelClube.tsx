@@ -4,6 +4,9 @@
 // P2.4: filtro de modalidade client-side (Todos | Futsal | Futebol) sobre a
 // lista de escalões já carregada — sem nova Server Action. Os KPIs globais
 // recalculam-se a partir do subconjunto filtrado para o painel ficar coerente.
+// Redesign 2026-08 (§12): layout "clean/global" (ref. Dossier do Treinador) —
+// KPIs de número grande, secções discretas e tabela limpa com destaques na cor
+// do clube. Sem alterações à lógica de dados.
 "use client";
 
 import { useMemo, useState } from "react";
@@ -14,7 +17,8 @@ import type {
   BalancoEpocaClube,
   EscalaoResumoClube,
 } from "@/lib/actions/analise";
-import { Cartao, pct } from "./Cartao";
+import { pct } from "./Cartao";
+import { Kpi, SecaoAnalitico } from "./Kpi";
 
 type FiltroModalidade = "TODAS" | Modalidade;
 
@@ -22,6 +26,11 @@ const LABEL_MODALIDADE: Record<Modalidade, string> = {
   FUTSAL: "Futsal",
   FUTEBOL: "Futebol",
 };
+
+/** Percentagem inteira de `parte` sobre `total` (ex.: 6/10 → "60%"). */
+function pctDe(parte: number, total: number): string {
+  return total > 0 ? `${Math.round((parte / total) * 100)}%` : "—";
+}
 
 /** Recalcula os totais a partir de um subconjunto de escalões (mirror do servidor). */
 function calcularTotais(escaloes: EscalaoResumoClube[]) {
@@ -125,81 +134,97 @@ export function PainelClube({
     ...modalidadesPresentes.map((m) => ({ valor: m, label: LABEL_MODALIDADE[m] })),
   ];
 
-  return (
-    <div className="space-y-6">
-      {/* Filtro de modalidade (P2.4) — só quando o clube tem escalões de ≥2 modalidades. */}
-      {mostrarFiltro && (
-        <div
-          className="inline-flex rounded-lg border border-cinza-200 bg-white p-1 shadow-card print:hidden"
-          role="group"
-          aria-label="Filtrar escalões por modalidade"
-        >
-          {opcoes.map((o) => {
-            const ativo = filtro === o.valor;
-            return (
-              <button
-                key={o.valor}
-                type="button"
-                onClick={() => setFiltro(o.valor)}
-                aria-pressed={ativo}
-                className={`min-h-[44px] rounded-md px-4 text-corpo-sec font-medium transition-colors ${
-                  ativo
-                    ? "bg-primary text-white"
-                    : "text-cinza-600 hover:bg-cinza-100"
-                }`}
-              >
-                {o.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
+  const filtroModalidade = mostrarFiltro ? (
+    <div
+      className="inline-flex rounded-lg border border-cinza-200 bg-white p-1 print:hidden"
+      role="group"
+      aria-label="Filtrar escalões por modalidade"
+    >
+      {opcoes.map((o) => {
+        const ativo = filtro === o.valor;
+        return (
+          <button
+            key={o.valor}
+            type="button"
+            onClick={() => setFiltro(o.valor)}
+            aria-pressed={ativo}
+            className={`min-h-[44px] rounded-md px-4 text-corpo-sec font-medium transition-colors ${
+              ativo
+                ? "bg-primary text-white"
+                : "text-cinza-600 hover:bg-cinza-100"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
 
-      {/* KPIs globais */}
-      <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-        <Cartao valor={escaloes.length} label="escalões" />
-        <Cartao valor={totais.nAtletas} label="atletas" />
-        <Cartao valor={totais.jogos} label="jogos" />
-        <Cartao
-          valor={`${sessoesExecutadasTotais}/${totais.sessoes}`}
-          label="sessões realizadas"
-        />
-        <Cartao valor={totais.golosMarcados} label="golos M" />
-        <Cartao valor={pct(totais.taxaPresencaMediaGlobal)} label="presença méd." />
-      </div>
-      {/* Resultados da época (P2-06) — balanço agregado de todos os escalões. */}
-      <section className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-        <p className="mb-4 text-legenda font-medium uppercase tracking-wide text-cinza-400">
-          Resultados da época
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          <Cartao valor={balanco.vitorias} label="🟢 vitórias" />
-          <Cartao valor={balanco.empates} label="⬜ empates" />
-          <Cartao valor={balanco.derrotas} label="🔴 derrotas" />
+  return (
+    <div className="space-y-10">
+      {/* Geral — visão global do clube na época */}
+      <SecaoAnalitico titulo="Geral" acao={filtroModalidade}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Kpi valor={escaloes.length} label="escalões" acento="primary" />
+          <Kpi valor={totais.nAtletas} label="atletas" />
+          <Kpi valor={totais.jogos} label="jogos" />
+          <Kpi
+            valor={`${sessoesExecutadasTotais}/${totais.sessoes}`}
+            label="sessões"
+            nota="realizadas/prog."
+          />
+          <Kpi valor={totais.golosMarcados} label="golos marcados" acento="verde" />
+          <Kpi
+            valor={pct(totais.taxaPresencaMediaGlobal)}
+            label="presença méd."
+            acento="primary"
+          />
         </div>
-        <p className="mt-3 text-center text-corpo-sec tabular-nums text-cinza-600">
-          {balanco.jogos} jogos | {balanco.golosMarcados} golos marcados /{" "}
+      </SecaoAnalitico>
+
+      {/* Resultados da época — balanço agregado de todos os escalões (P2-06) */}
+      <SecaoAnalitico titulo="Resultados da época">
+        <div className="grid grid-cols-3 gap-3">
+          <Kpi
+            valor={balanco.vitorias}
+            label="vitórias"
+            acento="verde"
+            nota={pctDe(balanco.vitorias, balanco.jogos)}
+          />
+          <Kpi
+            valor={balanco.empates}
+            label="empates"
+            acento="ambar"
+            nota={pctDe(balanco.empates, balanco.jogos)}
+          />
+          <Kpi
+            valor={balanco.derrotas}
+            label="derrotas"
+            acento="vermelho"
+            nota={pctDe(balanco.derrotas, balanco.jogos)}
+          />
+        </div>
+        <p className="text-center text-corpo-sec tabular-nums text-cinza-500">
+          {balanco.jogos} jogos · {balanco.golosMarcados} golos marcados /{" "}
           {balanco.golosSofridos} sofridos
         </p>
-      </section>
+      </SecaoAnalitico>
 
-      {/* Comparação entre escalões */}
-      <div className="rounded-lg border border-cinza-200 bg-white shadow-card">
-        <p className="border-b border-cinza-100 px-5 py-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
-          Escalões
-        </p>
-        <div className="overflow-x-auto">
+      {/* Comparação entre escalões — tabela limpa */}
+      <SecaoAnalitico titulo="Escalões">
+        <div className="overflow-x-auto rounded-lg border border-cinza-200 bg-white">
           <table className="w-full min-w-[640px] text-corpo-sec">
             <thead>
-              <tr className="text-left text-legenda uppercase tracking-wide text-cinza-500">
-                <th className="px-5 py-2.5 font-medium">Escalão</th>
-                <th className="px-3 py-2.5 text-right font-medium">Atletas</th>
-                <th className="px-3 py-2.5 text-right font-medium">Jogos</th>
-                <th className="px-3 py-2.5 text-center font-medium">V-E-D</th>
-                <th className="px-3 py-2.5 text-right font-medium">Golos M/S</th>
-                <th className="px-3 py-2.5 text-right font-medium">Sessões</th>
-                <th className="px-3 py-2.5 text-right font-medium">Realizadas</th>
-                <th className="px-5 py-2.5 text-right font-medium">Presença</th>
+              <tr className="border-b border-cinza-200 text-left text-legenda uppercase tracking-wide text-cinza-500">
+                <th className="px-5 py-3 font-medium">Escalão</th>
+                <th className="px-3 py-3 text-right font-medium">Atletas</th>
+                <th className="px-3 py-3 text-right font-medium">Jogos</th>
+                <th className="px-3 py-3 text-center font-medium">V-E-D</th>
+                <th className="px-3 py-3 text-right font-medium">Golos M/S</th>
+                <th className="px-3 py-3 text-right font-medium">Sessões</th>
+                <th className="px-3 py-3 text-right font-medium">Realizadas</th>
+                <th className="px-5 py-3 text-right font-medium">Presença</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-cinza-100">
@@ -207,19 +232,22 @@ export function PainelClube({
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-5 py-6 text-center text-corpo-sec text-cinza-500"
+                    className="px-5 py-8 text-center text-corpo-sec text-cinza-500"
                   >
                     Sem escalões nesta modalidade.
                   </td>
                 </tr>
               ) : (
                 escaloes.map((e) => (
-                  <tr key={e.escalaoId} className="text-cinza-900">
+                  <tr
+                    key={e.escalaoId}
+                    className="text-cinza-900 transition-colors hover:bg-cinza-50"
+                  >
                     <td className="px-5 py-3 font-medium">
                       {linkEscaloes ? (
                         <Link
                           href={`/escaloes/${e.escalaoId}/analiticos`}
-                          className="text-primary hover:underline"
+                          className="inline-flex min-h-[44px] items-center text-primary hover:underline"
                         >
                           {e.nome}
                         </Link>
@@ -239,7 +267,7 @@ export function PainelClube({
                     <td className="px-3 py-3 text-right tabular-nums text-cinza-600">
                       {e.sessoesExecutadas ?? e.sessoes}
                     </td>
-                    <td className="px-5 py-3 text-right tabular-nums font-medium text-primary">
+                    <td className="px-5 py-3 text-right tabular-nums font-semibold text-primary">
                       {pct(e.taxaPresencaMedia)}
                     </td>
                   </tr>
@@ -248,7 +276,7 @@ export function PainelClube({
             </tbody>
           </table>
         </div>
-      </div>
+      </SecaoAnalitico>
     </div>
   );
 }

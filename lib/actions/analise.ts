@@ -238,7 +238,7 @@ export interface AnaliticoCaderneta {
 export interface ComparacaoEquipa {
   /** Média de golos por atleta do escalão. */
   golosMediaEquipa: number;
-  /** Taxa de presença média do escalão (presenças / (nAtletas × sessões)). */
+  /** Taxa de presença média do escalão (presenças / (nAtletas × sessões executadas)). */
   taxaPresencaMediaEquipa: number;
   /** Tempo de jogo médio por atleta (minutos, a partir dos blocos). */
   tempoJogoMedioEquipa: number;
@@ -473,10 +473,16 @@ export async function obterAnaliticoAtleta(
   }));
 
   const presencasSet = new Set(presencas.map((p) => p.sessaoId));
+  // Denominador da assiduidade = sessões EXECUTADAS desde o ingresso (data <
+  // agora), nunca as programadas futuras (BUG-P1-08). As presenças (numerador)
+  // só existem em sessões já realizadas, pelo que fica simétrico. A `sessoes`
+  // completa mantém-se para a grelha mensal (montarPresencasMensais).
+  const agora = Date.now();
+  const sessoesExecutadas = sessoes.filter((s) => s.data.getTime() < agora).length;
   const agregado = agregarEstatisticas({
     eGR,
     jogosConvocado,
-    sessoesTotais: sessoes.length,
+    sessoesTotais: sessoesExecutadas,
     presencas: presencas.length,
     estatisticas: linhas,
   });
@@ -534,9 +540,12 @@ async function calcularComparacaoEquipa(
     prisma.atletaEscalao.count({
       where: { escalaoId, epocaId, estado: "ATIVO", atleta: { ativo: true } },
     }),
-    // Só sessões NORMAL contam para assiduidade (BUG-P1-07): simetria com a
-    // vista do atleta e com o numerador de presenças abaixo.
-    prisma.sessao.count({ where: { epocaId, escalaoId, tipoSessao: "NORMAL" } }),
+    // Só sessões NORMAL contam para assiduidade (BUG-P1-07) e apenas as já
+    // EXECUTADAS (data < agora) — nunca as programadas (BUG-P1-08): simetria
+    // com a vista do atleta e com o numerador de presenças abaixo.
+    prisma.sessao.count({
+      where: { epocaId, escalaoId, tipoSessao: "NORMAL", data: { lt: new Date() } },
+    }),
     prisma.estatisticaAtleta.findMany({
       where: { jogo: filtroJogo },
       // §10.8: formato para o tempo por bloco correto (futebol ≠ futsal).
@@ -561,7 +570,7 @@ async function calcularComparacaoEquipa(
 
   return {
     golosMediaEquipa: nAtletas > 0 ? totalGolos / nAtletas : 0,
-    taxaPresencaMediaEquipa: slots > 0 ? presencas / slots : 0,
+    taxaPresencaMediaEquipa: slots > 0 ? Math.min(presencas / slots, 1) : 0,
     tempoJogoMedioEquipa: nAtletas > 0 ? totalTempo / nAtletas : 0,
   };
 }
@@ -576,7 +585,7 @@ export interface RankingAtleta {
   valor: number;
 }
 
-/** Assiduidade por atleta (top presenças). `taxa` = presenças / sessões do escalão. */
+/** Assiduidade por atleta (top presenças). `taxa` = presenças / sessões executadas do escalão. */
 export interface RankingAssiduidade {
   atletaId: string;
   nome: string;
@@ -941,13 +950,18 @@ export async function obterAnaliticoEscalao(
       };
     });
 
-  const slots = nAtletas * sessoes.length;
+  // Denominador da assiduidade = sessões EXECUTADAS (já realizadas), nunca as
+  // programadas (BUG-P1-08): com 1 sessão realizada e todos presentes a taxa
+  // tem de dar ~100%, não 1/(nº programadas). A assiduidade do escalão é a
+  // média das assiduidades individuais — Σ presençasAtleta / (nAtletas ×
+  // sessoesExecutadas) — que colapsa nesta forma agregada.
+  const slots = nAtletas * sessoesExecutadas;
 
   // Ranking de assiduidade por atleta (top 5). Reutiliza a MESMA lista de
-  // presenças já lida acima — sem query adicional. Denominador = total de
-  // sessões do escalão, em simetria com taxaPresencaMedia da equipa
-  // (nAtletas × sessoes.length); a taxa por atleta fica assim comparável.
-  const totalSessoes = sessoes.length;
+  // presenças já lida acima — sem query adicional. Denominador = sessões
+  // EXECUTADAS do escalão, em simetria com taxaPresencaMedia da equipa
+  // (nAtletas × sessoesExecutadas); a taxa por atleta fica assim comparável.
+  const totalSessoes = sessoesExecutadas;
   const assiduidadeMap = new Map<string, { nome: string; presencas: number }>();
   for (const p of presencas) {
     if (!p.atletaId) continue;
@@ -985,9 +999,10 @@ export async function obterAnaliticoEscalao(
     sessoes: sessoes.length,
     sessoesExecutadas,
     nAtletas,
-    // Cap a 1 (100%): atletas que saíram a meio da época podem gerar presenças
-    // sem contribuir para o denominador de slots atual, o que inflaria a taxa
-    // acima de 100% (BUG-P1-06). Simetria com o ranking (Math.min acima).
+    // Denominador = nAtletas × sessoesExecutadas (BUG-P1-08). Cap a 1 (100%):
+    // atletas que saíram a meio da época podem gerar presenças sem contribuir
+    // para o denominador de slots atual, o que inflaria a taxa acima de 100%
+    // (BUG-P1-06). Simetria com o ranking (Math.min acima).
     taxaPresencaMedia: slots > 0 ? Math.min(presencas.length / slots, 1) : 0,
     marcadores,
     assistentes,
@@ -1247,7 +1262,9 @@ export async function obterAnaliticoClubeEpoca(
     const nSessoes = sessoesPorEscalao.get(e.id) ?? 0;
     const nSessoesExecutadas = sessoesExecutadasPorEscalao.get(e.id) ?? 0;
     const nPresencas = presencasPorEscalao.get(e.id) ?? 0;
-    const slots = nAtletas * nSessoes;
+    // Assiduidade = presenças / (atletas × sessões EXECUTADAS), nunca as
+    // programadas (BUG-P1-08): simetria com obterAnaliticoEscalao.
+    const slots = nAtletas * nSessoesExecutadas;
     return {
       escalaoId: e.id,
       nome: e.nome,
@@ -1261,7 +1278,8 @@ export async function obterAnaliticoClubeEpoca(
       golosSofridos: j?.golosSofridos ?? 0,
       sessoes: nSessoes,
       sessoesExecutadas: nSessoesExecutadas,
-      taxaPresencaMedia: slots > 0 ? nPresencas / slots : 0,
+      // Cap a 1 (100%): simetria com obterAnaliticoEscalao (BUG-P1-06/08).
+      taxaPresencaMedia: slots > 0 ? Math.min(nPresencas / slots, 1) : 0,
     };
   });
 
@@ -1283,7 +1301,10 @@ export async function obterAnaliticoClubeEpoca(
       golosMarcados: 0, golosSofridos: 0, sessoes: 0, sessoesExecutadas: 0,
     },
   );
-  const slotsGlobais = resumos.reduce((acc, r) => acc + r.nAtletas * r.sessoes, 0);
+  const slotsGlobais = resumos.reduce(
+    (acc, r) => acc + r.nAtletas * r.sessoesExecutadas,
+    0,
+  );
   const presencasGlobais = [...presencasPorEscalao.values()].reduce((a, b) => a + b, 0);
 
   // Balanço de resultados (P2-06): mesma fonte que `totais` (soma de todos os
@@ -1303,7 +1324,8 @@ export async function obterAnaliticoClubeEpoca(
     escaloes: resumos,
     totais: {
       ...totais,
-      taxaPresencaMediaGlobal: slotsGlobais > 0 ? presencasGlobais / slotsGlobais : 0,
+      taxaPresencaMediaGlobal:
+        slotsGlobais > 0 ? Math.min(presencasGlobais / slotsGlobais, 1) : 0,
     },
     balanco,
   });

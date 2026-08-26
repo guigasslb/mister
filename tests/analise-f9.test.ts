@@ -367,6 +367,46 @@ describe("obterAnaliticoEscalao", () => {
     expect(r.dados.sessoesExecutadas).toBe(2);
   });
 
+  it("assiduidade usa sessões executadas, não as programadas (BUG-P1-08)", async () => {
+    // Cenário reportado: 1 sessão realizada, TODOS presentes → deve dar ~100%,
+    // não 1/(nº de sessões programadas). Aqui: 5 atletas, 1 sessão passada +
+    // 4 sessões futuras programadas, e as 5 presenças na sessão realizada.
+    p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
+    p.jogo.findMany.mockResolvedValue([]);
+    const futura = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const futura2 = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const futura3 = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
+    const futura4 = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000);
+    p.sessao.findMany.mockResolvedValue([
+      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
+      { id: "s2", data: futura, tipoSessao: "NORMAL" },
+      { id: "s3", data: futura2, tipoSessao: "NORMAL" },
+      { id: "s4", data: futura3, tipoSessao: "NORMAL" },
+      { id: "s5", data: futura4, tipoSessao: "NORMAL" },
+    ]);
+    p.atletaEscalao.count.mockResolvedValue(5);
+    p.estatisticaAtleta.findMany.mockResolvedValue([]);
+    p.eventoJogo.findMany.mockResolvedValue([]);
+    // 5 presenças, todas na única sessão executada.
+    p.presenca.findMany.mockResolvedValue([
+      { sessaoId: "s1", atletaId: ATLETA, atleta: { nome: "A" } },
+      { sessaoId: "s1", atletaId: ATLETA2, atleta: { nome: "B" } },
+      { sessaoId: "s1", atletaId: "a3", atleta: { nome: "C" } },
+      { sessaoId: "s1", atletaId: "a4", atleta: { nome: "D" } },
+      { sessaoId: "s1", atletaId: "a5", atleta: { nome: "E" } },
+    ]);
+
+    const r = await obterAnaliticoEscalao(ESCALAO);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(r.dados.sessoes).toBe(5);
+    expect(r.dados.sessoesExecutadas).toBe(1);
+    // 5 presenças / (5 atletas × 1 sessão executada) = 1.0 (100%), não 0.04.
+    expect(r.dados.taxaPresencaMedia).toBeCloseTo(1);
+    // Ranking por atleta também usa sessões executadas como denominador.
+    expect(r.dados.rankingAssiduidade[0].taxa).toBeCloseTo(1);
+  });
+
   it("constrói rankings de métricas configuráveis por equipa", async () => {
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
     p.jogo.findMany.mockResolvedValue([]);
@@ -588,6 +628,27 @@ describe("obterAnaliticoClubeEpoca", () => {
     // Totais: 8 programadas, 5 executadas.
     expect(r.dados.totais.sessoes).toBe(8);
     expect(r.dados.totais.sessoesExecutadas).toBe(5);
+  });
+
+  it("assiduidade do clube usa sessões executadas, não as programadas (BUG-P1-08)", async () => {
+    // 1 escalão, 5 atletas, 10 sessões programadas mas só 1 executada, e 5
+    // presenças → taxa = 5/(5×1) = 100%, não 5/(5×10) = 10%.
+    p.escalao.findMany.mockResolvedValue([{ id: ESCALAO, nome: "Sub-13", ordem: 0 }]);
+    p.jogo.findMany.mockResolvedValue([]);
+    p.sessao.groupBy
+      .mockResolvedValueOnce([{ escalaoId: ESCALAO, _count: { _all: 10 } }]) // programadas
+      .mockResolvedValueOnce([{ escalaoId: ESCALAO, _count: { _all: 1 } }]); // executadas
+    p.atletaEscalao.groupBy.mockResolvedValue([{ escalaoId: ESCALAO, _count: { _all: 5 } }]);
+    p.presenca.groupBy.mockResolvedValue([{ escalaoId: ESCALAO, _count: { _all: 5 } }]);
+
+    const r = await obterAnaliticoClubeEpoca();
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    const sub13 = r.dados.escaloes.find((e) => e.escalaoId === ESCALAO)!;
+    expect(sub13.sessoes).toBe(10);
+    expect(sub13.sessoesExecutadas).toBe(1);
+    expect(sub13.taxaPresencaMedia).toBeCloseTo(1);
+    expect(r.dados.totais.taxaPresencaMediaGlobal).toBeCloseTo(1);
   });
 
   it("nega sem escalões visíveis", async () => {

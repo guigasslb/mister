@@ -8,6 +8,7 @@ import { obterCargaSemanal, obterCargaAtletas } from "@/lib/actions/cargaTreino"
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PainelEscalao } from "@/components/analiticos/PainelEscalao";
 import { ExportarCsvBotao } from "@/components/analiticos/ExportarCsvBotao";
+import { DescarregarPdfBotao } from "@/components/analiticos/DescarregarPdfBotao";
 import { TabelaAcwrAtletas } from "@/components/analiticos/TabelaAcwrAtletas";
 import { CurvaCargaSemanal } from "@/components/graficos/CurvaCargaSemanalLazy";
 import { GerarRelatorioBotao } from "@/components/relatorios/GerarRelatorioBotao";
@@ -66,6 +67,13 @@ export default async function AnaliticosEscalaoPage({
                 escalaoId: id,
                 competicaoId: competicao || undefined,
               })}
+            />
+            <DescarregarPdfBotao
+              params={{
+                tipo: "escalao",
+                escalaoId: id,
+                competicaoId: competicao || undefined,
+              }}
             />
             <GerarRelatorioBotao tipo="EPOCA_EQUIPA" escalaoId={id} />
           </div>
