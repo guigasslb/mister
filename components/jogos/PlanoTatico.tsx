@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { definirPlanoTatico } from "@/lib/actions/jogos";
 import { LABEL_POSICAO, posicoesPorModalidade } from "@/lib/schemas/atleta";
-import { CampoDesenho } from "@/components/campo/CampoDesenho";
+import { QuadroTaticoJogo } from "@/components/jogos/QuadroTaticoJogo";
 import type { DiagramaCampo, Jogador } from "@/lib/schemas/exercicio";
 import type { FormatoJogo, Modalidade, Posicao } from "@prisma/client";
 
@@ -70,6 +70,8 @@ export function PlanoTatico({
   planoInicial,
   modalidade,
   formato,
+  quadroInicial,
+  podeGerirQuadro,
 }: {
   jogoId: string;
   convocados: Convocado[];
@@ -77,6 +79,10 @@ export function PlanoTatico({
   // 🔁 v7 (§11.5): modalidade → posições/linhas; formato → fundo de campo.
   modalidade: Modalidade;
   formato: FormatoJogo | null;
+  // §8.10: quadro tático interativo do plano de jogo (persistido em
+  // QuadroTatico.diagrama) + gating por MODELO_JOGO_GERIR.
+  quadroInicial: { id: string; diagrama: DiagramaCampo | null } | null;
+  podeGerirQuadro: boolean;
 }) {
   const POSICOES = posicoesPorModalidade(modalidade);
   const LINHAS = modalidade === "FUTEBOL" ? LINHAS_FUTEBOL : LINHAS_FUTSAL;
@@ -167,40 +173,39 @@ export function PlanoTatico({
 
   return (
     <div className="space-y-5">
-      {/* Formação visual no campo (titulares posicionados) — §11.5 */}
+      {/* Quadro tático interativo: formação dos titulares + adversários +
+          jogadas (setas). Persistido em QuadroTatico.diagrama — §8.10/§11.3. */}
       <div className="rounded-lg border border-cinza-200 bg-cinza-50 p-4">
         <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-500">
-          Formação prevista ({titulares.length} titular
+          Quadro tático ({titulares.length} titular
           {titulares.length === 1 ? "" : "es"})
         </p>
-        {titulares.length === 0 ? (
-          <p className="text-corpo-sec text-cinza-500">
-            Marca os titulares para veres a formação.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            <div className="mx-auto max-w-xl">
-              <CampoDesenho diagrama={diagrama} formato={formato ?? undefined} />
-            </div>
-            {/* Titulares sem posição atribuída (não aparecem no campo) */}
-            {titularesSemPosicao.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="w-24 flex-shrink-0 text-legenda text-cinza-500">
-                  Sem posição
+        <div className="space-y-3">
+          <QuadroTaticoJogo
+            jogoId={jogoId}
+            formato={formato}
+            quadroInicial={quadroInicial}
+            diagramaFormacao={diagrama}
+            podeGerir={podeGerirQuadro}
+          />
+          {/* Titulares sem posição atribuída (não entram na formação semeada) */}
+          {titularesSemPosicao.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-24 flex-shrink-0 text-legenda text-cinza-500">
+                Sem posição
+              </span>
+              {titularesSemPosicao.map((c) => (
+                <span
+                  key={c.id}
+                  className="inline-flex items-center gap-1 rounded-full bg-cinza-200 px-3 py-1 text-legenda font-medium text-cinza-700"
+                >
+                  {c.numero != null && <span className="opacity-80">#{c.numero}</span>}
+                  {c.nome}
                 </span>
-                {titularesSemPosicao.map((c) => (
-                  <span
-                    key={c.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-cinza-200 px-3 py-1 text-legenda font-medium text-cinza-700"
-                  >
-                    {c.numero != null && <span className="opacity-80">#{c.numero}</span>}
-                    {c.nome}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Editor por convocado */}

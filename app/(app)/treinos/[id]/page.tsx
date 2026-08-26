@@ -93,6 +93,8 @@ export default async function DetalheSessaoPage({
       notas: se.notas ?? null,
       series: se.series ?? null,
       descricaoOverride: se.descricaoOverride ?? null,
+      // §3.5: fase do treino deste exercício nesta sessão (agrupamento na visualização).
+      parteTreino: se.parteTreino ?? null,
     };
   });
 
@@ -212,6 +214,7 @@ export default async function DetalheSessaoPage({
           series: e.series,
           descricaoOverride: e.descricaoOverride,
           notas: e.notas,
+          parteTreino: e.parteTreino,
         }))}
       />
 
@@ -237,6 +240,7 @@ export default async function DetalheSessaoPage({
           series: e.series,
           descricaoOverride: e.descricaoOverride,
           notas: e.notas,
+          parteTreino: e.parteTreino,
           exercicio: {
             id: e.exercicioId,
             nome: e.nome,
@@ -251,6 +255,10 @@ export default async function DetalheSessaoPage({
           nome: b.nome,
           categoriaPrincipal: b.categoriaPrincipal,
           duracaoMin: b.duracaoMin,
+          // Melhoria 1: diagrama para pré-visualização no seletor.
+          diagrama: b.diagrama,
+          // §3.5: fase sugerida por defeito ao adicionar (herdada do exercício).
+          parteTreino: b.parteTreino,
         }))}
       />
 

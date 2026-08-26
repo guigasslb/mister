@@ -24,10 +24,15 @@ export function CampoAnimado({
   diagrama,
   formato,
   className,
+  autoPlay = false,
 }: {
   diagrama: DiagramaCampo;
   formato?: FormatoJogo;
   className?: string;
+  // Quando `true` e o diagrama tem passos, a animação arranca sozinha em ciclo
+  // assim que o componente monta (ou quando o diagrama muda) — sem clicar em play.
+  // Usado no Modo Treino (§3/§11): abrir o exercício reproduz logo a animação.
+  autoPlay?: boolean;
 }) {
   const fmt = formato ?? diagrama.campo ?? FormatoJogo.FUTSAL_5;
   const keyframes = useMemo(() => construirKeyframes(diagrama), [diagrama]);
@@ -39,7 +44,9 @@ export function CampoAnimado({
 
   const [posicoes, setPosicoes] = useState<Map<string, Pos>>(keyframes[0]);
   const [aPlay, setAPlay] = useState(false);
-  const [loop, setLoop] = useState(false);
+  // Em autoPlay o ciclo começa ativo (a animação repete-se enquanto o painel
+  // estiver aberto); o utilizador pode desligá-lo pelos controlos.
+  const [loop, setLoop] = useState(autoPlay);
   const [velocidade, setVelocidade] = useState<0.5 | 1 | 2>(1);
   const [movimentoReduzido, setMovimentoReduzido] = useState(false);
 
@@ -72,11 +79,13 @@ export function CampoAnimado({
     return () => mq.removeEventListener("change", ouvir);
   }, []);
 
-  // Repõe o frame base quando o diagrama muda.
+  // Repõe o frame base quando o diagrama muda. Com `autoPlay` e havendo animação
+  // (mais do que um keyframe), arranca automaticamente — assim, ao abrir o
+  // exercício no Modo Treino, a animação começa logo em ciclo, sem clicar em play.
   useEffect(() => {
-    setAPlay(false);
     setPosicoes(keyframes[0]);
-  }, [keyframes]);
+    setAPlay(autoPlay && keyframes.length > 1);
+  }, [keyframes, autoPlay]);
 
   // Loop de playback.
   useEffect(() => {

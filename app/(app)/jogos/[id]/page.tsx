@@ -7,6 +7,9 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { obterJogo, obterSuspensoesPendentes } from "@/lib/actions/jogos";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { listarMetricas } from "@/lib/actions/metricas";
+import { listarQuadrosTaticos } from "@/lib/actions/modeloJogo";
+import { NOME_QUADRO_PLANO_JOGO } from "@/lib/schemas/modeloJogo";
+import { diagramaSchema, type DiagramaCampo } from "@/lib/schemas/exercicio";
 import { prisma } from "@/lib/db";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { JogoDetalhe } from "@/components/jogos/JogoDetalhe";
@@ -38,6 +41,16 @@ function formatarData(data: Date): string {
   });
 }
 
+/**
+ * Hora do jogo em "HH:MM". Devolve null para jogos sem hora definida
+ * (meia-noite, 00:00), típico de registos antigos — nesse caso não se mostra.
+ */
+function formatarHora(data: Date): string | null {
+  const d = new Date(data);
+  if (d.getHours() === 0 && d.getMinutes() === 0) return null;
+  return d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+}
+
 export const metadata: Metadata = { title: "Detalhe do jogo" };
 
 export default async function DetalheJogoPage({
@@ -50,14 +63,30 @@ export default async function DetalheJogoPage({
   if (!res.sucesso) notFound();
 
   const j = res.dados;
-  const [resAtletas, resMetricas, membro] = await Promise.all([
+  const [resAtletas, resMetricas, membro, resQuadros] = await Promise.all([
     listarAtletas(j.escalaoId),
     listarMetricas(true),
     obterMembroAtual(),
+    listarQuadrosTaticos(j.id),
   ]);
   const atletas = resAtletas.sucesso ? resAtletas.dados : [];
   const metricasAtivas = resMetricas.sucesso ? resMetricas.dados : [];
   const podeComunicar = membro?.capacidades.includes("COMUNICACOES_GERIR") ?? false;
+  // §8.10: o quadro tático do plano de jogo é gerido sob MODELO_JOGO_GERIR.
+  const podeGerirQuadro = membro?.capacidades.includes("MODELO_JOGO_GERIR") ?? false;
+
+  // Quadro tático interativo do "Plano de jogo": um único quadro por jogo,
+  // identificado pelo nome canónico. O diagrama (Json) é validado antes de descer
+  // ao cliente (diagramas legados/corrompidos → null, semeia-se pela formação).
+  const quadroPlano =
+    (resQuadros.sucesso
+      ? resQuadros.dados.find((q) => q.nome === NOME_QUADRO_PLANO_JOGO)
+      : undefined) ?? null;
+  let quadroInicial: { id: string; diagrama: DiagramaCampo | null } | null = null;
+  if (quadroPlano) {
+    const parsed = diagramaSchema.safeParse(quadroPlano.diagrama);
+    quadroInicial = { id: quadroPlano.id, diagrama: parsed.success ? parsed.data : null };
+  }
 
   // Métricas a mostrar: ativas + as que já têm valores neste jogo (histórico, secção 22.1)
   const idsComValor = new Set(
@@ -189,6 +218,7 @@ export default async function DetalheJogoPage({
         </div>
         <p className="text-corpo-sec text-cinza-600 capitalize">
           {formatarData(j.data)}
+          {formatarHora(j.data) ? ` · ${formatarHora(j.data)}` : ""}
           {j.competicao ? ` · ${j.competicao}` : ""}
           {j.local ? ` · ${j.local}` : ""}
         </p>
@@ -244,6 +274,8 @@ export default async function DetalheJogoPage({
         formato={j.formato}
         suspensoes={suspensoes}
         escalaoJovem={escalaoJovemDisciplina}
+        quadroInicial={quadroInicial}
+        podeGerirQuadro={podeGerirQuadro}
       />
     </div>
   );

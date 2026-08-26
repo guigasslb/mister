@@ -11,6 +11,7 @@ import {
   marcarPresencasSchema,
   notasSessaoSchema,
   sessaoExercicioOverrideSchema,
+  parteTreinoSessaoSchema,
 } from "@/lib/schemas/treino";
 import { alcanceSchema } from "@/lib/schemas/planoSemanal";
 import { construirSnapshotExercicio } from "@/lib/snapshot-exercicio";
@@ -450,6 +451,7 @@ export async function atualizarNotasSessao(
 export async function adicionarExercicioSessao(
   sessaoId: string,
   exercicioId: string,
+  parteTreino?: unknown,
 ): Promise<Resultado<void>> {
   const clubeId = await obterClubeIdAtual();
   if (!clubeId) return erro("Não autenticado");
@@ -463,6 +465,12 @@ export async function adicionarExercicioSessao(
   const exercicio = await prisma.exercicio.findFirst({ where: { id: exercicioId, clubeId } });
   if (!exercicio) return erro("Exercício não encontrado");
 
+  // §3.5: fase do treino escolhida no formulário; quando não indicada, herda a
+  // `parteTreino` do próprio exercício da biblioteca (pode ser null).
+  const parsedFase = parteTreinoSessaoSchema.safeParse(parteTreino);
+  if (!parsedFase.success) return erroDeValidacao(parsedFase.error);
+  const faseFinal = parsedFase.data ?? exercicio.parteTreino ?? null;
+
   const ultimo = await prisma.sessaoExercicio.findFirst({
     where: { sessaoId },
     orderBy: { ordem: "desc" },
@@ -475,7 +483,14 @@ export async function adicionarExercicioSessao(
   const snapshot = construirSnapshotExercicio(exercicio);
 
   await prisma.sessaoExercicio.create({
-    data: { sessaoId, exercicioId, ordem, duracaoMin: exercicio.duracaoMin, ...(snapshot ?? {}) },
+    data: {
+      sessaoId,
+      exercicioId,
+      ordem,
+      duracaoMin: exercicio.duracaoMin,
+      parteTreino: faseFinal,
+      ...(snapshot ?? {}),
+    },
   });
   revalidatePath(`${PATH}/${sessaoId}`);
   return ok(undefined);

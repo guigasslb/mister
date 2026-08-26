@@ -31,6 +31,7 @@ import {
   type Lembrete,
 } from "@/lib/dashboard-lembretes";
 import { ListaLembretes } from "@/components/lembretes/ListaLembretes";
+import type { Reuniao } from "@prisma/client";
 
 function dataLonga(data: Date): string {
   return new Date(data).toLocaleString("pt-PT", {
@@ -115,7 +116,7 @@ export default async function DashboardPage() {
   const [
     clube,
     proximaSessao,
-    proximoJogo,
+    proximosJogos,
     nAtletas,
     nSessoes,
     nJogos,
@@ -129,10 +130,12 @@ export default async function DashboardPage() {
       include: { escalao: { select: { nome: true } } },
       orderBy: { data: "asc" },
     }),
-    prisma.jogo.findFirst({
+    // Próximos jogos futuros (até 3) ordenados por data asc — para o dashboard.
+    prisma.jogo.findMany({
       where: { epocaId: epoca.id, escalao: { clubeId }, data: { gte: agora } },
       include: { escalao: { select: { nome: true } } },
       orderBy: { data: "asc" },
+      take: 3,
     }),
     // F1: atletas do clube com participação ativa na época.
     prisma.atleta.count({
@@ -178,6 +181,10 @@ export default async function DashboardPage() {
     }),
   ]);
 
+  // Jogo mais próximo (1.º da lista) — mantém o herói/secundário inalterados.
+  // `proximosJogos` (até 3) fica disponível para a UI listar os próximos jogos.
+  const proximoJogo = proximosJogos[0] ?? null;
+
   // Secções do clube (§8.16 v7): quando há >1 secção, os "atletas por escalão"
   // são agrupados por secção/modalidade para futsal e futebol não se confundirem.
   const resSeccoes = await obterSeccoes();
@@ -185,9 +192,11 @@ export default async function DashboardPage() {
   const multiSeccao = seccoes.length > 1;
   const seccaoPorId = new Map(seccoes.map((s) => [s.id, s]));
 
-  // Reuniões para o dashboard (futuras + afixadas) — §reuniões.
+  // Reuniões para o dashboard, separadas em próximas (futuras) e anteriores
+  // (afixadas já passadas) — §reuniões.
   const resReunioes = await obterReunioesParaDashboard();
-  const reunioesDashboard = resReunioes.sucesso ? resReunioes.dados : [];
+  const reunioesProximas = resReunioes.sucesso ? resReunioes.dados.proximas : [];
+  const reunioesAnteriores = resReunioes.sucesso ? resReunioes.dados.anteriores : [];
   const nomePorEscalao = new Map(escaloesContagem.map((e) => [e.id, e.nome]));
 
   // Lembretes in-app: treino/jogo hoje (usa os dados existentes; sem push).
@@ -243,6 +252,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {/* Lembretes / tarefas persistidos — P2.1 / §3.15/§8.19.
+          Movidos para o topo (antes de qualquer outro conteúdo) e com cor de
+          destaque da marca (laranja) para máxima visibilidade. */}
+      <ListaLembretes />
+
       {/* Identidade (compacto — pensado para tablet) */}
       <div>
         <p className="font-display text-[18px] font-bold leading-tight tracking-[-0.01em] text-cinza-900">
@@ -298,6 +312,30 @@ export default async function DashboardPage() {
                     Ver jogo <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
+                {proximosJogos.length > 1 && (
+                  <ul className="mt-3 space-y-1 border-t border-white/20 pt-3">
+                    {proximosJogos.slice(1).map((j) => (
+                      <li key={j.id}>
+                        <Link
+                          href={`/jogos/${j.id}`}
+                          className="group flex items-center gap-2 rounded-lg px-1.5 py-1 text-sm text-white/85 transition-colors hover:bg-white/10"
+                        >
+                          <Trophy className="h-3.5 w-3.5 flex-shrink-0 text-white/60" />
+                          <span className="truncate">
+                            vs {j.adversario}
+                            <span className="text-white/60">
+                              {" · "}
+                              <span className="capitalize">{dataCurta(j.data)}</span>
+                              {" · "}
+                              {j.escalao.nome}
+                            </span>
+                          </span>
+                          <ChevronRight className="ml-auto h-3.5 w-3.5 flex-shrink-0 text-white/50 transition-transform group-hover:translate-x-0.5" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           ) : proximaSessao ? (
@@ -365,12 +403,14 @@ export default async function DashboardPage() {
               href={proximaSessao ? `/treinos/${proximaSessao.id}` : "/treinos/novo"}
               vazio="Sem treinos agendados"
             />
+          ) : proximosJogos.length > 0 ? (
+            <ProximosJogosSecundario jogos={proximosJogos} />
           ) : (
             <EventoSecundario
               tipo="jogo"
-              titulo={proximoJogo ? `vs ${proximoJogo.adversario}` : null}
-              sub={proximoJogo ? dataCurta(proximoJogo.data) : null}
-              href={proximoJogo ? `/jogos/${proximoJogo.id}` : "/jogos/novo"}
+              titulo={null}
+              sub={null}
+              href="/jogos/novo"
               vazio="Sem jogos agendados"
             />
           )}
@@ -433,44 +473,29 @@ export default async function DashboardPage() {
         </>
       )}
 
-      {/* Próximas reuniões (futuras + afixadas) */}
-      {reunioesDashboard.length > 0 && (
+      {/* Próximas reuniões (futuras — afixadas ou não) */}
+      {reunioesProximas.length > 0 && (
         <div className="space-y-3">
           <p className="text-legenda font-semibold uppercase tracking-wide text-cinza-400">
             Próximas reuniões
           </p>
           <div className="animar-cascata grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {reunioesDashboard.map((r) => (
-              <Link
-                key={r.id}
-                href="/reunioes"
-                className="card-base card-hover group flex items-center gap-3 p-4"
-              >
-                <span className="chip-clube flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl">
-                  <Users2 className="h-5 w-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-1.5 text-corpo font-semibold text-cinza-900">
-                    {r.afixada && (
-                      <Pin className="h-3.5 w-3.5 flex-shrink-0 fill-primary text-primary" />
-                    )}
-                    <span className="truncate">{r.titulo}</span>
-                  </p>
-                  <p className="text-legenda text-cinza-500">
-                    {new Date(r.data).toLocaleString("pt-PT", {
-                      day: "2-digit",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    {" · "}
-                    {r.ambito === "CLUBE"
-                      ? "Clube"
-                      : nomePorEscalao.get(r.escalaoId ?? "") ?? "Escalão"}
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 flex-shrink-0 text-cinza-300 transition-transform group-hover:translate-x-0.5" />
-              </Link>
+            {reunioesProximas.map((r) => (
+              <CartaoReuniao key={r.id} reuniao={r} nomePorEscalao={nomePorEscalao} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Reuniões anteriores (afixadas, já passadas) */}
+      {reunioesAnteriores.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-legenda font-semibold uppercase tracking-wide text-cinza-400">
+            Reuniões anteriores
+          </p>
+          <div className="animar-cascata grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {reunioesAnteriores.map((r) => (
+              <CartaoReuniao key={r.id} reuniao={r} nomePorEscalao={nomePorEscalao} />
             ))}
           </div>
         </div>
@@ -488,9 +513,6 @@ export default async function DashboardPage() {
           <AcaoRapida href="/plantel" icon={Users} titulo="Ver plantel" desc="Consultar atletas" />
         </div>
       </div>
-
-      {/* Lembretes / tarefas persistidos — P2.1 / §3.15/§8.19 */}
-      <ListaLembretes />
     </div>
   );
 }
@@ -528,6 +550,111 @@ function EventoSecundario({
         <p className="text-corpo-sec text-cinza-500">{vazio}</p>
       )}
     </Link>
+  );
+}
+
+/** Cartão de reunião no dashboard (partilhado por "Próximas" e "Anteriores"). */
+function CartaoReuniao({
+  reuniao: r,
+  nomePorEscalao,
+}: {
+  reuniao: Reuniao;
+  nomePorEscalao: Map<string, string>;
+}) {
+  return (
+    <Link
+      href="/reunioes"
+      className="card-base card-hover group flex items-center gap-3 p-4"
+    >
+      <span className="chip-clube flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl">
+        <Users2 className="h-5 w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5 text-corpo font-semibold text-cinza-900">
+          {r.afixada && (
+            <Pin className="h-3.5 w-3.5 flex-shrink-0 fill-primary text-primary" />
+          )}
+          <span className="truncate">{r.titulo}</span>
+        </p>
+        <p className="text-legenda text-cinza-500">
+          {new Date(r.data).toLocaleString("pt-PT", {
+            day: "2-digit",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+          {" · "}
+          {r.ambito === "CLUBE"
+            ? "Clube"
+            : nomePorEscalao.get(r.escalaoId ?? "") ?? "Escalão"}
+        </p>
+      </div>
+      <ChevronRight className="h-4 w-4 flex-shrink-0 text-cinza-300 transition-transform group-hover:translate-x-0.5" />
+    </Link>
+  );
+}
+
+/** Lista dos próximos jogos na coluna secundária — 1.º em destaque, seguintes menores. */
+function ProximosJogosSecundario({
+  jogos,
+}: {
+  jogos: {
+    id: string;
+    data: Date;
+    adversario: string;
+    escalao: { nome: string };
+  }[];
+}) {
+  const [primeiro, ...restantes] = jogos;
+  return (
+    <div className="card-base p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="chip-clube flex h-8 w-8 items-center justify-center rounded-lg">
+          <Trophy className="h-4 w-4" />
+        </span>
+        <p className="text-legenda font-semibold uppercase tracking-wide text-cinza-400">
+          {jogos.length === 1 ? "Próximo jogo" : "Próximos jogos"}
+        </p>
+      </div>
+
+      <Link
+        href={`/jogos/${primeiro.id}`}
+        className="group -mx-1 block rounded-lg px-1 py-1 transition-colors hover:bg-cinza-50"
+      >
+        <p className="flex items-center gap-1 text-corpo font-semibold text-cinza-900">
+          <span className="truncate">vs {primeiro.adversario}</span>
+          <ChevronRight className="ml-auto h-4 w-4 flex-shrink-0 text-cinza-300 transition-transform group-hover:translate-x-0.5" />
+        </p>
+        <p className="text-legenda text-cinza-500">
+          <span className="capitalize">{dataCurta(primeiro.data)}</span> ·{" "}
+          {primeiro.escalao.nome}
+        </p>
+      </Link>
+
+      {restantes.length > 0 && (
+        <ul className="mt-2 space-y-1 border-t border-cinza-100 pt-2">
+          {restantes.map((j) => (
+            <li key={j.id}>
+              <Link
+                href={`/jogos/${j.id}`}
+                className="group -mx-1 flex items-center gap-1.5 rounded-lg px-1 py-1 text-sm text-cinza-700 transition-colors hover:bg-cinza-50"
+              >
+                <span className="truncate">
+                  vs {j.adversario}
+                  <span className="text-cinza-400">
+                    {" · "}
+                    <span className="capitalize">{dataCurta(j.data)}</span>
+                    {" · "}
+                    {j.escalao.nome}
+                  </span>
+                </span>
+                <ChevronRight className="ml-auto h-3.5 w-3.5 flex-shrink-0 text-cinza-300 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,8 +12,13 @@ import {
   SlidersHorizontal,
   LogOut,
 } from "lucide-react";
-import { LABEL_CATEGORIA, diagramaSchema } from "@/lib/schemas/exercicio";
+import {
+  LABEL_CATEGORIA,
+  diagramaSchema,
+  type ParteTreinoValor,
+} from "@/lib/schemas/exercicio";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
+import { CampoAnimado } from "@/components/campo/CampoAnimado";
 import { AdaptarExercicioDialog } from "@/components/treinos/AdaptarExercicioDialog";
 import { guardarTreinoSuspenso, limparTreinoSuspenso } from "@/lib/treino-suspenso";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
@@ -30,6 +35,8 @@ export type ExercicioModo = {
   series: number | null;
   descricaoOverride: string | null;
   notas: string | null;
+  // §3.5: fase do treino deste exercício nesta sessão (null = sem fase).
+  parteTreino: ParteTreinoValor | null;
 };
 
 function formatarTempo(segundos: number): string {
@@ -40,13 +47,31 @@ function formatarTempo(segundos: number): string {
 
 /** Diagrama grande, ou placeholder cinzento com bola quando não existe (Melhoria 3.5). */
 function DiagramaGrande({ diagrama, nome }: { diagrama: unknown; nome: string }) {
-  const diag = diagramaSchema.safeParse(diagrama);
-  const temDiagrama = diag.success && diag.data.elementos.length > 0;
+  // Memoiza o parse: `safeParse` cria um objeto novo a cada render e o
+  // `CampoAnimado` depende da identidade do diagrama (useMemo dos keyframes) —
+  // sem isto, cada render reinicia a animação (ciclo de renders no autoPlay).
+  const diag = useMemo(() => diagramaSchema.safeParse(diagrama), [diagrama]);
+  const dados = diag.success ? diag.data : null;
+  const temDiagrama = dados !== null && dados.elementos.length > 0;
+  // Tem animação quando existe pelo menos um passo (keyframe além da base).
+  const temAnimacao = dados !== null && (dados.passos?.length ?? 0) > 0;
 
-  if (temDiagrama && diag.success) {
+  if (dados && temDiagrama && temAnimacao) {
+    // Animação arranca sozinha em ciclo assim que o painel do exercício abre.
+    return (
+      <div className="mx-auto w-full max-w-md">
+        <CampoAnimado
+          diagrama={dados}
+          autoPlay
+          className="w-full h-auto rounded-lg border border-cinza-200"
+        />
+      </div>
+    );
+  }
+  if (dados && temDiagrama) {
     return (
       <div className="mx-auto w-full max-w-md overflow-hidden rounded-lg border border-cinza-200">
-        <MiniaturaCampo diagrama={diag.data} largura={640} className="w-full" />
+        <MiniaturaCampo diagrama={dados} largura={640} className="w-full" />
       </div>
     );
   }
@@ -330,6 +355,7 @@ export function ModoTreino({
             series: atual.series,
             descricaoOverride: atual.descricaoOverride,
             notas: atual.notas,
+            parteTreino: atual.parteTreino,
           }}
           aberto={adaptarAberto}
           onFechar={() => setAdaptarAberto(false)}

@@ -14,6 +14,14 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -26,7 +34,13 @@ import {
   removerExercicioSessao,
   reordenarExercicios,
 } from "@/lib/actions/treinos";
-import { LABEL_CATEGORIA, diagramaSchema } from "@/lib/schemas/exercicio";
+import {
+  LABEL_CATEGORIA,
+  diagramaSchema,
+  PARTES_TREINO,
+  LABEL_PARTE_TREINO,
+  type ParteTreinoValor,
+} from "@/lib/schemas/exercicio";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
 import { ModalDiagramaExercicio } from "@/components/treinos/ModalDiagramaExercicio";
 import { AdaptarExercicioDialog } from "@/components/treinos/AdaptarExercicioDialog";
@@ -40,6 +54,8 @@ type ExercicioSessao = {
   series: number | null;
   descricaoOverride: string | null;
   notas: string | null;
+  // §3.5: fase do treino deste exercício nesta sessão (null = sem fase).
+  parteTreino: ParteTreinoValor | null;
   exercicio: {
     id: string;
     nome: string;
@@ -56,27 +72,48 @@ type ExercicioBiblioteca = {
   nome: string;
   categoriaPrincipal: CategoriaExercicioPrincipal | null;
   duracaoMin: number | null;
+  // Melhoria 1: diagrama para pré-visualização no seletor.
+  diagrama: unknown;
+  // §3.5: fase sugerida por defeito ao adicionar (herdada do exercício).
+  parteTreino: ParteTreinoValor | null;
+};
+
+// §3.5: ordem canónica das fases + bucket para exercícios sem fase (rows legadas).
+const SEM_FASE = "SEM_FASE" as const;
+type FaseKey = ParteTreinoValor | typeof SEM_FASE;
+const ORDEM_FASES: FaseKey[] = [...PARTES_TREINO, SEM_FASE];
+const LABEL_FASE: Record<FaseKey, string> = {
+  ...LABEL_PARTE_TREINO,
+  [SEM_FASE]: "Sem fase",
 };
 
 /** Miniatura do diagrama, ou placeholder cinzento se o exercício não tiver campo. */
-function DiagramaCartao({ diagrama, nome }: { diagrama: unknown; nome: string }) {
+function DiagramaCartao({
+  diagrama,
+  nome,
+  largura = 112,
+  className = "w-24 sm:w-28",
+}: {
+  diagrama: unknown;
+  nome: string;
+  largura?: number;
+  className?: string;
+}) {
   const diag = diagramaSchema.safeParse(diagrama);
   const temDiagrama = diag.success && diag.data.elementos.length > 0;
 
   if (temDiagrama && diag.success) {
     return (
-      <div className="w-24 flex-shrink-0 overflow-hidden rounded border border-cinza-200 sm:w-28">
-        <MiniaturaCampo
-          diagrama={diag.data}
-          largura={112}
-          className="w-full"
-        />
+      <div
+        className={`flex-shrink-0 overflow-hidden rounded border border-cinza-200 ${className}`}
+      >
+        <MiniaturaCampo diagrama={diag.data} largura={largura} className="w-full" />
       </div>
     );
   }
   return (
     <div
-      className="flex h-16 w-24 flex-shrink-0 items-center justify-center rounded border border-dashed border-cinza-300 bg-cinza-50 sm:w-28"
+      className={`flex h-16 flex-shrink-0 items-center justify-center rounded border border-dashed border-cinza-300 bg-cinza-50 ${className}`}
       aria-label={`${nome} sem diagrama`}
     >
       <svg viewBox="0 0 24 24" className="h-6 w-6 text-cinza-300" fill="currentColor">
@@ -105,21 +142,38 @@ export function GestorExercicios({
   const [dialogAberto, setDialogAberto] = useState(false);
   const [modoEdicao, setModoEdicao] = useState(false);
   const [expandido, setExpandido] = useState<string | null>(null);
+  // §3.5: fase escolhida no formulário de adição (aplica-se ao exercício adicionado).
+  const [faseAdicionar, setFaseAdicionar] = useState<ParteTreinoValor>("PRINCIPAL");
   const [exercicioModal, setExercicioModal] = useState<
     ExercicioSessao["exercicio"] | null
   >(null);
-  const [exercicioAdaptar, setExercicioAdaptar] = useState<
-    (typeof exercicios)[0] | null
-  >(null);
+  const [exercicioAdaptar, setExercicioAdaptar] = useState<ExercicioSessao | null>(null);
 
   const total = exercicios.reduce((acc, e) => acc + (e.duracaoMin ?? 0), 0);
   const jaAdicionados = new Set(exercicios.map((e) => e.exercicio.id));
 
+  // §3.5: agrupamento por fase, preservando a ordem (exercícios já vêm ordenados
+  // por `ordem`). Só se renderizam grupos com exercícios.
+  const grupos: Record<FaseKey, ExercicioSessao[]> = {
+    AQUECIMENTO: [],
+    PRINCIPAL: [],
+    JOGO_REDUZIDO: [],
+    RETORNO_CALMA: [],
+    [SEM_FASE]: [],
+  };
+  for (const e of exercicios) grupos[e.parteTreino ?? SEM_FASE].push(e);
+
+  // Numeração global na ordem de visualização (fase a fase).
+  const numeroDe: Record<string, number> = {};
+  let contador = 0;
+  for (const fase of ORDEM_FASES)
+    for (const e of grupos[fase]) numeroDe[e.id] = ++contador;
+
   function adicionar(exercicioId: string) {
     startTransition(async () => {
-      const res = await adicionarExercicioSessao(sessaoId, exercicioId);
+      const res = await adicionarExercicioSessao(sessaoId, exercicioId, faseAdicionar);
       if (res.sucesso) {
-        toast.success("Exercício adicionado");
+        toast.success(`Exercício adicionado a "${LABEL_PARTE_TREINO[faseAdicionar]}"`);
         setDialogAberto(false);
       } else {
         toast.error(res.erro);
@@ -134,12 +188,21 @@ export function GestorExercicios({
     });
   }
 
-  function mover(index: number, direcao: -1 | 1) {
-    const novo = index + direcao;
-    if (novo < 0 || novo >= exercicios.length) return;
-    const reordenado = [...exercicios];
-    [reordenado[index], reordenado[novo]] = [reordenado[novo], reordenado[index]];
-    const ordens = reordenado.map((e, i) => ({ id: e.id, ordem: i }));
+  // §3.5: reordenar DENTRO de uma fase. Reatribui `ordem` global (fase a fase)
+  // para manter a sequência coerente com a visualização e evitar colisões no
+  // unique [sessaoId, ordem].
+  function mover(fase: FaseKey, indexNoGrupo: number, direcao: -1 | 1) {
+    const grupo = grupos[fase];
+    const alvo = indexNoGrupo + direcao;
+    if (alvo < 0 || alvo >= grupo.length) return;
+
+    const novoGrupo = [...grupo];
+    [novoGrupo[indexNoGrupo], novoGrupo[alvo]] = [novoGrupo[alvo], novoGrupo[indexNoGrupo]];
+
+    const flat: ExercicioSessao[] = [];
+    for (const f of ORDEM_FASES) flat.push(...(f === fase ? novoGrupo : grupos[f]));
+    const ordens = flat.map((e, i) => ({ id: e.id, ordem: i }));
+
     startTransition(async () => {
       const res = await reordenarExercicios(sessaoId, ordens);
       if (!res.sucesso) toast.error(res.erro);
@@ -182,6 +245,27 @@ export function GestorExercicios({
               <DialogHeader>
                 <DialogTitle>Adicionar exercício da biblioteca</DialogTitle>
               </DialogHeader>
+
+              {/* §3.5: escolher a fase do treino a que o exercício será adicionado. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="fase-adicionar">Fase do treino</Label>
+                <Select
+                  value={faseAdicionar}
+                  onValueChange={(v) => setFaseAdicionar(v as ParteTreinoValor)}
+                >
+                  <SelectTrigger id="fase-adicionar">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PARTES_TREINO.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {LABEL_PARTE_TREINO[p]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {biblioteca.length === 0 ? (
                 <p className="text-corpo-sec text-cinza-600">
                   A biblioteca está vazia. Cria exercícios primeiro.
@@ -191,10 +275,19 @@ export function GestorExercicios({
                   {biblioteca.map((ex) => (
                     <li
                       key={ex.id}
-                      className="flex items-center justify-between gap-3 rounded-md border border-cinza-200 p-3"
+                      className="flex items-center gap-3 rounded-md border border-cinza-200 p-3"
                     >
-                      <div>
-                        <p className="text-corpo font-medium text-cinza-900">{ex.nome}</p>
+                      {/* Melhoria 1: pré-visualização do diagrama no seletor. */}
+                      <DiagramaCartao
+                        diagrama={ex.diagrama}
+                        nome={ex.nome}
+                        largura={80}
+                        className="w-20"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-corpo font-medium text-cinza-900">
+                          {ex.nome}
+                        </p>
                         <p className="text-legenda text-cinza-500">
                           {ex.categoriaPrincipal
                             ? LABEL_CATEGORIA[ex.categoriaPrincipal]
@@ -225,124 +318,142 @@ export function GestorExercicios({
         </p>
       ) : (
         <>
-          <ol className="space-y-2">
-            {exercicios.map((e, i) => {
-              const aberto = expandido === e.id;
-              const temDetalhe = Boolean(e.exercicio.descricao);
-              return (
-                <li
-                  key={e.id}
-                  className="overflow-hidden rounded-md border border-cinza-200 bg-white shadow-card"
-                >
-                  <div className="flex items-stretch gap-2 p-2.5">
-                    {modoEdicao && (
-                      <div className="flex flex-col justify-center">
-                        <button
-                          type="button"
-                          onClick={() => mover(i, -1)}
-                          disabled={i === 0 || pending}
-                          className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                          aria-label={`Subir ${e.exercicio.nome}`}
-                        >
-                          <ChevronUp className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => mover(i, 1)}
-                          disabled={i === exercicios.length - 1 || pending}
-                          className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                          aria-label={`Descer ${e.exercicio.nome}`}
-                        >
-                          <ChevronDown className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
+          {ORDEM_FASES.filter((fase) => grupos[fase].length > 0).map((fase) => (
+            <div key={fase} className="space-y-2">
+              {/* §3.5: separador/header da fase. */}
+              <div className="flex items-center gap-2 pt-1">
+                <h3 className="text-corpo font-semibold uppercase tracking-wide text-cinza-700">
+                  {LABEL_FASE[fase]}
+                </h3>
+                <span className="rounded-full bg-cinza-100 px-2 py-0.5 text-legenda text-cinza-500">
+                  {grupos[fase].length}
+                </span>
+                <span className="h-px flex-1 bg-cinza-100" aria-hidden />
+              </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setExercicioModal(e.exercicio)}
-                      title="Ver diagrama em grande"
-                      aria-label="Ver diagrama em grande"
-                      className="flex-shrink-0 cursor-pointer rounded transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              <ol className="space-y-2">
+                {grupos[fase].map((e, i) => {
+                  const aberto = expandido === e.id;
+                  const temDetalhe = Boolean(e.exercicio.descricao);
+                  return (
+                    <li
+                      key={e.id}
+                      className="overflow-hidden rounded-md border border-cinza-200 bg-white shadow-card"
                     >
-                      <DiagramaCartao diagrama={e.exercicio.diagrama} nome={e.exercicio.nome} />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        temDetalhe ? setExpandido(aberto ? null : e.id) : undefined
-                      }
-                      aria-expanded={temDetalhe ? aberto : undefined}
-                      className="flex min-w-0 flex-1 items-start gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    >
-                      <span className="mt-0.5 text-corpo font-semibold text-cinza-400">
-                        {i + 1}.
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-corpo font-medium text-cinza-900">
-                          {e.exercicio.nome}
-                        </span>
-                        <span className="block text-legenda text-cinza-500">
-                          {e.exercicio.categoriaPrincipal
-                            ? LABEL_CATEGORIA[e.exercicio.categoriaPrincipal]
-                            : "Sem categoria"}
-                          {e.duracaoMin ? ` · ${e.duracaoMin} min` : ""}
-                        </span>
-                        {e.exercicio.objetivo && (
-                          <span className="mt-0.5 block line-clamp-2 text-legenda text-cinza-600">
-                            {e.exercicio.objetivo}
-                          </span>
+                      <div className="flex items-stretch gap-2 p-2.5">
+                        {modoEdicao && (
+                          <div className="flex flex-col justify-center">
+                            <button
+                              type="button"
+                              onClick={() => mover(fase, i, -1)}
+                              disabled={i === 0 || pending}
+                              className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                              aria-label={`Subir ${e.exercicio.nome}`}
+                            >
+                              <ChevronUp className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => mover(fase, i, 1)}
+                              disabled={i === grupos[fase].length - 1 || pending}
+                              className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                              aria-label={`Descer ${e.exercicio.nome}`}
+                            >
+                              <ChevronDown className="h-4 w-4" />
+                            </button>
+                          </div>
                         )}
-                      </span>
-                      {temDetalhe && (
-                        <ChevronRight
-                          className={`mt-1 h-4 w-4 flex-shrink-0 text-cinza-400 transition-transform ${
-                            aberto ? "rotate-90" : ""
-                          }`}
-                        />
+
+                        <button
+                          type="button"
+                          onClick={() => setExercicioModal(e.exercicio)}
+                          title="Ver diagrama em grande"
+                          aria-label="Ver diagrama em grande"
+                          className="flex-shrink-0 cursor-pointer rounded transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
+                          <DiagramaCartao
+                            diagrama={e.exercicio.diagrama}
+                            nome={e.exercicio.nome}
+                          />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            temDetalhe ? setExpandido(aberto ? null : e.id) : undefined
+                          }
+                          aria-expanded={temDetalhe ? aberto : undefined}
+                          className="flex min-w-0 flex-1 items-start gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
+                          <span className="mt-0.5 text-corpo font-semibold text-cinza-400">
+                            {numeroDe[e.id]}.
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-corpo font-medium text-cinza-900">
+                              {e.exercicio.nome}
+                            </span>
+                            <span className="block text-legenda text-cinza-500">
+                              {e.exercicio.categoriaPrincipal
+                                ? LABEL_CATEGORIA[e.exercicio.categoriaPrincipal]
+                                : "Sem categoria"}
+                              {e.duracaoMin ? ` · ${e.duracaoMin} min` : ""}
+                            </span>
+                            {e.exercicio.objetivo && (
+                              <span className="mt-0.5 block line-clamp-2 text-legenda text-cinza-600">
+                                {e.exercicio.objetivo}
+                              </span>
+                            )}
+                          </span>
+                          {temDetalhe && (
+                            <ChevronRight
+                              className={`mt-1 h-4 w-4 flex-shrink-0 text-cinza-400 transition-transform ${
+                                aberto ? "rotate-90" : ""
+                              }`}
+                            />
+                          )}
+                        </button>
+
+                        {!modoEdicao && (
+                          <button
+                            type="button"
+                            onClick={() => setExercicioAdaptar(e)}
+                            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-cinza-400 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            aria-label="Adaptar para esta sessão"
+                            title="Adaptar para esta sessão"
+                          >
+                            <SlidersHorizontal className="h-4 w-4" />
+                          </button>
+                        )}
+
+                        {modoEdicao && (
+                          <button
+                            type="button"
+                            onClick={() => remover(e.id)}
+                            disabled={pending}
+                            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-vermelho-600 hover:bg-vermelho-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                            aria-label={`Remover ${e.exercicio.nome}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {aberto && temDetalhe && (
+                        <div className="border-t border-cinza-100 bg-cinza-50 px-3 py-3">
+                          <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+                            Descrição / montagem
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
+                            {e.exercicio.descricao}
+                          </p>
+                        </div>
                       )}
-                    </button>
-
-                    {!modoEdicao && (
-                      <button
-                        type="button"
-                        onClick={() => setExercicioAdaptar(e)}
-                        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-cinza-400 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        aria-label="Adaptar para esta sessão"
-                        title="Adaptar para esta sessão"
-                      >
-                        <SlidersHorizontal className="h-4 w-4" />
-                      </button>
-                    )}
-
-                    {modoEdicao && (
-                      <button
-                        type="button"
-                        onClick={() => remover(e.id)}
-                        disabled={pending}
-                        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-vermelho-600 hover:bg-vermelho-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                        aria-label={`Remover ${e.exercicio.nome}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  {aberto && temDetalhe && (
-                    <div className="border-t border-cinza-100 bg-cinza-50 px-3 py-3">
-                      <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
-                        Descrição / montagem
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
-                        {e.exercicio.descricao}
-                      </p>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          ))}
           {total > 0 && (
             <p className="flex items-center gap-1 text-corpo-sec text-cinza-600">
               <Clock className="h-4 w-4" />
@@ -374,6 +485,7 @@ export function GestorExercicios({
             series: exercicioAdaptar.series ?? null,
             descricaoOverride: exercicioAdaptar.descricaoOverride ?? null,
             notas: exercicioAdaptar.notas ?? null,
+            parteTreino: exercicioAdaptar.parteTreino ?? null,
           }}
           aberto={true}
           onFechar={() => setExercicioAdaptar(null)}

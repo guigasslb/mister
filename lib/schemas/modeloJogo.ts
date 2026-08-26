@@ -88,6 +88,13 @@ export const LABEL_TIPO_QUADRO: Record<TipoQuadroTatico, string> = {
   BOLA_PARADA: "Bola parada",
 };
 
+/**
+ * Nome canónico do quadro tático interativo do separador "Plano de jogo" (§8.10).
+ * O detalhe do jogo identifica (e faz upsert d)este quadro por nome, para manter
+ * um único quadro-plano por jogo, distinto de outros quadros criados à parte.
+ */
+export const NOME_QUADRO_PLANO_JOGO = "Plano de jogo";
+
 export const TIPOS_QUADRO = Object.keys(LABEL_TIPO_QUADRO) as TipoQuadroTatico[];
 
 export const quadroTaticoSchema = z.object({

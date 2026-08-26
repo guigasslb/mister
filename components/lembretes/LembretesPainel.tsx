@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Check, Trash2, CalendarClock } from "lucide-react";
+import { Plus, Check, Trash2, CalendarClock, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -79,12 +79,42 @@ export function LembretesPainel({
     });
   }
 
+  // Destaque visual (cor da marca — laranja #F0531E) só quando há lembretes
+  // pendentes; sem pendentes, o painel fica discreto para não pesar no topo.
+  const destaque = lembretes.length > 0;
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-legenda font-semibold uppercase tracking-wide text-cinza-400">
-          Lembretes
-        </p>
+    <div
+      className={
+        destaque
+          ? "animar-entrada space-y-3 rounded-xl border border-laranja-500/45 bg-laranja-50 p-4 shadow-card sm:p-5"
+          : "space-y-3"
+      }
+      role={destaque ? "region" : undefined}
+      aria-label={destaque ? "Lembretes pendentes" : undefined}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {destaque && (
+            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-laranja-500/15 text-laranja-600">
+              <Bell className="h-4 w-4" />
+            </span>
+          )}
+          <p
+            className={
+              destaque
+                ? "text-corpo-sec font-bold uppercase tracking-wide text-laranja-600"
+                : "text-legenda font-semibold uppercase tracking-wide text-cinza-400"
+            }
+          >
+            Lembretes
+          </p>
+          {destaque && (
+            <span className="rounded-full bg-laranja-500/15 px-2 py-0.5 text-legenda font-semibold tabular-nums text-laranja-600">
+              {lembretes.length}
+            </span>
+          )}
+        </div>
         {podeGerir && (
           <Dialog open={criar} onOpenChange={setCriar}>
             <DialogTrigger asChild>

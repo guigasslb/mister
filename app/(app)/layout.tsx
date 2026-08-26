@@ -156,6 +156,8 @@ export default async function AppLayout({
         <div className="flex min-h-screen flex-col" style={estiloClube}>
           <BarraTopo
             nomeUtilizador={session.user.name ?? "Utilizador"}
+            nomeClube={clube.nome}
+            logoClube={clube.logoUrl}
             epocas={epocas}
             epocaAtivaId={epocaAtiva?.id ?? null}
             seccoes={seccoes}

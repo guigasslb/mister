@@ -975,6 +975,11 @@ model SessaoExercicio {
   notas             String?   @db.Text
   series            Int?
   descricaoOverride String?   @db.Text
+  // Fase do treino a que este exercício pertence NESTA sessão (§3.5). Reutiliza o
+  // enum ParteTreino já usado em Exercicio/ModeloSessaoExercicio: AQUECIMENTO |
+  // PRINCIPAL | JOGO_REDUZIDO | RETORNO_CALMA. Null = sem fase atribuída (rows
+  // legadas). Override por sessão — não altera a biblioteca.
+  parteTreino       ParteTreino?
 
   // Snapshot só-de-leitura (mecanismo em §4.2.1). Preenchido AUTOMATICAMENTE quando se
   // adiciona à sessão do clube um exercício com proprietario = TREINADOR: congela os dados

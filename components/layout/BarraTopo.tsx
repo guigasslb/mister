@@ -15,6 +15,7 @@ import { SeletorEpoca } from "@/components/layout/SeletorEpoca";
 import { SeletorSeccao, type SeccaoOpcao } from "@/components/layout/SeletorSeccao";
 import { AlternadorTema } from "@/components/layout/AlternadorTema";
 import { Logo } from "@/components/layout/Logo";
+import { LogoClube } from "@/components/layout/LogoClube";
 import type { Epoca } from "@prisma/client";
 
 function iniciais(nome: string): string {
@@ -25,6 +26,10 @@ function iniciais(nome: string): string {
 
 interface Props {
   nomeUtilizador: string;
+  /** Nome do clube — mostrado junto ao logótipo na barra de topo (§12.2). */
+  nomeClube: string;
+  /** URL do logótipo do clube (branding, §8.4); null → fallback às iniciais. */
+  logoClube?: string | null;
   epocas: Epoca[];
   epocaAtivaId: string | null;
   /** Secções do clube (§8.1.1) — o seletor só aparece com 2+ secções. */
@@ -37,6 +42,8 @@ interface Props {
 
 export function BarraTopo({
   nomeUtilizador,
+  nomeClube,
+  logoClube = null,
   epocas,
   epocaAtivaId,
   seccoes = [],
@@ -47,12 +54,27 @@ export function BarraTopo({
 
   return (
     <header className="topbar-glass sticky top-0 z-30 flex h-16 items-center justify-between border-b border-cinza-200/60 px-4 gap-3 print:hidden md:px-6">
-      {/* Marca Mister */}
-      <Link href="/dashboard" className="flex items-center shrink-0 transition-transform hover:scale-[1.02]">
-        {/* "auto": ícone invertido (laranja) + texto adaptável ao tema (topbar-glass
-            é claro em light mode e escuro em dark mode). */}
-        <Logo size={20} variant="auto" />
-      </Link>
+      {/* Marca Mister (logótipo do produto — §12.2) + identidade do clube */}
+      <div className="flex min-w-0 items-center gap-3">
+        <Link href="/dashboard" className="flex items-center shrink-0 transition-transform hover:scale-[1.02]">
+          {/* "auto": ícone invertido (laranja) + texto adaptável ao tema (topbar-glass
+              é claro em light mode e escuro em dark mode). */}
+          <Logo size={20} variant="auto" />
+        </Link>
+
+        {/* Logótipo do clube (§12.2) + nome — dá vida à barra e reforça a
+            identidade do clube ativo. Fallback às iniciais quando não há logo. */}
+        <span
+          aria-hidden
+          className="hidden h-6 w-px shrink-0 bg-cinza-200/70 sm:block"
+        />
+        <div className="flex min-w-0 items-center gap-2">
+          <LogoClube nome={nomeClube} logoUrl={logoClube} size={32} />
+          <span className="hidden min-w-0 truncate text-corpo-sec font-semibold text-cinza-900 sm:block">
+            {nomeClube}
+          </span>
+        </div>
+      </div>
 
       {/* Seletor de época + ações + menu do utilizador */}
       <div className="flex items-center gap-2 ml-auto sm:gap-3">

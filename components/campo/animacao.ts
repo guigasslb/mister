@@ -136,6 +136,8 @@ export function pontosSemRepetidos(pontos: Pos[], eps = 0.5): Pos[] {
 export function rotuloElemento(el: ElementoCampo): string {
   switch (el.tipo) {
     case "jogador":
+      if (el.equipa === "adversario")
+        return `Adversário ${el.numero ?? ""}`.replace(/\s+/g, " ").trim();
       return `Jogador ${el.numero ?? ""} (${el.cor})`.replace(/\s+/g, " ").trim();
     case "bola":
       return "Bola";

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   MousePointer2,
   User,
+  Users,
   Circle,
   Triangle,
   Goal,
@@ -63,6 +64,7 @@ import type {
 type Ferramenta =
   | "selecionar"
   | "jogador"
+  | "adversario"
   | "bola"
   | "cone"
   | "baliza"
@@ -147,6 +149,14 @@ const FERRAMENTAS: {
   { id: "apagar", label: "Apagar", Icon: Eraser },
 ];
 
+// Ferramenta opcional (só quando `permitirAdversario`): coloca tokens genéricos
+// da equipa adversária (§11.3). Inserida logo a seguir a "Jogador".
+const FERRAMENTA_ADVERSARIO: {
+  id: Ferramenta;
+  label: string;
+  Icon: ComponentType<{ className?: string }>;
+} = { id: "adversario", label: "Adversário", Icon: Users };
+
 const PASSO_TECLADO = 5;
 const PASSO_TECLADO_FINO = 1;
 
@@ -162,6 +172,7 @@ export function EditorCampo({
   valor,
   onChange,
   formato,
+  permitirAdversario = false,
 }: {
   valor: DiagramaCampo;
   onChange: (d: DiagramaCampo) => void;
@@ -169,6 +180,10 @@ export function EditorCampo({
   // FUTSAL_5). Fornecido pelo contexto (exercício/modelo de jogo) ao criar novos
   // diagramas de futebol; preservado em todas as gravações.
   formato?: FormatoJogo;
+  // §8.10/§11.3: quando `true`, expõe a ferramenta "Adversário" (tokens genéricos
+  // da equipa contrária). Opt-in — usado no quadro tático do jogo; os restantes
+  // contextos (exercícios/modelo de jogo) mantêm a barra de ferramentas anterior.
+  permitirAdversario?: boolean;
 }) {
   // Formato efectivo do diagrama: o já gravado tem prioridade; senão o do contexto.
   const campoActual = valor.campo ?? formato;
@@ -376,6 +391,24 @@ export function EditorCampo({
             y,
             cor: corJogador,
             numero: proximoNumero(corJogador),
+          },
+        ]);
+        break;
+      }
+      case "adversario": {
+        // §11.3: token genérico do adversário — sem número (rótulo "A" no render),
+        // marcado com `equipa: "adversario"`. `cor` mantém-se num valor válido do
+        // schema (o render ignora-a para adversários).
+        registarHistorico();
+        aplicarElementos([
+          ...elementos,
+          {
+            id: novoId(),
+            tipo: "jogador",
+            x,
+            y,
+            cor: "vermelho",
+            equipa: "adversario",
           },
         ]);
         break;
@@ -676,6 +709,16 @@ export function EditorCampo({
   const aEditarPasso = keyframeActivo >= 0;
   const ferramentasVisiveis = !aEditarPasso;
 
+  // Barra de ferramentas: base + "Adversário" (opt-in) logo após "Jogador".
+  const ferramentas = permitirAdversario
+    ? [
+        FERRAMENTAS[0],
+        FERRAMENTAS[1],
+        FERRAMENTA_ADVERSARIO,
+        ...FERRAMENTAS.slice(2),
+      ]
+    : FERRAMENTAS;
+
   const elementoSelecionado = selecionadoId
     ? elementosRender.find((el) => el.id === selecionadoId)
     : null;
@@ -691,7 +734,7 @@ export function EditorCampo({
       {/* Barra de ferramentas */}
       <div className="flex flex-shrink-0 flex-wrap gap-1.5 lg:w-40 lg:flex-col">
         {ferramentasVisiveis ? (
-          FERRAMENTAS.map(({ id, label, Icon }) => (
+          ferramentas.map(({ id, label, Icon }) => (
             <button
               key={id}
               type="button"
@@ -764,7 +807,11 @@ export function EditorCampo({
       </div>
 
       {/* Campo + controlos contextuais */}
-      <div className="flex-1 space-y-3">
+      {/* min-w-0: sem isto, o flex item assume min-width:auto e cresce para
+          acomodar a largura intrínseca da timeline de passos (chips flex-shrink-0),
+          impedindo o overflow-x-auto de scrollar e ampliando o SVG w-full a cada
+          passo adicionado (efeito de "auto-zoom" progressivo). */}
+      <div className="min-w-0 flex-1 space-y-3">
         {/* Região de anúncios para leitores de ecrã */}
         <div aria-live="polite" className="sr-only">
           {anuncio}
@@ -867,6 +914,19 @@ export function EditorCampo({
         {/* Controlos contextuais das ferramentas */}
         {ferramentasVisiveis && (
           <div className="flex flex-wrap items-center gap-3 rounded-md bg-cinza-50 p-3 text-corpo-sec">
+            {ferramenta === "adversario" && (
+              <div className="flex items-center gap-2">
+                <span
+                  className="inline-block h-5 w-5 rounded-full border-2 border-white"
+                  style={{ backgroundColor: "#334155" }}
+                  aria-hidden="true"
+                />
+                <span className="text-cinza-600">
+                  Toca no campo para adicionar adversários (token «A»).
+                </span>
+              </div>
+            )}
+
             {ferramenta === "jogador" && (
               <div className="flex items-center gap-2">
                 <span className="text-cinza-600">Cor:</span>

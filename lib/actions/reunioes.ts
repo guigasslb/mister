@@ -8,7 +8,7 @@ import { exigirCapacidade, podeLerEscalao, escaloesLegiveis } from "@/lib/permis
 import { ok, erro, erroDeValidacao, type Resultado } from "@/lib/utils";
 import { reuniaoSchema } from "@/lib/schemas/reuniao";
 import { sincronizarComCalendario } from "@/lib/actions/integracao";
-import type { Reuniao } from "@prisma/client";
+import type { Prisma, Reuniao } from "@prisma/client";
 
 const PATH = "/reunioes";
 
@@ -154,12 +154,20 @@ export async function alternarAfixadaReuniao(reuniaoId: string): Promise<Resulta
 }
 
 /**
- * Reuniões a mostrar no Dashboard/Início: as futuras (data >= hoje, mostradas
- * automaticamente) e as afixadas manualmente (`afixada = true`, independentes
- * da data). Filtra sempre pelo clube do utilizador autenticado e respeita a
- * legibilidade por escalão (igual a `listarReunioes`). Máximo 5, por data.
+ * Reuniões a mostrar no Dashboard/Início, separadas em dois grupos:
+ *
+ * - `proximas`: reuniões futuras (data >= hoje), afixadas ou não, ordenadas por
+ *   data ascendente (a mais próxima primeiro).
+ * - `anteriores`: reuniões afixadas (`afixada = true`) já passadas (data < hoje),
+ *   ordenadas por data descendente (a mais recente primeiro). Reuniões passadas
+ *   NÃO afixadas nunca aparecem no dashboard.
+ *
+ * Filtra sempre pelo clube do utilizador autenticado e respeita a legibilidade
+ * por escalão (igual a `listarReunioes`). Cada grupo limita a 5.
  */
-export async function obterReunioesParaDashboard(): Promise<Resultado<Reuniao[]>> {
+export async function obterReunioesParaDashboard(): Promise<
+  Resultado<{ proximas: Reuniao[]; anteriores: Reuniao[] }>
+> {
   const clubeId = await obterClubeIdAtual();
   if (!clubeId) return erro("Não autenticado");
 
@@ -168,23 +176,29 @@ export async function obterReunioesParaDashboard(): Promise<Resultado<Reuniao[]>
   inicioHoje.setHours(0, 0, 0, 0);
 
   const legiveis = await escaloesLegiveis();
-  const reunioes = await prisma.reuniao.findMany({
-    where: {
-      clubeId,
-      AND: [
-        {
-          OR: [
-            { ambito: "CLUBE" },
-            legiveis === "TODOS" ? { ambito: "ESCALAO" } : { escalaoId: { in: legiveis } },
-          ],
-        },
-        {
-          OR: [{ data: { gte: inicioHoje } }, { afixada: true }],
-        },
-      ],
-    },
-    orderBy: { data: "asc" },
-    take: 5,
-  });
-  return ok(reunioes);
+  // Filtro de âmbito partilhado pelos dois grupos (evita duplicação e assegura
+  // simetria entre as duas consultas): reuniões de clube + escalões legíveis.
+  const filtroAmbito: Prisma.ReuniaoWhereInput = {
+    OR: [
+      { ambito: "CLUBE" },
+      legiveis === "TODOS" ? { ambito: "ESCALAO" } : { escalaoId: { in: legiveis } },
+    ],
+  };
+
+  const [proximas, anteriores] = await Promise.all([
+    // Próximas: futuras (data >= hoje), afixadas ou não — ordem ascendente.
+    prisma.reuniao.findMany({
+      where: { clubeId, AND: [filtroAmbito, { data: { gte: inicioHoje } }] },
+      orderBy: { data: "asc" },
+      take: 5,
+    }),
+    // Anteriores: apenas afixadas já passadas (data < hoje) — ordem descendente.
+    prisma.reuniao.findMany({
+      where: { clubeId, AND: [filtroAmbito, { afixada: true }, { data: { lt: inicioHoje } }] },
+      orderBy: { data: "desc" },
+      take: 5,
+    }),
+  ]);
+
+  return ok({ proximas, anteriores });
 }

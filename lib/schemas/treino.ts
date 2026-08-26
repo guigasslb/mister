@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PARTES_TREINO } from "@/lib/schemas/exercicio";
 
 export const TIPOS_SESSAO = ["NORMAL", "ABERTO", "CAPTACAO", "EVENTO"] as const;
 
@@ -111,5 +112,13 @@ export const sessaoExercicioOverrideSchema = z.object({
   series:            z.number().int().min(1).max(99).nullable().optional(),
   descricaoOverride: z.string().max(2000).nullable().optional(),
   notas:             z.string().max(2000).nullable().optional(),
+  // Fase do treino (§3.5) — override por sessão; reutiliza o enum ParteTreino.
+  parteTreino:       z.enum(PARTES_TREINO).nullable().optional(),
 });
 export type SessaoExercicioOverrideInput = z.infer<typeof sessaoExercicioOverrideSchema>;
+
+/**
+ * Fase do treino escolhida ao adicionar um exercício à sessão (§3.5). Opcional:
+ * quando ausente, a action herda a `parteTreino` do próprio exercício da biblioteca.
+ */
+export const parteTreinoSessaoSchema = z.enum(PARTES_TREINO).nullable().optional();

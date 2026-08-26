@@ -59,6 +59,15 @@ function coneCor(cor?: string): { hex: string; stroke: string } {
 export const ESCADINHA_COR = "#F5C518"; // amarelo (visível sobre relvado/pitch)
 export const BARRAS_COR = "#2563EB"; // azul
 
+// ─── Adversário (secção 11.3) ────────────────────────────────────────────────
+//
+// Token genérico da equipa adversária no quadro tático (§8.10). Independente da
+// paleta da equipa própria (`cor`): render sempre neutro/escuro com contorno
+// tracejado e rótulo genérico ("A"), para se distinguir à primeira vista dos
+// jogadores da própria equipa (coloridos e numerados). Marcado por `equipa:
+// "adversario"` no schema do jogador — retrocompatível (ausente → própria).
+export const ADVERSARIO_COR = "#334155"; // slate-700 (neutro, "outra equipa")
+
 export const ESCADINHA_DEGRAUS: Record<TamanhoEscadinha, number> = {
   pequena: 4,
   media: 6,
@@ -499,7 +508,13 @@ export function ElementoSVG({
   );
 
   switch (elemento.tipo) {
-    case "jogador":
+    case "jogador": {
+      // §11.3: o adversário é neutro/escuro, tracejado e sem número (rótulo "A"),
+      // para se distinguir dos jogadores da equipa própria (coloridos/numerados).
+      const eAdversario = elemento.equipa === "adversario";
+      const preenchimento = eAdversario ? ADVERSARIO_COR : corParaHex(elemento.cor);
+      const etiqueta =
+        elemento.numero != null ? String(elemento.numero) : eAdversario ? "A" : null;
       return (
         <g>
           {decoracoes}
@@ -507,11 +522,12 @@ export function ElementoSVG({
             cx={elemento.x}
             cy={elemento.y}
             r={8}
-            fill={corParaHex(elemento.cor)}
+            fill={preenchimento}
             stroke="#FFFFFF"
             strokeWidth={1.5}
+            strokeDasharray={eAdversario ? "3 2" : undefined}
           />
-          {elemento.numero != null && (
+          {etiqueta != null && (
             <text
               x={elemento.x}
               y={elemento.y}
@@ -521,11 +537,12 @@ export function ElementoSVG({
               fontWeight={700}
               fill="#FFFFFF"
             >
-              {elemento.numero}
+              {etiqueta}
             </text>
           )}
         </g>
       );
+    }
 
     case "bola":
       return (

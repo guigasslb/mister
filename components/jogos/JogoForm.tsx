@@ -193,7 +193,9 @@ export function JogoForm({
     }
 
     const dados = {
-      data: String(fd.get("data")),
+      data: fd.get("data")
+        ? new Date(String(fd.get("data"))).toISOString()
+        : "",
       adversario: String(fd.get("adversario")),
       casaFora,
       tipo,

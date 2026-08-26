@@ -14,8 +14,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { atualizarExercicioSessao } from "@/lib/actions/treinos";
 import type { SessaoExercicioOverrideInput } from "@/lib/schemas/treino";
+import {
+  PARTES_TREINO,
+  LABEL_PARTE_TREINO,
+  type ParteTreinoValor,
+} from "@/lib/schemas/exercicio";
+
+// Valor "sem fase" no Select (o Radix Select não aceita item com value vazio).
+const SEM_FASE = "SEM_FASE";
 
 interface Props {
   sessaoExercicioId: string;
@@ -25,6 +40,7 @@ interface Props {
     series: number | null;
     descricaoOverride: string | null;
     notas: string | null;
+    parteTreino: ParteTreinoValor | null;
   };
   aberto: boolean;
   onFechar: () => void;
@@ -63,6 +79,9 @@ export function AdaptarExercicioDialog({
     valorActual.descricaoOverride ?? "",
   );
   const [notas, setNotas] = useState(valorActual.notas ?? "");
+  const [parteTreino, setParteTreino] = useState<string>(
+    valorActual.parteTreino ?? SEM_FASE,
+  );
 
   function guardar() {
     setErro(null);
@@ -73,6 +92,7 @@ export function AdaptarExercicioDialog({
       series: paraNumero(series),
       descricaoOverride: descricaoLimpa === "" ? null : descricaoLimpa,
       notas: notasLimpa === "" ? null : notasLimpa,
+      parteTreino: parteTreino === SEM_FASE ? null : (parteTreino as ParteTreinoValor),
     };
     startTransition(async () => {
       const res = await atualizarExercicioSessao(sessaoExercicioId, dados);
@@ -125,6 +145,23 @@ export function AdaptarExercicioDialog({
                 onChange={(e) => setSeries(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="adaptar-fase">Fase do treino</Label>
+            <Select value={parteTreino} onValueChange={setParteTreino}>
+              <SelectTrigger id="adaptar-fase">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PARTES_TREINO.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {LABEL_PARTE_TREINO[p]}
+                  </SelectItem>
+                ))}
+                <SelectItem value={SEM_FASE}>Sem fase</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1.5">

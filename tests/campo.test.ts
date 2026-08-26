@@ -7,8 +7,10 @@ import {
   elementoEmPonto,
   posicoesBase,
   raioHitEfetivo,
+  rotuloElemento,
   type Pos,
 } from "@/components/campo/animacao";
+import { diagramaSchema } from "@/lib/schemas/exercicio";
 import type { DiagramaCampo, ElementoCampo } from "@/lib/schemas/exercicio";
 
 const jogador = (id: string, x: number, y: number): ElementoCampo => ({
@@ -219,5 +221,41 @@ describe("raioHitEfetivo", () => {
   it("cresce em ecrãs mais pequenos (escala < 1)", () => {
     // escala 0.5 → 16/0.5 = 32 unidades
     expect(raioHitEfetivo(0.5)).toBe(32);
+  });
+});
+
+// §8.10/§11.3: tokens do adversário no quadro tático do jogo.
+describe("adversário (quadro tático do jogo)", () => {
+  it("rótulo acessível distingue adversário de jogador próprio", () => {
+    const proprio: ElementoCampo = {
+      id: "p",
+      tipo: "jogador",
+      x: 100,
+      y: 100,
+      cor: "azul",
+      numero: 7,
+    };
+    const adversario: ElementoCampo = {
+      id: "a",
+      tipo: "jogador",
+      x: 100,
+      y: 100,
+      cor: "vermelho",
+      equipa: "adversario",
+    };
+    expect(rotuloElemento(proprio)).toBe("Jogador 7 (azul)");
+    expect(rotuloElemento(adversario)).toBe("Adversário");
+  });
+
+  it("o diagrama aceita tokens de adversário (equipa: adversario)", () => {
+    const r = diagramaSchema.safeParse({
+      versao: 2,
+      elementos: [
+        { id: "p", tipo: "jogador", x: 30, y: 100, cor: "azul", numero: 1, equipa: "propria" },
+        { id: "a", tipo: "jogador", x: 300, y: 100, cor: "vermelho", equipa: "adversario" },
+      ],
+      passos: [],
+    });
+    expect(r.success).toBe(true);
   });
 });

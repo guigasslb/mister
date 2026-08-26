@@ -20,6 +20,16 @@ function formatarData(data: Date): string {
   });
 }
 
+/**
+ * Hora do jogo em "HH:MM". Devolve null para jogos sem hora definida
+ * (meia-noite, 00:00), típico de registos antigos — nesse caso não se mostra.
+ */
+function formatarHora(data: Date): string | null {
+  const d = new Date(data);
+  if (d.getHours() === 0 && d.getMinutes() === 0) return null;
+  return d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+}
+
 export const metadata: Metadata = { title: "Jogos" };
 
 const CLS_TAB_BASE =
@@ -189,6 +199,11 @@ export default async function JogosPage({
                     <span className="text-legenda text-cinza-400 capitalize">
                       {formatarData(j.data)}
                     </span>
+                    {formatarHora(j.data) && (
+                      <span className="text-legenda font-medium text-cinza-500">
+                        {formatarHora(j.data)}
+                      </span>
+                    )}
                   </div>
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2">

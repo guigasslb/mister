@@ -41,6 +41,7 @@ import { PlanoTatico } from "@/components/jogos/PlanoTatico";
 import { RegistoAoVivo } from "@/components/jogos/RegistoAoVivo";
 import { ScoutingJogo } from "@/components/jogos/ScoutingJogo";
 import { TimelineEventos, type EventoTimeline } from "@/components/jogos/TimelineEventos";
+import type { DiagramaCampo } from "@/lib/schemas/exercicio";
 import type {
   BlocoTempo,
   CasaFora,
@@ -111,6 +112,8 @@ export function JogoDetalhe({
   formato,
   suspensoes = [],
   escalaoJovem = false,
+  quadroInicial = null,
+  podeGerirQuadro = false,
 }: {
   jogoId: string;
   atletas: Atleta[];
@@ -133,6 +136,10 @@ export function JogoDetalhe({
   suspensoes?: SuspensaoPendente[];
   // Formação jovem (§3.7): oculta cartões e suspensões (não aplicáveis a menores).
   escalaoJovem?: boolean;
+  // §8.10: quadro tático interativo do plano de jogo (persistido em
+  // QuadroTatico.diagrama) + gating por MODELO_JOGO_GERIR.
+  quadroInicial?: { id: string; diagrama: DiagramaCampo | null } | null;
+  podeGerirQuadro?: boolean;
 }) {
   const eFutebol = modalidade === "FUTEBOL";
   const suspensaoPorAtleta = new Map(suspensoes.map((s) => [s.atletaId, s]));
@@ -166,6 +173,16 @@ export function JogoDetalhe({
       else novo.add(id);
       return novo;
     });
+  }
+
+  // Todos selecionados quando há atletas e todos estão na convocatória local.
+  const todosConvocados =
+    atletas.length > 0 && atletas.every((a) => convocados.has(a.id));
+
+  function alternarTodos() {
+    setConvocados(() =>
+      todosConvocados ? new Set() : new Set(atletas.map((a) => a.id)),
+    );
   }
 
   function gravarConvocatoria() {
@@ -308,6 +325,14 @@ export function JogoDetalhe({
                 </div>
               </div>
             )}
+            <div className="flex items-center justify-between">
+              <p className="text-corpo-sec text-cinza-600">
+                {convocados.size}/{atletas.length} selecionado(s)
+              </p>
+              <Button variant="outline" size="sm" onClick={alternarTodos}>
+                {todosConvocados ? "Desselecionar todos" : "Selecionar todos"}
+              </Button>
+            </div>
             <ul className="space-y-2">
               {atletas.map((a) => {
                 const suspensao = escalaoJovem
@@ -371,6 +396,8 @@ export function JogoDetalhe({
               planoInicial={planoInicial}
               modalidade={modalidade}
               formato={formato}
+              quadroInicial={quadroInicial}
+              podeGerirQuadro={podeGerirQuadro}
             />
           </TabsContent>
         </Tabs>

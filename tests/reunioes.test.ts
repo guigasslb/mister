@@ -274,36 +274,65 @@ describe("obterReunioesParaDashboard", () => {
     expect(prisma.reuniao.findMany).not.toHaveBeenCalled();
   });
 
-  it("filtra por clube, futuras OU afixadas, limita a 5 e ordena por data", async () => {
-    mocked(prisma.reuniao.findMany).mockResolvedValue([REUNIAO_BD]);
+  it("separa em próximas (futuras, asc) e anteriores (afixadas passadas, desc), limita cada grupo a 5", async () => {
+    const PROXIMA = { ...REUNIAO_BD, id: "proxima" };
+    const ANTERIOR = { ...REUNIAO_BD, id: "anterior" };
+    // 1.ª chamada findMany → próximas; 2.ª chamada → anteriores.
+    mocked(prisma.reuniao.findMany).mockImplementation(() => {
+      const n = calls(prisma.reuniao.findMany).length;
+      return Promise.resolve(n === 1 ? [PROXIMA] : [ANTERIOR]);
+    });
+
     const r = await obterReunioesParaDashboard();
     expect(r.sucesso).toBe(true);
-    const arg = calls(prisma.reuniao.findMany)[0][0] as {
-      where: { clubeId: string; AND: Array<{ OR: unknown[] }> };
+    if (!r.sucesso) return;
+    expect(r.dados.proximas).toEqual([PROXIMA]);
+    expect(r.dados.anteriores).toEqual([ANTERIOR]);
+
+    // Duas consultas independentes (uma por grupo).
+    expect(calls(prisma.reuniao.findMany).length).toBe(2);
+
+    // Grupo "próximas": futuras (data >= hoje), ordem ascendente, limite 5.
+    const argProximas = calls(prisma.reuniao.findMany)[0][0] as {
+      where: { clubeId: string; AND: Array<Record<string, unknown>> };
       orderBy: { data: string };
       take: number;
     };
-    expect(arg.where.clubeId).toBe("clube1");
-    expect(arg.take).toBe(5);
-    expect(arg.orderBy.data).toBe("asc");
-    // Segundo bloco AND = (data futura OU afixada).
-    const orDataAfixada = arg.where.AND[1].OR as Array<Record<string, unknown>>;
-    expect(orDataAfixada).toContainEqual({ afixada: true });
-    expect(orDataAfixada.some((c) => "data" in c)).toBe(true);
+    expect(argProximas.where.clubeId).toBe("clube1");
+    expect(argProximas.take).toBe(5);
+    expect(argProximas.orderBy.data).toBe("asc");
+    expect(argProximas.where.AND.some((c) => "data" in c && "gte" in (c.data as object))).toBe(
+      true,
+    );
+
+    // Grupo "anteriores": afixadas passadas (data < hoje), ordem descendente, limite 5.
+    const argAnteriores = calls(prisma.reuniao.findMany)[1][0] as {
+      where: { clubeId: string; AND: Array<Record<string, unknown>> };
+      orderBy: { data: string };
+      take: number;
+    };
+    expect(argAnteriores.where.clubeId).toBe("clube1");
+    expect(argAnteriores.take).toBe(5);
+    expect(argAnteriores.orderBy.data).toBe("desc");
+    expect(argAnteriores.where.AND).toContainEqual({ afixada: true });
+    expect(argAnteriores.where.AND.some((c) => "data" in c && "lt" in (c.data as object))).toBe(
+      true,
+    );
   });
 
-  it("respeita a legibilidade por escalão (âmbito restrito)", async () => {
+  it("respeita a legibilidade por escalão (âmbito restrito) nos dois grupos", async () => {
     mocked(escaloesLegiveis).mockResolvedValue([ESC_ID]);
     mocked(prisma.reuniao.findMany).mockResolvedValue([]);
     const r = await obterReunioesParaDashboard();
     expect(r.sucesso).toBe(true);
-    const arg = calls(prisma.reuniao.findMany)[0][0] as {
-      where: { AND: Array<{ OR: Array<Record<string, unknown>> }> };
-    };
-    // Primeiro bloco AND = (ambito CLUBE OU escalão legível).
-    const orAmbito = arg.where.AND[0].OR;
-    expect(orAmbito).toContainEqual({ ambito: "CLUBE" });
-    expect(orAmbito).toContainEqual({ escalaoId: { in: [ESC_ID] } });
+
+    // O filtro de âmbito (1.º bloco AND) é partilhado pelas duas consultas.
+    for (const call of calls(prisma.reuniao.findMany)) {
+      const arg = call[0] as { where: { AND: Array<{ OR?: Array<Record<string, unknown>> }> } };
+      const orAmbito = arg.where.AND[0].OR!;
+      expect(orAmbito).toContainEqual({ ambito: "CLUBE" });
+      expect(orAmbito).toContainEqual({ escalaoId: { in: [ESC_ID] } });
+    }
   });
 });
 
