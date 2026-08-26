@@ -6,9 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  CalendarCheck,
   Dumbbell,
-  Trophy,
   Swords,
   Settings,
   Users2,
@@ -37,18 +35,19 @@ const ITEM_COMECAR = { href: "/vitoria-rapida", label: "Começar", icon: Rocket 
 const ITEM_ADMIN = { href: "/admin", label: "Backoffice", icon: ShieldCheck };
 
 // Ordem pensada para a bottom-nav (móvel): os 4 primeiros são fixos. A Agenda é
-// a vista central do produto (treinos + jogos + reuniões), por isso é item
-// primário logo a seguir a Treinos; Jogos desce para o menu "Mais" no móvel. O
-// scoping da Agenda pelos escalões legíveis é feito em obterAgendaClube
-// (§6.4, F P2.2) — visível a todos os treinadores autenticados.
+// a vista central de eventos do produto (treinos + jogos + reuniões, §8.13.1),
+// por isso é item primário — e SUBSTITUI os antigos itens separados de Treinos e
+// Jogos no menu, que eram redundantes com a Agenda. As rotas /treinos e /jogos
+// mantêm-se (vistas de gestão), acessíveis a partir da própria Agenda (detalhes
+// de cada evento + botões «Nova sessão»/«Novo jogo»). O scoping da Agenda pelos
+// escalões legíveis é feito em obterAgendaClube (§6.4, F P2.2) — visível a todos
+// os treinadores autenticados.
 const ITENS_BASE = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
   { href: "/plantel", label: "Plantel", icon: Users },
-  { href: "/treinos", label: "Treinos", icon: CalendarCheck },
   { href: "/agenda", label: "Agenda", icon: CalendarRange },
-  { href: "/jogos", label: "Jogos", icon: Trophy },
-  { href: "/mano-a-mano", label: "Mano-a-Mano", icon: Swords },
   { href: "/exercicios", label: "Exercícios", icon: Dumbbell },
+  { href: "/mano-a-mano", label: "Mano-a-Mano", icon: Swords },
   { href: "/analiticos", label: "Analytics", icon: BarChart3 },
   { href: "/comunicacoes", label: "Comunicações", icon: MessageSquare },
   { href: "/reunioes", label: "Reuniões", icon: Users2 },
