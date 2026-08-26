@@ -47,6 +47,7 @@ import {
   associarAEscalaoSchema,
   transferirEscalaoSchema,
   terminarParticipacaoSchema,
+  editarTipoParticipacaoSchema,
   conflitoPrincipalAtivo,
   principaisADespromover,
   ficariaSemPrincipal,
@@ -61,6 +62,7 @@ import {
   associarAEscalao,
   transferirEscalao,
   terminarParticipacao,
+  editarTipoParticipacao,
   listarParticipacoes,
   obterCarreiraAtleta,
 } from "@/lib/actions/participacoes";
@@ -284,6 +286,50 @@ describe("terminarParticipacaoSchema (F1)", () => {
         escalaoId: ESC_A,
         epocaId: "x",
       }).success,
+    ).toBe(false);
+  });
+});
+
+describe("editarTipoParticipacaoSchema (F1)", () => {
+  const base = { atletaId: ATLETA, escalaoId: ESC_A };
+
+  it("aceita qualquer um dos três tipos (incl. PRINCIPAL)", () => {
+    for (const tipo of TIPOS_PARTICIPACAO) {
+      const r = editarTipoParticipacaoSchema.safeParse({ ...base, tipo });
+      expect(r.success).toBe(true);
+      if (r.success) expect(r.data.tipo).toBe(tipo);
+    }
+  });
+
+  it("exige tipo (não tem valor por omissão)", () => {
+    expect(editarTipoParticipacaoSchema.safeParse(base).success).toBe(false);
+  });
+
+  it("rejeita tipo fora do enum", () => {
+    expect(
+      editarTipoParticipacaoSchema.safeParse({ ...base, tipo: "EMPRESTIMO" }).success,
+    ).toBe(false);
+  });
+
+  it("aceita época explícita mas exige cuid", () => {
+    expect(
+      editarTipoParticipacaoSchema.safeParse({ ...base, tipo: "PRINCIPAL", epocaId: EPOCA })
+        .success,
+    ).toBe(true);
+    expect(
+      editarTipoParticipacaoSchema.safeParse({ ...base, tipo: "PRINCIPAL", epocaId: "x" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("exige atleta e escalão em formato cuid", () => {
+    expect(
+      editarTipoParticipacaoSchema.safeParse({ atletaId: "x", escalaoId: ESC_A, tipo: "PRINCIPAL" })
+        .success,
+    ).toBe(false);
+    expect(
+      editarTipoParticipacaoSchema.safeParse({ atletaId: ATLETA, escalaoId: "x", tipo: "PRINCIPAL" })
+        .success,
     ).toBe(false);
   });
 });
@@ -1051,6 +1097,196 @@ describe("terminarParticipacao", () => {
     expect(r.sucesso).toBe(false);
     if (!r.sucesso) expect(r.erro).toMatch(/época selecionada não existe/i);
     expect(prisma.atletaEscalao.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("editarTipoParticipacao", () => {
+  const pedido = { atletaId: ATLETA, escalaoId: ESC_A, tipo: "OCASIONAL" as const };
+
+  it("recusa tipo inválido sem tocar na BD", async () => {
+    const r = await editarTipoParticipacao({
+      atletaId: ATLETA,
+      escalaoId: ESC_A,
+      tipo: "EMPRESTIMO",
+    });
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.camposInvalidos?.tipo).toBeTruthy();
+    expect(exigirCapacidade).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("exige a capacidade de clube PROMOVER_ATLETAS", async () => {
+    mocked(prisma.atletaEscalao.findMany).mockResolvedValue([
+      { id: "ae1", escalaoId: ESC_A, tipo: "SIMULTANEA", escalao: { seccao: null } },
+      { id: "ae2", escalaoId: ESC_B, tipo: "PRINCIPAL", escalao: { seccao: null } },
+    ]);
+    mocked(prisma.atletaEscalao.update).mockResolvedValue({ id: "ae1" });
+
+    await editarTipoParticipacao(pedido);
+    expect(chamadas(exigirCapacidade)[0]).toEqual(["PROMOVER_ATLETAS"]);
+  });
+
+  it("falha sem a capacidade", async () => {
+    mocked(exigirCapacidade).mockResolvedValue({ ok: false, erro: "Sem permissão" });
+    const r = await editarTipoParticipacao(pedido);
+    expect(r.sucesso).toBe(false);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("isola por clube: falha se o atleta não pertence ao clube ativo", async () => {
+    mocked(prisma.atleta.findFirst).mockResolvedValue(null);
+    const r = await editarTipoParticipacao(pedido);
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/atleta não encontrado/i);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("isola por clube: falha se o escalão não pertence ao clube ativo", async () => {
+    mocked(prisma.escalao.findFirst).mockResolvedValue(null);
+    const r = await editarTipoParticipacao(pedido);
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/não existe/i);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("falha se o atleta não tem participação ativa nesse escalão", async () => {
+    mocked(prisma.atletaEscalao.findMany).mockResolvedValue([
+      { id: "ae2", escalaoId: ESC_B, tipo: "PRINCIPAL", escalao: { seccao: null } },
+    ]);
+    const r = await editarTipoParticipacao(pedido);
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/participação ativa/i);
+    expect(prisma.atletaEscalao.update).not.toHaveBeenCalled();
+  });
+
+  it("corre numa transação com isolamento Serializable", async () => {
+    mocked(prisma.atletaEscalao.findMany).mockResolvedValue([
+      { id: "ae1", escalaoId: ESC_A, tipo: "SIMULTANEA", escalao: { seccao: null } },
+      { id: "ae2", escalaoId: ESC_B, tipo: "PRINCIPAL", escalao: { seccao: null } },
+    ]);
+    mocked(prisma.atletaEscalao.update).mockResolvedValue({ id: "ae1" });
+
+    await editarTipoParticipacao(pedido);
+
+    const opcoes = chamadas(prisma.$transaction)[0][1] as { isolationLevel: string };
+    expect(opcoes.isolationLevel).toBe(
+      Prisma.TransactionIsolationLevel.Serializable,
+    );
+  });
+
+  it("altera o tipo de uma participação não-principal", async () => {
+    mocked(prisma.atletaEscalao.findMany).mockResolvedValue([
+      { id: "ae1", escalaoId: ESC_A, tipo: "SIMULTANEA", escalao: { seccao: null } },
+      { id: "ae2", escalaoId: ESC_B, tipo: "PRINCIPAL", escalao: { seccao: null } },
+    ]);
+    mocked(prisma.atletaEscalao.update).mockResolvedValue({ id: "ae1" });
+
+    const r = await editarTipoParticipacao(pedido);
+    expect(r.sucesso).toBe(true);
+
+    const updates = chamadas(prisma.atletaEscalao.update) as [
+      { where: { id: string }; data: Record<string, unknown> },
+    ][];
+    // Um único update: a própria participação. O principal (ae2) não é tocado.
+    expect(updates).toHaveLength(1);
+    expect(updates[0][0].where.id).toBe("ae1");
+    expect(updates[0][0].data).toEqual({ tipo: "OCASIONAL" });
+  });
+
+  it("promover a PRINCIPAL despromove o principal anterior da mesma modalidade", async () => {
+    // ae1 (Infantis) é SIMULTANEA; ae2 (Benjamins) é o PRINCIPAL atual. Promover
+    // ae1 a PRINCIPAL deve despromover ae2 para SIMULTANEA (invariante §9).
+    mocked(prisma.atletaEscalao.findMany).mockResolvedValue([
+      { id: "ae1", escalaoId: ESC_A, tipo: "SIMULTANEA", escalao: { seccao: null } },
+      { id: "ae2", escalaoId: ESC_B, tipo: "PRINCIPAL", escalao: { seccao: null } },
+    ]);
+    mocked(prisma.atletaEscalao.update).mockResolvedValue({ id: "ae1" });
+
+    const r = await editarTipoParticipacao({ ...pedido, tipo: "PRINCIPAL" });
+    expect(r.sucesso).toBe(true);
+
+    const updates = chamadas(prisma.atletaEscalao.update) as [
+      { where: { id: string }; data: Record<string, unknown> },
+    ][];
+    // 1º: despromove o principal anterior (ae2). 2º: promove o alvo (ae1).
+    expect(updates[0][0].where.id).toBe("ae2");
+    expect(updates[0][0].data).toEqual({ tipo: "SIMULTANEA" });
+    expect(updates[1][0].where.id).toBe("ae1");
+    expect(updates[1][0].data).toEqual({ tipo: "PRINCIPAL" });
+  });
+
+  it("não despromove o principal de OUTRA modalidade ao promover (invariante por modalidade)", async () => {
+    // Escalão editado é de FUTSAL; o principal existente noutra modalidade
+    // (FUTEBOL) não pode ser despromovido.
+    mocked(prisma.escalao.findFirst).mockResolvedValue({
+      id: ESC_A,
+      seccao: { modalidade: "FUTSAL" },
+    });
+    mocked(prisma.atletaEscalao.findMany).mockResolvedValue([
+      {
+        id: "ae1",
+        escalaoId: ESC_A,
+        tipo: "SIMULTANEA",
+        escalao: { seccao: { modalidade: "FUTSAL" } },
+      },
+      {
+        id: "ae2",
+        escalaoId: ESC_B,
+        tipo: "PRINCIPAL",
+        escalao: { seccao: { modalidade: "FUTEBOL" } },
+      },
+    ]);
+    mocked(prisma.atletaEscalao.update).mockResolvedValue({ id: "ae1" });
+
+    const r = await editarTipoParticipacao({ ...pedido, tipo: "PRINCIPAL" });
+    expect(r.sucesso).toBe(true);
+
+    // Só o alvo (ae1) é atualizado — o principal de futebol (ae2) fica intacto,
+    // porque a modalidade FUTSAL não tinha ainda principal.
+    const updates = chamadas(prisma.atletaEscalao.update) as [
+      { where: { id: string }; data: Record<string, unknown> },
+    ][];
+    expect(updates).toHaveLength(1);
+    expect(updates[0][0].where.id).toBe("ae1");
+    expect(updates[0][0].data).toEqual({ tipo: "PRINCIPAL" });
+  });
+
+  it("recusa despromover o único principal da modalidade (participação principal obrigatória)", async () => {
+    // ae1 (ESC_A) é o único PRINCIPAL; tentar passá-lo a OCASIONAL deixaria a
+    // modalidade sem principal.
+    mocked(prisma.atletaEscalao.findMany).mockResolvedValue([
+      { id: "ae1", escalaoId: ESC_A, tipo: "PRINCIPAL", escalao: { seccao: null } },
+      { id: "ae2", escalaoId: ESC_B, tipo: "SIMULTANEA", escalao: { seccao: null } },
+    ]);
+
+    const r = await editarTipoParticipacao(pedido);
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/sem participação principal/i);
+    expect(prisma.atletaEscalao.update).not.toHaveBeenCalled();
+  });
+
+  it("revalida plantel, perfil do atleta e dashboard", async () => {
+    mocked(prisma.atletaEscalao.findMany).mockResolvedValue([
+      { id: "ae1", escalaoId: ESC_A, tipo: "SIMULTANEA", escalao: { seccao: null } },
+      { id: "ae2", escalaoId: ESC_B, tipo: "PRINCIPAL", escalao: { seccao: null } },
+    ]);
+    mocked(prisma.atletaEscalao.update).mockResolvedValue({ id: "ae1" });
+
+    await editarTipoParticipacao(pedido);
+
+    expect(chamadas(revalidatePath).map((c) => c[0])).toEqual([
+      "/plantel",
+      "/plantel/atleta1",
+      "/dashboard",
+    ]);
+  });
+
+  it("valida a época indicada contra o clube", async () => {
+    mocked(prisma.epoca.findFirst).mockResolvedValue(null);
+    const r = await editarTipoParticipacao({ ...pedido, epocaId: EPOCA });
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/época selecionada não existe/i);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 

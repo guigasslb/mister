@@ -81,6 +81,22 @@ export const terminarParticipacaoSchema = z.object({
   epocaId: z.string().cuid("Época inválida").optional(),
 });
 
+/**
+ * Editar o tipo de uma participação ativa (secção 8.5).
+ *
+ * Ao contrário de `associar` (que nunca cria um segundo principal), aqui os três
+ * tipos são permitidos: passar a PRINCIPAL despromove automaticamente o principal
+ * anterior da mesma modalidade para SIMULTANEA (invariante da secção 9, imposto na
+ * action). Passar o único PRINCIPAL a não-principal é recusado — deixaria a
+ * modalidade sem participação principal obrigatória.
+ */
+export const editarTipoParticipacaoSchema = z.object({
+  atletaId: z.string().cuid("Atleta inválido"),
+  escalaoId: z.string().cuid("Escalão inválido"),
+  epocaId: z.string().cuid("Época inválida").optional(),
+  tipo: z.enum(TIPOS_PARTICIPACAO),
+});
+
 /** Participação ativa reduzida ao necessário para validar o invariante. */
 export interface ParticipacaoAtivaResumo {
   escalaoId: string;
@@ -157,3 +173,4 @@ export function ficariaSemPrincipal(
 export type AssociarAEscalaoInput = z.infer<typeof associarAEscalaoSchema>;
 export type TransferirEscalaoInput = z.infer<typeof transferirEscalaoSchema>;
 export type TerminarParticipacaoInput = z.infer<typeof terminarParticipacaoSchema>;
+export type EditarTipoParticipacaoInput = z.infer<typeof editarTipoParticipacaoSchema>;

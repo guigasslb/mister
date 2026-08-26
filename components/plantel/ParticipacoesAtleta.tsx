@@ -8,6 +8,7 @@ import {
   type EscalaoOpcao,
 } from "@/components/plantel/AssociarEscalaoForm";
 import { TransferirEscalaoForm } from "@/components/plantel/TransferirEscalaoForm";
+import { EditarTipoParticipacaoButton } from "@/components/plantel/EditarTipoParticipacaoButton";
 import { TerminarParticipacaoButton } from "@/components/plantel/TerminarParticipacaoButton";
 import type { ParticipacaoHistorico } from "@/lib/actions/participacoes";
 
@@ -129,6 +130,9 @@ export function ParticipacoesAtleta({
                   const ativaNaEpoca =
                     p.estado === "ATIVO" && p.epocaId === epocaIdAtual;
                   const mostrarTerminar = ativaNaEpoca && podeTerminar;
+                  // Editar o tipo (principal/simultânea/ocasional) usa a mesma
+                  // capacidade de clube que terminar (PROMOVER_ATLETAS).
+                  const mostrarEditar = ativaNaEpoca && podeTerminar;
                   return (
                     <li
                       key={p.id}
@@ -145,14 +149,24 @@ export function ParticipacoesAtleta({
                         )}
                         <BadgeTipoParticipacao tipo={p.tipo} />
                         <BadgeEstadoParticipacao estado={p.estado} />
-                        {mostrarTerminar && (
-                          <div className="ms-auto">
-                            <TerminarParticipacaoButton
-                              atletaId={atletaId}
-                              nomeAtleta={nomeAtleta}
-                              escalaoId={p.escalaoId}
-                              escalaoNome={p.escalaoNome}
-                            />
+                        {(mostrarEditar || mostrarTerminar) && (
+                          <div className="ms-auto flex items-center gap-1">
+                            {mostrarEditar && (
+                              <EditarTipoParticipacaoButton
+                                atletaId={atletaId}
+                                escalaoId={p.escalaoId}
+                                escalaoNome={p.escalaoNome}
+                                tipoAtual={p.tipo}
+                              />
+                            )}
+                            {mostrarTerminar && (
+                              <TerminarParticipacaoButton
+                                atletaId={atletaId}
+                                nomeAtleta={nomeAtleta}
+                                escalaoId={p.escalaoId}
+                                escalaoNome={p.escalaoNome}
+                              />
+                            )}
                           </div>
                         )}
                       </div>
