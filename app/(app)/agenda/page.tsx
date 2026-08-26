@@ -112,8 +112,8 @@ export default async function AgendaPage({
       ? tipoRaw
       : undefined;
 
-  // Vista padrão: lista. O calendário só aparece com `vista=calendario` explícito.
-  const ehCalendario = vista === "calendario";
+  // Vista padrão: calendário. A lista só aparece com `vista=lista` explícito.
+  const ehCalendario = vista !== "lista";
 
   // Mês a focar no calendário (default: mês atual). Guardado como 1–12 para a action
   // e para o componente de calendário, conforme o seu contrato.
@@ -185,6 +185,12 @@ export default async function AgendaPage({
             <Link href="/jogos/novo">
               <Plus className="h-4 w-4" />
               Novo jogo
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/reunioes">
+              <Plus className="h-4 w-4" />
+              Nova reunião
             </Link>
           </Button>
         </div>

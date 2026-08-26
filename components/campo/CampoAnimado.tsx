@@ -43,7 +43,10 @@ export function CampoAnimado({
   const temAnimacao = keyframes.length > 1;
 
   const [posicoes, setPosicoes] = useState<Map<string, Pos>>(keyframes[0]);
-  const [aPlay, setAPlay] = useState(false);
+  // Com `autoPlay` e havendo animação, arranca já no primeiro render (estado
+  // inicial ativo) — não depende de um efeito assíncrono para pôr a rodar, pelo
+  // que o playback começa logo na montagem (corrige o autoplay do Modo Treino).
+  const [aPlay, setAPlay] = useState(() => autoPlay && keyframes.length > 1);
   // Em autoPlay o ciclo começa ativo (a animação repete-se enquanto o painel
   // estiver aberto); o utilizador pode desligá-lo pelos controlos.
   const [loop, setLoop] = useState(autoPlay);
@@ -167,7 +170,10 @@ export function CampoAnimado({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [aPlay]);
+    // Depende também de `keyframes`: ao trocar de exercício (novo diagrama) o
+    // playback reinicia do frame base em vez de continuar com o `segmento` do
+    // diagrama anterior (que, se o novo tiver menos passos, se auto-desligava).
+  }, [aPlay, keyframes]);
 
   function reproduzir() {
     setPosicoes(keyframes[0]);

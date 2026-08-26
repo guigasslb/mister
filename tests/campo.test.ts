@@ -258,4 +258,41 @@ describe("adversário (quadro tático do jogo)", () => {
     });
     expect(r.success).toBe(true);
   });
+
+  // Regressão: diagramas gravados como string JSON (ex.: conteúdo curado via
+  // `seed-sub11-pg`, ou valores legados) têm de parsear na mesma — senão a
+  // animação/diagrama desaparece silenciosamente no Modo Treino e no detalhe.
+  it("aceita diagrama como string JSON (retrocompatível) preservando os passos", () => {
+    const objeto = {
+      versao: 2 as const,
+      elementos: [
+        { id: "j1", tipo: "jogador", x: 100, y: 100, cor: "azul", numero: 7, equipa: "propria" },
+        { id: "b1", tipo: "bola", x: 120, y: 110 },
+      ],
+      passos: [
+        {
+          id: "p1",
+          ordem: 0,
+          posicoes: [
+            { elementoId: "j1", x: 200, y: 120 },
+            { elementoId: "b1", x: 220, y: 130 },
+          ],
+          duracaoMs: 900,
+        },
+      ],
+    };
+
+    const r = diagramaSchema.safeParse(JSON.stringify(objeto));
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.passos).toHaveLength(1);
+      // O diagrama string desserializado produz a mesma animação (base + 1 passo).
+      expect(construirKeyframes(r.data)).toHaveLength(2);
+    }
+  });
+
+  it("string não-JSON falha de forma limpa (não lança)", () => {
+    const r = diagramaSchema.safeParse("isto não é json");
+    expect(r.success).toBe(false);
+  });
 });

@@ -124,8 +124,8 @@ const passoAnimacaoSchema = z.object({
   duracaoMs: z.number().int().min(100).max(10000).optional(),
 });
 
-// Retrocompatível: versão 1 (estático) ou 2 (com passos opcionais).
-export const diagramaSchema = z.object({
+// Forma do diagrama (objeto). Versão 1 (estático) ou 2 (com passos opcionais).
+const diagramaObjetoSchema = z.object({
   versao: z.union([z.literal(1), z.literal(2)]),
   elementos: z.array(elementoCampoSchema),
   passos: z.array(passoAnimacaoSchema).optional(),
@@ -133,6 +133,29 @@ export const diagramaSchema = z.object({
   // → FUTSAL_5 (retrocompatível — Apêndice C). `TipoCampo` alinha com FormatoJogo.
   campo: z.nativeEnum(FormatoJogo).optional(),
 });
+
+/**
+ * Diagrama do campo, retrocompatível. Aceita:
+ *   - objeto (Json do Prisma já desserializado — caminho normal), OU
+ *   - string JSON (diagramas gravados com `JSON.stringify`, ex.: conteúdo curado
+ *     via `seed-sub11-pg`, ou valores legados/importados).
+ *
+ * Sem esta tolerância, `safeParse` de uma string devolve `success: false` e o
+ * chamador cai no ramo "sem diagrama" — o diagrama (e a sua animação) desaparecem
+ * silenciosamente no Modo Treino e no detalhe do exercício. O `preprocess`
+ * desserializa a string antes de validar; objetos passam intactos.
+ */
+export const diagramaSchema = z.preprocess((valor) => {
+  if (typeof valor === "string") {
+    try {
+      return JSON.parse(valor) as unknown;
+    } catch {
+      // String não-JSON: devolve como está para a validação falhar de forma limpa.
+      return valor;
+    }
+  }
+  return valor;
+}, diagramaObjetoSchema);
 
 export type PassoAnimacao = z.infer<typeof passoAnimacaoSchema>;
 
