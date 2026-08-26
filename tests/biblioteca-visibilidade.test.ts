@@ -21,26 +21,60 @@ const ESTRANHO = "u3";
 type Linha = Record<string, unknown> & { partilhasClube?: { clubeId: string }[] };
 
 /**
- * Mini-intérprete das cláusulas produzidas por `lib/biblioteca.ts`:
- * um OR de conjunções de igualdades, mais o `partilhasClube.some`.
- * Se o módulo passar a gerar operadores diferentes, o teste falha aqui —
- * é intencional (obriga a rever a semântica de visibilidade).
+ * Mini-intérprete recursivo das cláusulas produzidas por `lib/biblioteca.ts`.
+ * Suporta os operadores efetivamente usados pelo módulo: igualdades simples e o
+ * quantificador `some` sobre relações (usado em `partilhasClube` e no caminho de
+ * relações da visibilidade por escalão partilhado — `autor.membros.some...`).
+ * Se o módulo passar a gerar operadores fora deste conjunto, os testes falham
+ * (intencional: obriga a rever a semântica de visibilidade).
  */
+function matchWhere(where: unknown, node: unknown): boolean {
+  if (where === null || typeof where !== "object") return node === where;
+  const w = where as Record<string, unknown>;
+  if ("some" in w) {
+    const arr = Array.isArray(node) ? node : [];
+    return arr.some((el) => matchWhere(w.some, el));
+  }
+  if (node === null || typeof node !== "object") return false;
+  const n = node as Record<string, unknown>;
+  return Object.entries(w).every(([campo, cond]) => matchWhere(cond, n[campo]));
+}
+
 function visivel(filtro: { OR?: unknown }, linha: Linha): boolean {
   const clausulas = (filtro.OR ?? []) as Record<string, unknown>[];
   expect(clausulas.length).toBeGreaterThan(0);
+  return clausulas.some((clausula) => matchWhere(clausula, linha));
+}
 
-  return clausulas.some((clausula) =>
-    Object.entries(clausula).every(([campo, esperado]) => {
-      if (campo === "partilhasClube") {
-        const { some } = esperado as { some: { clubeId: string } };
-        return (linha.partilhasClube ?? []).some((p) => p.clubeId === some.clubeId);
-      }
-      // Só igualdades simples: qualquer outro operador é um desvio à especificação.
-      expect(typeof esperado === "object" && esperado !== null).toBe(false);
-      return linha[campo] === esperado;
-    }),
-  );
+/**
+ * Constrói o subgrafo `autor` de uma linha de exercício para exercitar a
+ * visibilidade por escalão partilhado. `escaloes` descreve os escalões que o autor
+ * coordena no clube ativo (CLUBE) e, para cada um, os utilizadores atribuídos a
+ * esse escalão nesse clube. Reflete o caminho de relações do filtro:
+ * autor → membros(deste clube) → atribuicoes → escalao → atribuicoes → membroClube.
+ */
+function comEscaloesDoAutor(
+  linha: Linha,
+  escaloes: { membros: string[] }[],
+  clubeDoAutor: string = CLUBE,
+): Linha {
+  return {
+    ...linha,
+    autor: {
+      membros: [
+        {
+          clubeId: clubeDoAutor,
+          atribuicoes: escaloes.map((esc) => ({
+            escalao: {
+              atribuicoes: esc.membros.map((utilizadorId) => ({
+                membroClube: { clubeId: clubeDoAutor, utilizadorId },
+              })),
+            },
+          })),
+        },
+      ],
+    },
+  };
 }
 
 const veExercicio = (linha: Linha, clubeId: string, utilizadorId: string) =>
@@ -71,14 +105,14 @@ function exercicioDoClube(clubeProprietarioId: string, autorId: string = EU): Li
   };
 }
 
-// ─── 🎒 Exercício pessoal: só visível ao autor ───────────────────────────────
+// ─── 🎒 Exercício pessoal sem escalão partilhado: só visível ao autor ─────────
 
-describe("exercício 🎒 pessoal — só o autor o vê", () => {
+describe("exercício 🎒 pessoal (sem escalão partilhado) — só o autor o vê", () => {
   it("é visível ao autor no clube ativo", () => {
     expect(veExercicio(exercicioPessoal(EU), CLUBE, EU)).toBe(true);
   });
 
-  it("NÃO é visível a um colega do mesmo clube", () => {
+  it("NÃO é visível a um colega do mesmo clube que não partilha escalão", () => {
     expect(veExercicio(exercicioPessoal(EU), CLUBE, COLEGA)).toBe(false);
     expect(veExercicio(exercicioPessoal(EU), CLUBE, ESTRANHO)).toBe(false);
   });
@@ -95,6 +129,44 @@ describe("exercício 🎒 pessoal — só o autor o vê", () => {
     const linha = { proprietario: "TREINADOR" as const, autorId: EU };
     expect(origemDoItem(linha, EU)).toBe("PESSOAL");
     expect(origemDoItem(linha, COLEGA)).toBe("CLUBE");
+  });
+});
+
+// ─── 🎒 Exercício pessoal com escalão partilhado: visível aos colegas do escalão ─
+
+describe("exercício 🎒 pessoal — visível a quem partilha um escalão com o autor", () => {
+  it("é visível ao colega que partilha pelo menos um escalão com o autor no clube ativo", () => {
+    // Autor (EU) coordena um escalão onde COLEGA também está atribuído.
+    const linha = comEscaloesDoAutor(exercicioPessoal(EU), [{ membros: [EU, COLEGA] }]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(true);
+  });
+
+  it("basta UM escalão em comum entre vários", () => {
+    const linha = comEscaloesDoAutor(exercicioPessoal(EU), [
+      { membros: [EU, ESTRANHO] }, // escalão não partilhado com COLEGA
+      { membros: [EU, COLEGA] }, // escalão partilhado
+    ]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(true);
+  });
+
+  it("NÃO é visível a quem não partilha nenhum escalão com o autor", () => {
+    const linha = comEscaloesDoAutor(exercicioPessoal(EU), [{ membros: [EU, ESTRANHO] }]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(false);
+  });
+
+  it("a partilha por escalão é scoped ao clube ativo: escalões de outro clube não contam", () => {
+    // O autor partilha o escalão com COLEGA, mas as atribuições são de OUTRO_CLUBE.
+    const linha = comEscaloesDoAutor(
+      exercicioPessoal(EU),
+      [{ membros: [EU, COLEGA] }],
+      OUTRO_CLUBE,
+    );
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(false);
+  });
+
+  it("mantém a visibilidade do próprio autor mesmo sem escalões (aba 🎒)", () => {
+    const linha = comEscaloesDoAutor(exercicioPessoal(EU), []);
+    expect(veExercicio(linha, CLUBE, EU)).toBe(true);
   });
 });
 

@@ -412,10 +412,29 @@ describe("criarSessaoDeTemplateSchema", () => {
 // ─── Visibilidade das bibliotecas ────────────────────────────────────────────
 
 describe("filtros de visibilidade (secção 3.3)", () => {
-  it("inclui pessoais do próprio, do clube (novo e legado) e partilhados", () => {
+  it("inclui pessoais do próprio, pessoais de colegas com escalão partilhado, do clube (novo e legado) e partilhados", () => {
     const filtro = filtroExerciciosVisiveis("clube1", "u1");
     expect(filtro.OR).toEqual([
       { proprietario: "TREINADOR", autorId: "u1" },
+      {
+        proprietario: "TREINADOR",
+        autor: {
+          membros: {
+            some: {
+              clubeId: "clube1",
+              atribuicoes: {
+                some: {
+                  escalao: {
+                    atribuicoes: {
+                      some: { membroClube: { clubeId: "clube1", utilizadorId: "u1" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       { proprietario: "CLUBE", clubeProprietarioId: "clube1" },
       { proprietario: "CLUBE", clubeProprietarioId: null, clubeId: "clube1" },
       { partilhasClube: { some: { clubeId: "clube1" } } },
