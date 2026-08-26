@@ -11,7 +11,11 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
+// Valor interno do item «Todos» no Select. Na URL usa-se o sentinel `todos`
+// (não a ausência do param), para que «Todos os escalões» seja explicitamente
+// alcançável mesmo quando a página cai por defeito no escalão do treinador.
 const TODOS = "__todos__";
+const TODOS_URL = "todos";
 
 interface EscalaoOpcao {
   id: string;
@@ -21,9 +25,10 @@ interface EscalaoOpcao {
 /**
  * Filtro por escalão da agenda do clube (P2.2 — bíblia §8.x).
  * Escreve `?escalaoId=<id>` na URL — a página é um Server Component e volta a
- * chamar `obterAgendaClube` com o filtro. «Todos os escalões» limpa o filtro
- * (comportamento por defeito). O `useTransition` dá o estado de carregamento
- * enquanto a página recalcula no servidor.
+ * chamar `obterAgendaClube` com o filtro. «Todos os escalões» escreve o sentinel
+ * `?escalaoId=todos` (não limpa o param), porque na primeira visita — sem param —
+ * a página cai por defeito no escalão do treinador. O `useTransition` dá o estado
+ * de carregamento enquanto a página recalcula no servidor.
  */
 export function FiltroEscalaoAgenda({
   escaloes,
@@ -39,8 +44,7 @@ export function FiltroEscalaoAgenda({
 
   function definir(valor: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (valor === TODOS) params.delete("escalaoId");
-    else params.set("escalaoId", valor);
+    params.set("escalaoId", valor === TODOS ? TODOS_URL : valor);
     const query = params.toString();
     startTransition(() => {
       router.replace(query ? `${pathname}?${query}` : pathname);

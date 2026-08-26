@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CalendarCheck, Trophy, MapPin, CalendarDays } from "lucide-react";
 import { obterAgendaClube, type EventoAgenda } from "@/lib/actions/agenda";
 import { listarEscaloes } from "@/lib/actions/escaloes";
+import { obterEscalaoDoUtilizador } from "@/lib/permissoes";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { FiltroEscalaoAgenda } from "@/components/agenda/FiltroEscalaoAgenda";
 
@@ -47,7 +48,20 @@ export default async function AgendaPage({
 }: {
   searchParams: Promise<{ escalaoId?: string }>;
 }) {
-  const { escalaoId } = await searchParams;
+  const { escalaoId: escalaoIdRaw } = await searchParams;
+  // Resolução do escalão em contexto (mesmo padrão de Treinos/Plantel). `escalaoIdRaw`:
+  //   undefined/"" → primeira visita: usar o escalão do treinador (ou "Todos" se null);
+  //   "todos"      → sentinel explícito de «Todos os escalões» (sem filtro);
+  //   "<cuid>"     → escalão específico escolhido.
+  let escalaoId: string | undefined;
+  if (!escalaoIdRaw || escalaoIdRaw === "") {
+    const def = await obterEscalaoDoUtilizador();
+    escalaoId = def ?? undefined;
+  } else if (escalaoIdRaw === "todos") {
+    escalaoId = undefined;
+  } else {
+    escalaoId = escalaoIdRaw;
+  }
 
   const [resEscaloes, resAgenda] = await Promise.all([
     listarEscaloes(),
@@ -61,14 +75,19 @@ export default async function AgendaPage({
   const eventos = resAgenda.dados;
   const grupos = agruparPorDia(eventos);
 
+  const escalaoNome = escalaoId
+    ? escaloes.find((e) => e.id === escalaoId)?.nome
+    : undefined;
+  const subtitulo = escalaoNome
+    ? `Treinos e jogos do escalão ${escalaoNome} · próximos 30 dias`
+    : "Treinos e jogos de todos os escalões · próximos 30 dias";
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1>Agenda</h1>
-          <p className="mt-1 text-corpo-sec text-cinza-500">
-            Treinos e jogos de todos os escalões · próximos 30 dias
-          </p>
+          <p className="mt-1 text-corpo-sec text-cinza-500">{subtitulo}</p>
         </div>
       </div>
 
