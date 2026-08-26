@@ -97,7 +97,7 @@ export function rotuloElemento(el: ElementoCampo): string {
     case "bola":
       return "Bola";
     case "cone":
-      return "Cone";
+      return el.cor ? `Cone (${el.cor})` : "Cone";
     case "baliza":
       return "Baliza";
     case "seta":
@@ -106,5 +106,9 @@ export function rotuloElemento(el: ElementoCampo): string {
       return "Linha";
     case "texto":
       return `Texto: ${el.conteudo}`;
+    case "escadinha":
+      return `Escadinha de agilidade (${el.tamanho})`;
+    case "barras":
+      return "Barras para saltos";
   }
 }

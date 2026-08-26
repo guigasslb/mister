@@ -19,6 +19,7 @@ import {
   Rocket,
   PanelLeftClose,
   PanelLeftOpen,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,11 @@ const ITEM_COMECAR = { href: "/vitoria-rapida", label: "Começar", icon: Rocket 
 // Agenda agregada de todos os escalões — visível a todos os treinadores; o
 // scoping pelos escalões legíveis é feito em obterAgendaClube (§6.4, F P2.2).
 const ITEM_AGENDA = { href: "/agenda", label: "Agenda", icon: CalendarRange };
+// Backoffice interno (/admin) — SÓ visível a admins de plataforma
+// (Utilizador.isAdmin na BD, §21.1). Colocado no fim da lista, isolado das
+// vistas de clube. O acesso é sempre re-validado server-side por
+// `exigirAdminPlataforma` no layout do grupo (admin); este item é só o atalho.
+const ITEM_ADMIN = { href: "/admin", label: "Backoffice", icon: ShieldCheck };
 
 // Ordem pensada para a bottom-nav (móvel): os 4 primeiros são fixos. Jogos vem
 // antes de Exercícios porque, no dia-a-dia do treinador, é mais crítico.
@@ -54,13 +60,17 @@ const ITENS_BASE = [
  * @param mostrarAgenda Mostra o item "Agenda" (vista agregada de todos os
  * escalões) — disponível a todos os treinadores; obterAgendaClube faz o
  * scoping pelos escalões legíveis de cada membro (P2.2 / §8.x, §6.4).
+ * @param mostrarAdmin Mostra o atalho "Backoffice" (/admin) — SÓ para admins de
+ * plataforma (Utilizador.isAdmin, §21.1). Avaliado server-side no layout.
  */
 export function Navegacao({
   mostrarComecar = false,
   mostrarAgenda = false,
+  mostrarAdmin = false,
 }: {
   mostrarComecar?: boolean;
   mostrarAgenda?: boolean;
+  mostrarAdmin?: boolean;
 }) {
   const pathname = usePathname();
   const [maisAberto, setMaisAberto] = useState(false);
@@ -136,9 +146,14 @@ export function Navegacao({
     : ITENS_BASE;
 
   // "Começar" entra logo a seguir ao Início, para ficar visível na bottom-nav.
-  const ITENS = mostrarComecar
+  const ITENS_COM_COMECAR = mostrarComecar
     ? [ITENS_COM_AGENDA[0], ITEM_COMECAR, ...ITENS_COM_AGENDA.slice(1)]
     : ITENS_COM_AGENDA;
+
+  // Backoffice sempre no fim (isolado das vistas de clube) e só para admins.
+  const ITENS = mostrarAdmin
+    ? [...ITENS_COM_COMECAR, ITEM_ADMIN]
+    : ITENS_COM_COMECAR;
   const ITENS_BOTTOM = ITENS.slice(0, 4);
   const ITENS_MAIS = ITENS.slice(4);
 

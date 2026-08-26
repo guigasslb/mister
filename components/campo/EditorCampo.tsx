@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   MousePointer2,
   User,
@@ -16,6 +16,7 @@ import {
   Check,
   Film,
   Plus,
+  RotateCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +31,15 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { FormatoJogo } from "@prisma/client";
-import { CAMPO_W, CAMPO_H, LinhasCampo, ElementoSVG, rotuloCampo } from "./desenho";
+import {
+  CAMPO_W,
+  CAMPO_H,
+  LinhasCampo,
+  ElementoSVG,
+  rotuloCampo,
+  CONE_CORES,
+  CONE_COR_DEFAULT,
+} from "./desenho";
 import { useEscalaCampo } from "./useEscalaCampo";
 import { usePointerDrag } from "./usePointerDrag";
 import { TimelinePassos } from "./TimelinePassos";
@@ -44,7 +53,9 @@ import type {
   DiagramaCampo,
   ElementoCampo,
   CorJogador,
+  CorCone,
   PassoAnimacao,
+  TamanhoEscadinha,
 } from "@/lib/schemas/exercicio";
 
 type Ferramenta =
@@ -56,6 +67,8 @@ type Ferramenta =
   | "seta"
   | "linha"
   | "texto"
+  | "escadinha"
+  | "barras"
   | "apagar";
 
 type EstiloSeta = "movimento" | "passe" | "conducao";
@@ -67,7 +80,58 @@ const CORES_JOGADOR: { valor: CorJogador; hex: string; nome: string }[] = [
   { valor: "verde", hex: "#16A34A", nome: "Verde" },
 ];
 
-const FERRAMENTAS: { id: Ferramenta; label: string; Icon: typeof User }[] = [
+// Ângulos de rotação predefinidos (graus) para escadinha/barras.
+const ANGULOS: number[] = [0, 45, 90, 135];
+
+const TAMANHOS_ESCADINHA: { valor: TamanhoEscadinha; label: string }[] = [
+  { valor: "pequena", label: "Pequena" },
+  { valor: "media", label: "Média" },
+  { valor: "grande", label: "Grande" },
+];
+
+// Miniaturas SVG inline para as ferramentas sem ícone lucide adequado.
+function IconeEscadinha({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="3" width="16" height="18" rx="1" />
+      <line x1="4" y1="8" x2="20" y2="8" />
+      <line x1="4" y1="13" x2="20" y2="13" />
+      <line x1="4" y1="18" x2="20" y2="18" />
+    </svg>
+  );
+}
+
+function IconeBarras({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <line x1="4" y1="8" x2="20" y2="8" />
+      <line x1="7" y1="8" x2="7" y2="19" />
+      <line x1="17" y1="8" x2="17" y2="19" />
+    </svg>
+  );
+}
+
+const FERRAMENTAS: {
+  id: Ferramenta;
+  label: string;
+  Icon: ComponentType<{ className?: string }>;
+}[] = [
   { id: "selecionar", label: "Selecionar", Icon: MousePointer2 },
   { id: "jogador", label: "Jogador", Icon: User },
   { id: "bola", label: "Bola", Icon: Circle },
@@ -76,6 +140,8 @@ const FERRAMENTAS: { id: Ferramenta; label: string; Icon: typeof User }[] = [
   { id: "seta", label: "Seta", Icon: MoveRight },
   { id: "linha", label: "Linha", Icon: Minus },
   { id: "texto", label: "Texto", Icon: Type },
+  { id: "escadinha", label: "Escadinha", Icon: IconeEscadinha },
+  { id: "barras", label: "Barras", Icon: IconeBarras },
   { id: "apagar", label: "Apagar", Icon: Eraser },
 ];
 
@@ -111,10 +177,15 @@ export function EditorCampo({
 
   const [ferramenta, setFerramenta] = useState<Ferramenta>("selecionar");
   const [corJogador, setCorJogador] = useState<CorJogador>("azul");
+  const [corCone, setCorCone] = useState<CorCone>(CONE_COR_DEFAULT as CorCone);
   const [estiloSeta, setEstiloSeta] = useState<EstiloSeta>("movimento");
   const [orientacaoBaliza, setOrientacaoBaliza] = useState<
     "horizontal" | "vertical"
   >("vertical");
+  // Ângulo do próximo elemento (escadinha/barras) e tamanho da próxima escadinha.
+  const [anguloNovo, setAnguloNovo] = useState<number>(0);
+  const [tamanhoEscadinha, setTamanhoEscadinha] =
+    useState<TamanhoEscadinha>("media");
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const [focadoId, setFocadoId] = useState<string | null>(null);
   const [historico, setHistorico] = useState<DiagramaCampo[]>([]);
@@ -267,7 +338,10 @@ export function EditorCampo({
       }
       case "cone": {
         registarHistorico();
-        aplicarElementos([...elementos, { id: novoId(), tipo: "cone", x, y }]);
+        aplicarElementos([
+          ...elementos,
+          { id: novoId(), tipo: "cone", x, y, cor: corCone },
+        ]);
         break;
       }
       case "baliza": {
@@ -275,6 +349,29 @@ export function EditorCampo({
         aplicarElementos([
           ...elementos,
           { id: novoId(), tipo: "baliza", x, y, orientacao: orientacaoBaliza },
+        ]);
+        break;
+      }
+      case "escadinha": {
+        registarHistorico();
+        aplicarElementos([
+          ...elementos,
+          {
+            id: novoId(),
+            tipo: "escadinha",
+            x,
+            y,
+            angulo: anguloNovo,
+            tamanho: tamanhoEscadinha,
+          },
+        ]);
+        break;
+      }
+      case "barras": {
+        registarHistorico();
+        aplicarElementos([
+          ...elementos,
+          { id: novoId(), tipo: "barras", x, y, angulo: anguloNovo },
         ]);
         break;
       }
@@ -430,6 +527,46 @@ export function EditorCampo({
     anunciar("Elemento apagado");
   }
 
+  // Muda a cor de um cone já colocado (via selecção). Atualiza também a cor
+  // ativa da ferramenta para o próximo cone a colocar.
+  function mudarCorCone(id: string, cor: CorCone) {
+    registarHistorico();
+    aplicarElementos(
+      elementos.map((el) =>
+        el.id === id && el.tipo === "cone" ? { ...el, cor } : el,
+      ),
+    );
+    setCorCone(cor);
+    anunciar(`Cor do cone alterada para ${cor}`);
+  }
+
+  // Roda uma escadinha/barras já colocada (via selecção). Atualiza também o
+  // ângulo ativo da ferramenta para o próximo elemento a colocar.
+  function mudarAnguloElemento(id: string, angulo: number) {
+    registarHistorico();
+    aplicarElementos(
+      elementos.map((el) =>
+        el.id === id && (el.tipo === "escadinha" || el.tipo === "barras")
+          ? { ...el, angulo }
+          : el,
+      ),
+    );
+    setAnguloNovo(angulo);
+    anunciar(`Elemento rodado para ${angulo}°`);
+  }
+
+  // Muda o tamanho de uma escadinha já colocada (via selecção).
+  function mudarTamanhoEscadinha(id: string, tamanho: TamanhoEscadinha) {
+    registarHistorico();
+    aplicarElementos(
+      elementos.map((el) =>
+        el.id === id && el.tipo === "escadinha" ? { ...el, tamanho } : el,
+      ),
+    );
+    setTamanhoEscadinha(tamanho);
+    anunciar(`Tamanho da escadinha alterado para ${tamanho}`);
+  }
+
   function alternarModoAnimacao() {
     setModoAnimacao((v) => {
       const proximo = !v;
@@ -473,6 +610,16 @@ export function EditorCampo({
   const desenhandoCaminho = ferramenta === "seta" || ferramenta === "linha";
   const aEditarPasso = keyframeActivo >= 0;
   const ferramentasVisiveis = !aEditarPasso;
+
+  const elementoSelecionado = selecionadoId
+    ? elementosRender.find((el) => el.id === selecionadoId)
+    : null;
+  const coneSelecionado =
+    elementoSelecionado?.tipo === "cone" ? elementoSelecionado : null;
+  const escadinhaSelecionada =
+    elementoSelecionado?.tipo === "escadinha" ? elementoSelecionado : null;
+  const barrasSelecionada =
+    elementoSelecionado?.tipo === "barras" ? elementoSelecionado : null;
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
@@ -684,6 +831,28 @@ export function EditorCampo({
               </div>
             )}
 
+            {ferramenta === "cone" && (
+              <div className="flex items-center gap-2">
+                <span className="text-cinza-600">Cor do cone:</span>
+                {CONE_CORES.map((c) => (
+                  <button
+                    key={c.valor}
+                    type="button"
+                    aria-label={c.nome}
+                    aria-pressed={corCone === c.valor}
+                    title={c.nome}
+                    onClick={() => setCorCone(c.valor as CorCone)}
+                    className={`h-11 w-11 rounded-full border-2 ${
+                      corCone === c.valor
+                        ? "border-cinza-900"
+                        : "border-cinza-300"
+                    }`}
+                    style={{ backgroundColor: c.hex }}
+                  />
+                ))}
+              </div>
+            )}
+
             {ferramenta === "seta" && (
               <div className="flex items-center gap-2">
                 <span className="text-cinza-600">Estilo:</span>
@@ -735,6 +904,70 @@ export function EditorCampo({
               </div>
             )}
 
+            {ferramenta === "escadinha" && (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-cinza-600">Tamanho:</span>
+                  {TAMANHOS_ESCADINHA.map((t) => (
+                    <button
+                      key={t.valor}
+                      type="button"
+                      aria-pressed={tamanhoEscadinha === t.valor}
+                      onClick={() => setTamanhoEscadinha(t.valor)}
+                      className={`min-h-11 rounded border px-3 py-1 ${
+                        tamanhoEscadinha === t.valor
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-cinza-200"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-cinza-600">Rotação:</span>
+                  {ANGULOS.map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      aria-pressed={anguloNovo === a}
+                      aria-label={`Rodar ${a} graus`}
+                      onClick={() => setAnguloNovo(a)}
+                      className={`min-h-11 min-w-11 rounded border px-2 py-1 ${
+                        anguloNovo === a
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-cinza-200"
+                      }`}
+                    >
+                      {a}°
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {ferramenta === "barras" && (
+              <div className="flex items-center gap-2">
+                <span className="text-cinza-600">Rotação:</span>
+                {ANGULOS.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    aria-pressed={anguloNovo === a}
+                    aria-label={`Rodar ${a} graus`}
+                    onClick={() => setAnguloNovo(a)}
+                    className={`min-h-11 min-w-11 rounded border px-2 py-1 ${
+                      anguloNovo === a
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-cinza-200"
+                    }`}
+                  >
+                    {a}°
+                  </button>
+                ))}
+              </div>
+            )}
+
             {desenhandoCaminho && (
               <div className="flex items-center gap-2">
                 <span className="text-cinza-600">
@@ -762,6 +995,113 @@ export function EditorCampo({
                     Cancelar
                   </Button>
                 )}
+              </div>
+            )}
+
+            {ferramenta === "selecionar" && coneSelecionado && (
+              <div className="flex items-center gap-2">
+                <span className="text-cinza-600">Cor do cone:</span>
+                {CONE_CORES.map((c) => {
+                  const ativa =
+                    (coneSelecionado.cor ?? CONE_COR_DEFAULT) === c.valor;
+                  return (
+                    <button
+                      key={c.valor}
+                      type="button"
+                      aria-label={c.nome}
+                      aria-pressed={ativa}
+                      title={c.nome}
+                      onClick={() =>
+                        mudarCorCone(coneSelecionado.id, c.valor as CorCone)
+                      }
+                      className={`h-11 w-11 rounded-full border-2 ${
+                        ativa ? "border-cinza-900" : "border-cinza-300"
+                      }`}
+                      style={{ backgroundColor: c.hex }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {ferramenta === "selecionar" && escadinhaSelecionada && (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-cinza-600">Tamanho:</span>
+                  {TAMANHOS_ESCADINHA.map((t) => {
+                    const ativa = escadinhaSelecionada.tamanho === t.valor;
+                    return (
+                      <button
+                        key={t.valor}
+                        type="button"
+                        aria-pressed={ativa}
+                        onClick={() =>
+                          mudarTamanhoEscadinha(escadinhaSelecionada.id, t.valor)
+                        }
+                        className={`min-h-11 rounded border px-3 py-1 ${
+                          ativa
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-cinza-200"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2">
+                  <RotateCw className="h-4 w-4 text-cinza-600" />
+                  <span className="text-cinza-600">Rotação:</span>
+                  {ANGULOS.map((a) => {
+                    const ativa = escadinhaSelecionada.angulo === a;
+                    return (
+                      <button
+                        key={a}
+                        type="button"
+                        aria-pressed={ativa}
+                        aria-label={`Rodar ${a} graus`}
+                        onClick={() =>
+                          mudarAnguloElemento(escadinhaSelecionada.id, a)
+                        }
+                        className={`min-h-11 min-w-11 rounded border px-2 py-1 ${
+                          ativa
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-cinza-200"
+                        }`}
+                      >
+                        {a}°
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {ferramenta === "selecionar" && barrasSelecionada && (
+              <div className="flex items-center gap-2">
+                <RotateCw className="h-4 w-4 text-cinza-600" />
+                <span className="text-cinza-600">Rotação:</span>
+                {ANGULOS.map((a) => {
+                  const ativa = barrasSelecionada.angulo === a;
+                  return (
+                    <button
+                      key={a}
+                      type="button"
+                      aria-pressed={ativa}
+                      aria-label={`Rodar ${a} graus`}
+                      onClick={() =>
+                        mudarAnguloElemento(barrasSelecionada.id, a)
+                      }
+                      className={`min-h-11 min-w-11 rounded border px-2 py-1 ${
+                        ativa
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-cinza-200"
+                      }`}
+                    >
+                      {a}°
+                    </button>
+                  );
+                })}
               </div>
             )}
 

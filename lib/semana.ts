@@ -53,3 +53,20 @@ export function semanaSobrepoePlaneamento(
   return segunda.getTime() <= new Date(planFim).getTime() &&
     dom.getTime() >= new Date(planInicio).getTime();
 }
+
+/** Início do dia (00:00) de `d`. */
+export function inicioDoDia(d: Date): Date {
+  const dt = new Date(d);
+  dt.setHours(0, 0, 0, 0);
+  return dt;
+}
+
+/**
+ * True se um treino já foi realizado — ou seja, a data é estritamente anterior
+ * ao dia de hoje (`data < inicioDoDia(agora)`). Um treino marcado para hoje
+ * ainda NÃO está concluído (pode acontecer mais logo). Helper puro, partilhado
+ * entre a lista e o detalhe do treino para tratamento visual consistente.
+ */
+export function treinoConcluido(data: Date, agora: Date = new Date()): boolean {
+  return new Date(data).getTime() < inicioDoDia(agora).getTime();
+}

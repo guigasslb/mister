@@ -91,6 +91,11 @@ export function PainelEscalao({
 
   const semJogos = dados.jogos === 0;
 
+  // Sessões executadas (§10.2): já realizadas (`data < agora`), subconjunto das
+  // programadas. Snapshots antigos não têm o campo — o default (= total) garante
+  // zero regressão na vista pública de relatórios.
+  const sessoesExecutadas = dados.sessoesExecutadas ?? dados.sessoes;
+
   return (
     <div className="space-y-8">
       {/* Filtro por competição (P2.5) — só quando há competições com jogos. */}
@@ -116,7 +121,12 @@ export function PainelEscalao({
         <h2 className="text-titulo-seccao text-cinza-900">Plantel e médias</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <CartaoKpi valor={dados.nAtletas} label="atletas" icon={Users} cor="primary" />
-          <CartaoKpi valor={dados.sessoes} label="sessões" icon={CalendarCheck} cor="primary" />
+          <CartaoKpi
+            valor={`${sessoesExecutadas}/${dados.sessoes}`}
+            label="sessões realizadas"
+            icon={CalendarCheck}
+            cor="primary"
+          />
           <CartaoKpi
             valor={pct(dados.taxaPresencaMedia)}
             label="presença média"

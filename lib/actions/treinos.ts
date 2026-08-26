@@ -24,6 +24,8 @@ const INCLUDE_LISTA = {
   _count: { select: { exercicios: true } },
   presencas: { select: { estado: true } },
   planeamento: { select: { id: true, tipo: true, dataInicio: true, dataFim: true, microciclo: true } },
+  // Etiqueta discreta de autor nas listagens: quem criou a sessão (§ mostrar criador).
+  criador: { select: { id: true, nome: true } },
 } as const;
 
 const INCLUDE_DETALHE = {

@@ -243,6 +243,35 @@ export async function exigirCapacidadeEmAlgumEscalao(
 }
 
 /**
+ * Escalão "principal" do utilizador autenticado (para seleção por defeito de tabs
+ * por escalão — treinos, plantel, analíticos). A fonte de verdade é a atribuição
+ * membro↔escalão (`AtribuicaoEscalao`, via `escaloesAtribuidos`).
+ *
+ * Regras:
+ *  - null se não autenticado / sem adesão ativa (modo individual sem clube).
+ *  - null se o membro não tem nenhum escalão atribuído — caso típico de perfis de
+ *    âmbito TODO_CLUBE (admin de clube, presidente) ou SECCAO (coordenador), que
+ *    gerem por âmbito e não por atribuição direta. Nesses casos a UI deve usar o
+ *    seu próprio default (ex.: primeira tab).
+ *  - Com múltiplos escalões atribuídos, o "principal" é o de menor `ordem`
+ *    (mesma ordenação usada em todo o lado; desempate por `nome` e `id` para
+ *    determinismo). Filtra sempre pelo clube da adesão ativa.
+ */
+export const obterEscalaoDoUtilizador = cache(async (): Promise<string | null> => {
+  const ctx = await obterMembroAtual();
+  if (!ctx) return null;
+  if (ctx.escaloesAtribuidos.length === 0) return null;
+
+  const principal = await prisma.escalao.findFirst({
+    where: { id: { in: ctx.escaloesAtribuidos }, clubeId: ctx.clube.id },
+    orderBy: [{ ordem: "asc" }, { nome: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+
+  return principal?.id ?? null;
+});
+
+/**
  * IDs dos escalões que o membro atual pode LER.
  * Devolve "TODOS" quando o âmbito é todo o clube (sem restrição).
  * Devolve [] se não houver membro ativo.

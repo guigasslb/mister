@@ -31,6 +31,8 @@ const INCLUDE_LISTA = {
   escalao: {
     select: { id: true, nome: true, seccao: { select: { modalidade: true } } },
   },
+  // Etiqueta discreta de autor nas listagens: quem criou o jogo (§ mostrar criador).
+  criador: { select: { id: true, nome: true } },
 } as const;
 
 // F5 (M15): eventos ordenados por minuto e depois por ordem de registo.

@@ -30,6 +30,9 @@ export type FiltroModalidade = Modalidade | "TODAS";
 
 const PATH = "/exercicios";
 
+/** Identidade mínima do autor, para a etiqueta discreta de criador nas listagens. */
+export type CriadorLite = { id: string; nome: string } | null;
+
 /** Exercício da biblioteca, anotado com a origem (🎒 pessoal ou 🏛️ clube). */
 export type ExercicioBiblioteca = Exercicio & {
   origem: OrigemBiblioteca;
@@ -40,10 +43,15 @@ export type ExercicioBiblioteca = Exercicio & {
    * "Remover da biblioteca do clube" (o toggle da secção 3.3).
    */
   naBibliotecaDoClube: boolean;
+  /** Autor do exercício, para a etiqueta discreta de criador (null se legado). */
+  criador: CriadorLite;
 };
 
 /** Linha do Prisma com as partilhas do clube ativo carregadas. */
-type ExercicioComPartilhas = Exercicio & { partilhasClube: { id: string }[] };
+type ExercicioComPartilhas = Exercicio & {
+  partilhasClube: { id: string }[];
+  criador: CriadorLite;
+};
 
 /**
  * Anota a linha com origem + presença na biblioteca do clube e remove a relação
@@ -113,7 +121,10 @@ export async function listarExercicios(
           : []),
       ],
     },
-    include: { partilhasClube: { where: { clubeId: ctx.clubeId }, select: { id: true } } },
+    include: {
+      partilhasClube: { where: { clubeId: ctx.clubeId }, select: { id: true } },
+      criador: { select: { id: true, nome: true } },
+    },
     orderBy: [{ categoriaPrincipal: "asc" }, { nome: "asc" }],
   });
 
@@ -126,7 +137,10 @@ export async function obterExercicio(id: string): Promise<Resultado<ExercicioBib
 
   const exercicio = await prisma.exercicio.findFirst({
     where: { AND: [{ id }, filtroExerciciosVisiveis(ctx.clubeId, ctx.utilizadorId)] },
-    include: { partilhasClube: { where: { clubeId: ctx.clubeId }, select: { id: true } } },
+    include: {
+      partilhasClube: { where: { clubeId: ctx.clubeId }, select: { id: true } },
+      criador: { select: { id: true, nome: true } },
+    },
   });
   if (!exercicio) return erro("Exercício não encontrado");
   return ok(anotar(exercicio, ctx.clubeId, ctx.utilizadorId));

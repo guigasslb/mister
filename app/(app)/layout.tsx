@@ -62,14 +62,20 @@ export default async function AppLayout({
     });
     if (!utilizadorExiste) redirect("/login");
 
+    // Admin de plataforma (`Utilizador.isAdmin` na BD) — operador do produto,
+    // independente de qualquer papel de clube. Avaliado UMA vez e reutilizado
+    // para: (a) o redirect de onboarding abaixo; (b) o atalho "Backoffice" na
+    // navegação. Routing puro — a autenticação fica intocada.
+    const eAdmin = await eAdminPlataforma(session.user.email);
+
     // Sem clube ativo → onboarding (criar clube ou aceitar convite).
-    // Exceção: um admin de plataforma (`Utilizador.isAdmin` na BD) não é um papel
-    // de clube — é um operador do produto e, por isso, não tem MembroClube. Sem
-    // esta exceção, o admin cairia no onboarding (/criar-clube). Enviá-lo para o
-    // backoffice interno (/admin). Routing puro — a autenticação fica intocada.
+    // Exceção: um admin de plataforma não tem MembroClube; sem esta exceção
+    // cairia no onboarding (/criar-clube). Enviá-lo antes para o backoffice
+    // interno (/admin). Um admin COM clube (conta híbrida) não é redirecionado —
+    // fica no dashboard e acede ao backoffice pelo atalho da navegação.
     const membro = await obterMembroAtual();
     if (!membro) {
-      if (await eAdminPlataforma(session.user.email)) redirect("/admin");
+      if (eAdmin) redirect("/admin");
       redirect("/criar-clube");
     }
 
@@ -163,6 +169,10 @@ export default async function AppLayout({
               // Agenda visível a todos os treinadores autenticados: obterAgendaClube
               // já faz o scoping pelos escalões legíveis de cada membro (§6.4).
               mostrarAgenda={true}
+              // Atalho "Backoffice" (/admin) só para admins de plataforma. O acesso
+              // é sempre re-validado server-side por exigirAdminPlataforma no grupo
+              // (admin); a prop só controla a visibilidade do item de navegação.
+              mostrarAdmin={eAdmin}
             />
 
             <ScrollTopo />

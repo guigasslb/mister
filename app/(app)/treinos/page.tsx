@@ -9,9 +9,9 @@ import {
   CalendarDays,
   CalendarRange,
   CalendarClock,
-  LayoutTemplate,
   ChevronRight,
   CalendarPlus,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listarSessoes, type SessaoLista } from "@/lib/actions/treinos";
@@ -19,7 +19,14 @@ import { listarEscaloes } from "@/lib/actions/escaloes";
 import { listarPlaneamentos } from "@/lib/actions/periodizacao";
 import { listarReunioes } from "@/lib/actions/reunioes";
 import { obterEpocaAtiva } from "@/lib/epoca-context";
-import { segundaFeira, domingo, numeroSemana, semanaSobrepoePlaneamento } from "@/lib/semana";
+import { obterEscalaoDoUtilizador } from "@/lib/permissoes";
+import {
+  segundaFeira,
+  domingo,
+  numeroSemana,
+  semanaSobrepoePlaneamento,
+  treinoConcluido,
+} from "@/lib/semana";
 import { LABEL_MOMENTO_SEMANA, type MomentoSemana } from "@/lib/schemas/treino";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { CalendarioTreinos } from "@/components/treinos/CalendarioTreinos";
@@ -75,8 +82,22 @@ export default async function TreinosPage({
 }: {
   searchParams: Promise<{ escalaoId?: string; vista?: string; mes?: string }>;
 }) {
-  const { escalaoId, vista, mes } = await searchParams;
-  const ehCalendario = vista === "calendario";
+  const { escalaoId: escalaoIdRaw, vista, mes } = await searchParams;
+  // Resolução do escalão em contexto. `escalaoIdRaw` pode ser:
+  //   undefined/"" → primeira visita: usar o escalão do treinador (ou "Todos" se null);
+  //   "todos"      → sentinel explícito da tab "Todos" (sem filtro);
+  //   "<cuid>"     → escalão específico escolhido.
+  let escalaoId: string | undefined;
+  if (!escalaoIdRaw || escalaoIdRaw === "") {
+    const def = await obterEscalaoDoUtilizador();
+    escalaoId = def ?? undefined;
+  } else if (escalaoIdRaw === "todos") {
+    escalaoId = undefined;
+  } else {
+    escalaoId = escalaoIdRaw;
+  }
+  // Vista padrão: calendário. A lista só aparece com `vista=lista` explícito.
+  const ehCalendario = vista !== "lista";
 
   const [resEscaloes, resSessoes, resPlan, resReunioes, epoca] = await Promise.all([
     listarEscaloes(),
@@ -163,12 +184,6 @@ export default async function TreinosPage({
         <h1>Treinos</h1>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/treinos/templates">
-              <LayoutTemplate className="h-4 w-4" />
-              Usar template
-            </Link>
-          </Button>
-          <Button asChild variant="outline">
             <Link href="/treinos/periodizacao">
               <CalendarRange className="h-4 w-4" />
               Periodização
@@ -193,7 +208,7 @@ export default async function TreinosPage({
       {escaloes.length > 0 && (
         <div className="-mb-px flex flex-wrap border-b border-cinza-200">
           <Link
-            href="/treinos"
+            href="/treinos?escalaoId=todos"
             className={`px-4 py-2.5 text-corpo font-medium border-b-2 transition-colors ${
               !escalaoId
                 ? "border-primary text-primary"
@@ -318,19 +333,40 @@ export default async function TreinosPage({
                     {g.sessoes.map((s) => {
                       const presentes = s.presencas.filter((p) => PRESENTES.has(p.estado)).length;
                       const momento = s.momentoSemana as MomentoSemana | null;
+                      // Treino já realizado: apagado visualmente (opacidade + cinza)
+                      // para se distinguir de imediato dos próximos, sem ler a data.
+                      const concluido = treinoConcluido(s.data);
                       return (
                         <li key={s.id}>
                           <Link
                             href={`/treinos/${s.id}`}
-                            className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-cinza-50"
+                            className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-cinza-50 ${
+                              concluido ? "bg-cinza-50/40" : ""
+                            }`}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <span className="text-corpo font-medium text-cinza-900">
+                                <span
+                                  className={`text-corpo font-medium ${
+                                    concluido ? "text-cinza-500" : "text-cinza-900"
+                                  }`}
+                                >
                                   {formatarDiaHora(s.data)}
                                 </span>
+                                {concluido && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-cinza-100 px-2 py-0.5 text-legenda font-medium text-cinza-500">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Concluído
+                                  </span>
+                                )}
                                 {momento && (
-                                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-legenda font-medium text-primary">
+                                  <span
+                                    className={`rounded px-1.5 py-0.5 text-legenda font-medium ${
+                                      concluido
+                                        ? "bg-cinza-100 text-cinza-500"
+                                        : "bg-primary/10 text-primary"
+                                    }`}
+                                  >
                                     {LABEL_MOMENTO_SEMANA[momento]}
                                   </span>
                                 )}
@@ -361,6 +397,11 @@ export default async function TreinosPage({
                               {s.objetivo && (
                                 <p className="mt-1 line-clamp-1 text-legenda text-cinza-500">
                                   {s.objetivo}
+                                </p>
+                              )}
+                              {s.criador && (
+                                <p className="mt-0.5 text-right text-[10px] text-cinza-400">
+                                  Criado por {s.criador.nome}
                                 </p>
                               )}
                             </div>

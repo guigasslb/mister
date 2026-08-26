@@ -238,6 +238,104 @@ describe("diagramaSchema", () => {
     };
     expect(diagramaSchema.safeParse(mau).success).toBe(false);
   });
+
+  it("aceita cone sem cor (retrocompatível → laranja)", () => {
+    const d = {
+      versao: 2,
+      elementos: [{ id: "c", tipo: "cone", x: 100, y: 100 }],
+    };
+    expect(diagramaSchema.safeParse(d).success).toBe(true);
+  });
+
+  it("aceita cone com cores válidas", () => {
+    for (const cor of ["laranja", "amarelo", "vermelho", "azul", "verde", "branco"]) {
+      const d = {
+        versao: 2,
+        elementos: [{ id: "c", tipo: "cone", x: 100, y: 100, cor }],
+      };
+      expect(diagramaSchema.safeParse(d).success, cor).toBe(true);
+    }
+  });
+
+  it("rejeita cor de cone inválida", () => {
+    const mau = {
+      versao: 2,
+      elementos: [{ id: "c", tipo: "cone", x: 100, y: 100, cor: "rosa" }],
+    };
+    expect(diagramaSchema.safeParse(mau).success).toBe(false);
+  });
+
+  it("aceita escadinha mínima (aplica defaults: ângulo 0, tamanho média)", () => {
+    const d = {
+      versao: 2,
+      elementos: [{ id: "e", tipo: "escadinha", x: 100, y: 80 }],
+    };
+    const r = diagramaSchema.safeParse(d);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      const el = r.data.elementos[0];
+      expect(el.tipo).toBe("escadinha");
+      if (el.tipo === "escadinha") {
+        expect(el.angulo).toBe(0);
+        expect(el.tamanho).toBe("media");
+      }
+    }
+  });
+
+  it("aceita escadinha com ângulo e tamanho explícitos", () => {
+    const d = {
+      versao: 2,
+      elementos: [
+        { id: "e", tipo: "escadinha", x: 100, y: 80, angulo: 90, tamanho: "grande" },
+      ],
+    };
+    expect(diagramaSchema.safeParse(d).success).toBe(true);
+  });
+
+  it("rejeita escadinha com tamanho inválido", () => {
+    const mau = {
+      versao: 2,
+      elementos: [{ id: "e", tipo: "escadinha", x: 100, y: 80, tamanho: "enorme" }],
+    };
+    expect(diagramaSchema.safeParse(mau).success).toBe(false);
+  });
+
+  it("rejeita escadinha com ângulo fora do intervalo (0-360)", () => {
+    const mau = {
+      versao: 2,
+      elementos: [{ id: "e", tipo: "escadinha", x: 100, y: 80, angulo: 400 }],
+    };
+    expect(diagramaSchema.safeParse(mau).success).toBe(false);
+  });
+
+  it("aceita barras para saltos (aplica default: ângulo 0)", () => {
+    const d = {
+      versao: 2,
+      elementos: [{ id: "b", tipo: "barras", x: 200, y: 100 }],
+    };
+    const r = diagramaSchema.safeParse(d);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      const el = r.data.elementos[0];
+      if (el.tipo === "barras") expect(el.angulo).toBe(0);
+    }
+  });
+
+  it("aceita barras com ângulo explícito", () => {
+    const d = {
+      versao: 2,
+      elementos: [{ id: "b", tipo: "barras", x: 200, y: 100, angulo: 45 }],
+    };
+    expect(diagramaSchema.safeParse(d).success).toBe(true);
+  });
+
+  it("rejeita barras com coordenadas fora do campo (0-400 / 0-200)", () => {
+    const mau = {
+      versao: 2,
+      elementos: [{ id: "b", tipo: "barras", x: 500, y: 100 }],
+    };
+    expect(diagramaSchema.safeParse(mau).success).toBe(false);
+  });
 });
 
 describe("jogoSchema", () => {

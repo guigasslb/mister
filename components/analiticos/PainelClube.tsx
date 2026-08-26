@@ -35,11 +35,14 @@ function calcularTotais(escaloes: EscalaoResumoClube[]) {
       acc.golosMarcados += r.golosMarcados;
       acc.golosSofridos += r.golosSofridos;
       acc.sessoes += r.sessoes;
+      // Snapshots antigos não têm `sessoesExecutadas` — o default (= total) evita
+      // NaN e garante zero regressão na vista pública de relatórios.
+      acc.sessoesExecutadas += r.sessoesExecutadas ?? r.sessoes;
       return acc;
     },
     {
       nAtletas: 0, jogos: 0, vitorias: 0, empates: 0, derrotas: 0,
-      golosMarcados: 0, golosSofridos: 0, sessoes: 0,
+      golosMarcados: 0, golosSofridos: 0, sessoes: 0, sessoesExecutadas: 0,
     },
   );
   // Reconstrói presenças/slots por escalão (taxa = presenças / slots no servidor)
@@ -106,6 +109,9 @@ export function PainelClube({
   const totais =
     mostrarFiltro && filtro !== "TODAS" ? calcularTotais(escaloes) : dados.totais;
 
+  // Sessões executadas do clube (§10.2). Fallback ao total para snapshots antigos.
+  const sessoesExecutadasTotais = totais.sessoesExecutadas ?? totais.sessoes;
+
   // Balanço da época (P2-06): com filtro ativo deriva do subconjunto; sem
   // filtro usa o balanço do servidor (fallback ao totais em snapshots antigos
   // que ainda não têm o campo `balanco`).
@@ -154,7 +160,10 @@ export function PainelClube({
         <Cartao valor={escaloes.length} label="escalões" />
         <Cartao valor={totais.nAtletas} label="atletas" />
         <Cartao valor={totais.jogos} label="jogos" />
-        <Cartao valor={totais.sessoes} label="sessões" />
+        <Cartao
+          valor={`${sessoesExecutadasTotais}/${totais.sessoes}`}
+          label="sessões realizadas"
+        />
         <Cartao valor={totais.golosMarcados} label="golos M" />
         <Cartao valor={pct(totais.taxaPresencaMediaGlobal)} label="presença méd." />
       </div>
@@ -189,6 +198,7 @@ export function PainelClube({
                 <th className="px-3 py-2.5 text-center font-medium">V-E-D</th>
                 <th className="px-3 py-2.5 text-right font-medium">Golos M/S</th>
                 <th className="px-3 py-2.5 text-right font-medium">Sessões</th>
+                <th className="px-3 py-2.5 text-right font-medium">Realizadas</th>
                 <th className="px-5 py-2.5 text-right font-medium">Presença</th>
               </tr>
             </thead>
@@ -196,7 +206,7 @@ export function PainelClube({
               {escaloes.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-5 py-6 text-center text-corpo-sec text-cinza-500"
                   >
                     Sem escalões nesta modalidade.
@@ -226,6 +236,9 @@ export function PainelClube({
                       {e.golosMarcados}/{e.golosSofridos}
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums">{e.sessoes}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-cinza-600">
+                      {e.sessoesExecutadas ?? e.sessoes}
+                    </td>
                     <td className="px-5 py-3 text-right tabular-nums font-medium text-primary">
                       {pct(e.taxaPresencaMedia)}
                     </td>

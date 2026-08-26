@@ -7,6 +7,17 @@ const pontoSchema = z.object({ x: z.number(), y: z.number() });
 
 const corJogadorSchema = z.enum(["azul", "vermelho", "amarelo", "verde"]);
 
+// Cores de cone (secção 13.3). Ausente → laranja (default/retrocompatível com
+// diagramas gravados antes do suporte multicolor).
+const corConeSchema = z.enum([
+  "laranja",
+  "amarelo",
+  "vermelho",
+  "azul",
+  "verde",
+  "branco",
+]);
+
 const jogadorSchema = z.object({
   id: z.string(),
   tipo: z.literal("jogador"),
@@ -31,6 +42,8 @@ const coneSchema = z.object({
   tipo: z.literal("cone"),
   x: z.number().min(0).max(400),
   y: z.number().min(0).max(200),
+  // Ausente → laranja (default/retrocompatível).
+  cor: corConeSchema.optional(),
 });
 
 const balizaSchema = z.object({
@@ -64,6 +77,31 @@ const textoSchema = z.object({
   conteudo: z.string().max(120),
 });
 
+// Tamanho da escadinha (nº de degraus derivado no render — secção 11.2).
+const tamanhoEscadinhaSchema = z.enum(["pequena", "media", "grande"]);
+
+// Escadinha de agilidade (escada de coordenação deitada no chão). Suporta
+// rotação (`angulo`, graus 0–360) para o treinador a orientar no campo.
+// `angulo`/`tamanho` têm default (media, 0°) — o editor coloca sempre valores
+// explícitos, mas o default garante robustez na leitura.
+const escadinhaSchema = z.object({
+  id: z.string(),
+  tipo: z.literal("escadinha"),
+  x: z.number().min(0).max(400),
+  y: z.number().min(0).max(200),
+  angulo: z.number().min(0).max(360).default(0),
+  tamanho: tamanhoEscadinhaSchema.default("media"),
+});
+
+// Barras para saltos (mini-barreiras/obstáculos). Suporta rotação (`angulo`).
+const barrasSchema = z.object({
+  id: z.string(),
+  tipo: z.literal("barras"),
+  x: z.number().min(0).max(400),
+  y: z.number().min(0).max(200),
+  angulo: z.number().min(0).max(360).default(0),
+});
+
 export const elementoCampoSchema = z.discriminatedUnion("tipo", [
   jogadorSchema,
   bolaSchema,
@@ -72,6 +110,8 @@ export const elementoCampoSchema = z.discriminatedUnion("tipo", [
   setaSchema,
   linhaSchema,
   textoSchema,
+  escadinhaSchema,
+  barrasSchema,
 ]);
 
 // Passo de animação (secção 11.2 da bíblia): posições dos elementos neste passo.
@@ -97,6 +137,7 @@ export const diagramaSchema = z.object({
 export type PassoAnimacao = z.infer<typeof passoAnimacaoSchema>;
 
 export type CorJogador = z.infer<typeof corJogadorSchema>;
+export type CorCone = z.infer<typeof corConeSchema>;
 export type Jogador = z.infer<typeof jogadorSchema>;
 export type Bola = z.infer<typeof bolaSchema>;
 export type Cone = z.infer<typeof coneSchema>;
@@ -104,6 +145,9 @@ export type Baliza = z.infer<typeof balizaSchema>;
 export type Seta = z.infer<typeof setaSchema>;
 export type Linha = z.infer<typeof linhaSchema>;
 export type Texto = z.infer<typeof textoSchema>;
+export type TamanhoEscadinha = z.infer<typeof tamanhoEscadinhaSchema>;
+export type Escadinha = z.infer<typeof escadinhaSchema>;
+export type Barras = z.infer<typeof barrasSchema>;
 export type ElementoCampo = z.infer<typeof elementoCampoSchema>;
 export type DiagramaCampo = z.infer<typeof diagramaSchema>;
 

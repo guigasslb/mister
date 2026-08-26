@@ -297,6 +297,11 @@ enum TipoQuadroTatico {
 }
 
 // Adesão utilizador↔clube. REGRA (lógica): no máximo UMA adesão ATIVA por utilizador.
+/// Garante no máximo uma adesão ATIVO por utilizador — constraint anti-duplicado atómica.
+/// Aplicada por um índice único PARCIAL em SQL (MembroClube_utilizadorId_ativo_unique,
+/// WHERE estado = 'ATIVO'), porque o Prisma ORM não modela índices parciais. Ver a
+/// migração 20260824160000_add_unique_membro_ativo_por_utilizador. Fecha a janela TOCTOU
+/// de criarClube (§5.4): dois pedidos concorrentes não conseguem criar dois clubes.
 model MembroClube {
   id           String       @id @default(cuid())
   utilizadorId String

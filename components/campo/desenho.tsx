@@ -1,5 +1,5 @@
 import { FormatoJogo } from "@prisma/client";
-import type { ElementoCampo } from "@/lib/schemas/exercicio";
+import type { ElementoCampo, TamanhoEscadinha } from "@/lib/schemas/exercicio";
 import { ancoraElemento, rotuloElemento } from "./animacao";
 
 // Dimensões internas do campo (secção 13.1): 1 unidade = 10 cm, campo 400×200.
@@ -20,6 +20,50 @@ const COR_HEX: Record<string, string> = {
 function corParaHex(cor: string): string {
   return COR_HEX[cor] ?? cor;
 }
+
+// ─── Cores de cone (secção 13.3) ─────────────────────────────────────────────
+//
+// Paleta partilhada pelo editor (toolbar) e pelo render. Cada cor tem um
+// preenchimento e um contorno mais escuro para contraste. Ausente → laranja
+// (default/retrocompatível com diagramas gravados antes do multicolor).
+
+export const CONE_COR_DEFAULT = "laranja";
+
+export const CONE_CORES: {
+  valor: string;
+  hex: string;
+  stroke: string;
+  nome: string;
+}[] = [
+  { valor: "laranja", hex: "#F97316", stroke: "#7C2D12", nome: "Laranja" },
+  { valor: "amarelo", hex: "#F5C518", stroke: "#8A6D00", nome: "Amarelo" },
+  { valor: "vermelho", hex: "#DC2626", stroke: "#7F1D1D", nome: "Vermelho" },
+  { valor: "azul", hex: "#2563EB", stroke: "#1E3A8A", nome: "Azul" },
+  { valor: "verde", hex: "#16A34A", stroke: "#14532D", nome: "Verde" },
+  { valor: "branco", hex: "#E5E7EB", stroke: "#6B7280", nome: "Branco" },
+];
+
+const CONE_COR_MAP: Record<string, { hex: string; stroke: string }> =
+  Object.fromEntries(CONE_CORES.map((c) => [c.valor, { hex: c.hex, stroke: c.stroke }]));
+
+function coneCor(cor?: string): { hex: string; stroke: string } {
+  return CONE_COR_MAP[cor ?? CONE_COR_DEFAULT] ?? CONE_COR_MAP[CONE_COR_DEFAULT];
+}
+
+// ─── Escadinha e barras para saltos (secção 11.2) ────────────────────────────
+//
+// Elementos de treino de agilidade/coordenação. Ambos suportam rotação
+// (`angulo`, graus) para orientação no campo. A escadinha deriva o nº de degraus
+// do `tamanho`; as barras têm forma de ⊓.
+
+export const ESCADINHA_COR = "#F5C518"; // amarelo (visível sobre relvado/pitch)
+export const BARRAS_COR = "#2563EB"; // azul
+
+export const ESCADINHA_DEGRAUS: Record<TamanhoEscadinha, number> = {
+  pequena: 4,
+  media: 6,
+  grande: 8,
+};
 
 // ─── Fundos de campo por formato (secção 11.5 + Apêndice B) ──────────────────
 //
@@ -441,18 +485,20 @@ export function ElementoSVG({
         </g>
       );
 
-    case "cone":
+    case "cone": {
+      const { hex, stroke } = coneCor(elemento.cor);
       return (
         <g>
           {decoracoes}
           <polygon
             points={`${elemento.x},${elemento.y - 7} ${elemento.x - 5},${elemento.y + 5} ${elemento.x + 5},${elemento.y + 5}`}
-            fill="#F97316"
-            stroke="#7C2D12"
+            fill={hex}
+            stroke={stroke}
             strokeWidth={0.8}
           />
         </g>
       );
+    }
 
     case "baliza": {
       const horizontal = elemento.orientacao === "horizontal";
@@ -547,6 +593,105 @@ export function ElementoSVG({
           </text>
         </g>
       );
+
+    case "escadinha": {
+      // Escada de coordenação: dois trilhos paralelos + degraus horizontais.
+      // Nº de degraus por tamanho; comprimento e largura em unidades (1u=10cm).
+      const degraus = ESCADINHA_DEGRAUS[elemento.tamanho];
+      const cell = 7; // comprimento de cada célula (entre degraus)
+      const comprimento = degraus * cell;
+      const meiaLargura = 6; // meia-largura da escada (separação dos trilhos)
+      const x0 = -comprimento / 2;
+      const rungs = [];
+      for (let i = 0; i <= degraus; i++) {
+        const rx = x0 + i * cell;
+        rungs.push(
+          <line
+            key={i}
+            x1={rx}
+            y1={-meiaLargura}
+            x2={rx}
+            y2={meiaLargura}
+            stroke={ESCADINHA_COR}
+            strokeWidth={1}
+          />,
+        );
+      }
+      return (
+        <g>
+          {decoracoes}
+          <g
+            transform={`translate(${elemento.x} ${elemento.y}) rotate(${elemento.angulo})`}
+          >
+            {/* Trilhos (lados compridos) */}
+            <line
+              x1={x0}
+              y1={-meiaLargura}
+              x2={-x0}
+              y2={-meiaLargura}
+              stroke={ESCADINHA_COR}
+              strokeWidth={1.4}
+            />
+            <line
+              x1={x0}
+              y1={meiaLargura}
+              x2={-x0}
+              y2={meiaLargura}
+              stroke={ESCADINHA_COR}
+              strokeWidth={1.4}
+            />
+            {rungs}
+          </g>
+        </g>
+      );
+    }
+
+    case "barras": {
+      // Mini-barreira para saltos: duas hastes verticais + barra por cima (⊓).
+      const largura = 12; // separação entre hastes
+      const altura = 9; // altura das hastes
+      const topo = -altura / 2;
+      const base = altura / 2;
+      const meia = largura / 2;
+      return (
+        <g>
+          {decoracoes}
+          <g
+            transform={`translate(${elemento.x} ${elemento.y}) rotate(${elemento.angulo})`}
+          >
+            {/* Barra horizontal superior */}
+            <line
+              x1={-meia}
+              y1={topo}
+              x2={meia}
+              y2={topo}
+              stroke={BARRAS_COR}
+              strokeWidth={2}
+              strokeLinecap="round"
+            />
+            {/* Hastes verticais */}
+            <line
+              x1={-meia}
+              y1={topo}
+              x2={-meia}
+              y2={base}
+              stroke={BARRAS_COR}
+              strokeWidth={2}
+              strokeLinecap="round"
+            />
+            <line
+              x1={meia}
+              y1={topo}
+              x2={meia}
+              y2={base}
+              stroke={BARRAS_COR}
+              strokeWidth={2}
+              strokeLinecap="round"
+            />
+          </g>
+        </g>
+      );
+    }
   }
 }
 
@@ -567,7 +712,11 @@ function pathOndulado(pontos: { x: number; y: number }[]): string {
       const t = k / ondas;
       const px = a.x + dx * t;
       const py = a.y + dy * t;
-      const amp = k % 2 === 0 ? 0 : 3;
+      // As duas últimas ondulações assentam na linha central: assim o segmento
+      // final fica alinhado com a direção real do movimento e a ponta da seta
+      // (markerEnd, orientada por `orient="auto"` a partir do último segmento)
+      // aponta no sentido correto — evita a cabeça "torta" nas setas de condução.
+      const amp = k >= ondas - 1 || k % 2 === 0 ? 0 : 3;
       segs.push(`L ${px + nx * amp} ${py + ny * amp}`);
     }
   }

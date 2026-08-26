@@ -340,6 +340,31 @@ describe("obterAnaliticoEscalao", () => {
     expect(r.dados.distribuicaoTipoTreino.CAPTACAO).toBe(0);
     // taxa média = 3 presenças / (10 atletas × 2 sessões) = 0.15
     expect(r.dados.taxaPresencaMedia).toBeCloseTo(0.15);
+    // Ambas as sessões (2025-09) já passaram → todas executadas.
+    expect(r.dados.sessoes).toBe(2);
+    expect(r.dados.sessoesExecutadas).toBe(2);
+  });
+
+  it("distingue sessões programadas de executadas (data < agora)", async () => {
+    p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
+    p.jogo.findMany.mockResolvedValue([]);
+    // 2 sessões passadas + 1 futura (data > agora) → 3 programadas, 2 executadas.
+    const futura = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    p.sessao.findMany.mockResolvedValue([
+      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
+      { id: "s2", data: new Date("2025-09-08"), tipoSessao: "NORMAL" },
+      { id: "s3", data: futura, tipoSessao: "NORMAL" },
+    ]);
+    p.atletaEscalao.count.mockResolvedValue(5);
+    p.estatisticaAtleta.findMany.mockResolvedValue([]);
+    p.eventoJogo.findMany.mockResolvedValue([]);
+    p.presenca.findMany.mockResolvedValue([]);
+
+    const r = await obterAnaliticoEscalao(ESCALAO);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(r.dados.sessoes).toBe(3);
+    expect(r.dados.sessoesExecutadas).toBe(2);
   });
 
   it("constrói rankings de métricas configuráveis por equipa", async () => {
@@ -512,6 +537,8 @@ describe("obterAnaliticoClubeEpoca", () => {
     expect(sub13.vitorias).toBe(1);
     expect(sub13.nAtletas).toBe(10);
     expect(sub13.sessoes).toBe(2);
+    // Mock devolve o mesmo groupBy para total e executadas → iguais aqui.
+    expect(sub13.sessoesExecutadas).toBe(2);
     expect(r.dados.totais.jogos).toBe(2);
     expect(r.dados.totais.vitorias).toBe(1);
     expect(r.dados.totais.derrotas).toBe(1);
@@ -525,6 +552,42 @@ describe("obterAnaliticoClubeEpoca", () => {
       golosMarcados: 3,
       golosSofridos: 3,
     });
+  });
+
+  it("distingue sessões programadas de executadas por escalão e no total", async () => {
+    p.escalao.findMany.mockResolvedValue([
+      { id: ESCALAO, nome: "Sub-13", ordem: 0 },
+      { id: "esc2", nome: "Sub-15", ordem: 1 },
+    ]);
+    p.jogo.findMany.mockResolvedValue([]);
+    // 1.ª groupBy = programadas (total); 2.ª groupBy = executadas (data < agora).
+    p.sessao.groupBy
+      .mockResolvedValueOnce([
+        { escalaoId: ESCALAO, _count: { _all: 5 } },
+        { escalaoId: "esc2", _count: { _all: 3 } },
+      ])
+      .mockResolvedValueOnce([
+        { escalaoId: ESCALAO, _count: { _all: 4 } },
+        { escalaoId: "esc2", _count: { _all: 1 } },
+      ]);
+    p.atletaEscalao.groupBy.mockResolvedValue([
+      { escalaoId: ESCALAO, _count: { _all: 10 } },
+      { escalaoId: "esc2", _count: { _all: 8 } },
+    ]);
+    p.presenca.groupBy.mockResolvedValue([]);
+
+    const r = await obterAnaliticoClubeEpoca();
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    const sub13 = r.dados.escaloes.find((e) => e.escalaoId === ESCALAO)!;
+    const sub15 = r.dados.escaloes.find((e) => e.escalaoId === "esc2")!;
+    expect(sub13.sessoes).toBe(5);
+    expect(sub13.sessoesExecutadas).toBe(4);
+    expect(sub15.sessoes).toBe(3);
+    expect(sub15.sessoesExecutadas).toBe(1);
+    // Totais: 8 programadas, 5 executadas.
+    expect(r.dados.totais.sessoes).toBe(8);
+    expect(r.dados.totais.sessoesExecutadas).toBe(5);
   });
 
   it("nega sem escalões visíveis", async () => {

@@ -100,6 +100,11 @@ function CartaoExercicio({
             </Badge>
           )}
         </div>
+        {exercicio.criador && (
+          <p className="text-right text-[10px] text-cinza-400">
+            Criado por {exercicio.criador.nome}
+          </p>
+        )}
       </Link>
       {acao && <div className="flex flex-wrap gap-2 border-t border-cinza-200 pt-3">{acao}</div>}
     </div>

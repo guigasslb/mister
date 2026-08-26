@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, MapPin, Clock, AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { MapPin, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { EditarTreinoBotao } from "@/components/treinos/EditarTreinoBotao";
+import { treinoConcluido } from "@/lib/semana";
 import { obterSessao } from "@/lib/actions/treinos";
 import { listarExercicios } from "@/lib/actions/exercicios";
 import { listarAtletas } from "@/lib/actions/atletas";
@@ -18,6 +18,13 @@ import {
 import { RegistoRpeSessao } from "@/components/treinos/RegistoRpeSessao";
 import { IniciarTreinoBotao } from "@/components/treinos/IniciarTreinoBotao";
 import { NotasSessao } from "@/components/treinos/NotasSessao";
+import {
+  obterDuelosDaSessao,
+  listarCompeticoesManoMano,
+  obterCompeticaoManoMano,
+} from "@/lib/actions/mano-a-mano";
+import { nomeParticipanteMatch } from "@/lib/mano-a-mano-ui";
+import { BlocoManoManoSessao } from "@/components/mano-a-mano/BlocoManoManoSessao";
 
 function formatarDataHora(data: Date): string {
   return new Date(data).toLocaleString("pt-PT", {
@@ -62,6 +69,11 @@ export default async function DetalheSessaoPage({
   const foraDaEpoca =
     epoca && (new Date(s.data) < epoca.dataInicio || new Date(s.data) > epoca.dataFim);
 
+  // Treino já realizado: data estritamente anterior a hoje (§ tratamento visual
+  // consistente entre lista e detalhe). Muda o CTA para "Ver treino" e pede
+  // confirmação ao editar.
+  const concluido = treinoConcluido(s.data);
+
   // §4.2.1: fallback ao snapshot quando o exercício original já não é visível (o
   // treinador saiu com o master editável) — sem "buracos". Resolvido uma vez e
   // partilhado entre o gestor de exercícios e o modo treino.
@@ -84,6 +96,57 @@ export default async function DetalheSessaoPage({
     };
   });
 
+  // ── Mano-a-Mano (§3.16): duelos desta sessão + competições ativas do escalão
+  //    para criar duelos ad-hoc entre atletas presentes.
+  const [resDuelos, resCompsManoMano] = await Promise.all([
+    obterDuelosDaSessao(s.id),
+    listarCompeticoesManoMano({ escalaoId: s.escalaoId, estado: "ATIVA" }),
+  ]);
+  const duelosRaw = resDuelos.sucesso ? resDuelos.dados : [];
+  const compsResumo = resCompsManoMano.sucesso ? resCompsManoMano.dados : [];
+  const compsDetalhe = (
+    await Promise.all(compsResumo.map((c) => obterCompeticaoManoMano(c.id)))
+  ).flatMap((r) => (r.sucesso ? [r.dados] : []));
+
+  const competicoesSessao = compsDetalhe.map((c) => ({
+    id: c.id,
+    nome: c.nome,
+    formatoDuelo: c.formatoDuelo,
+    golosParaVencer: c.golosParaVencer,
+    participantes: c.participantes
+      .filter((p) => p.ativo)
+      .map((p) => ({ id: p.id, nome: nomeParticipanteMatch(p), atletaId: p.atletaId })),
+  }));
+
+  const infoComp = new Map(
+    compsDetalhe.map((c) => [
+      c.id,
+      { formatoDuelo: c.formatoDuelo, golosParaVencer: c.golosParaVencer },
+    ]),
+  );
+
+  const duelosSessao = duelosRaw.map((m) => {
+    const info = infoComp.get(m.competicaoId);
+    return {
+      id: m.id,
+      estado: m.estado,
+      golosA: m.golosA,
+      golosB: m.golosB,
+      nomeA: nomeParticipanteMatch(m.participanteA),
+      nomeB: nomeParticipanteMatch(m.participanteB),
+      temAmbos: !!m.participanteAId && !!m.participanteBId,
+      vencedorParticipanteId: m.vencedorParticipanteId,
+      participanteAId: m.participanteAId,
+      participanteBId: m.participanteBId,
+      formatoDuelo: info?.formatoDuelo ?? ("PRIMEIRO_A_DOIS" as const),
+      golosParaVencer: info?.golosParaVencer ?? 2,
+    };
+  });
+
+  const presentesAtletaIds = s.presencas
+    .filter((p) => p.estado === "PRESENTE" || p.estado === "ATRASADO")
+    .map((p) => p.atletaId);
+
   return (
     <div className="space-y-6">
       {/* Navegação */}
@@ -94,12 +157,7 @@ export default async function DetalheSessaoPage({
             { label: s.escalao.nome },
           ]}
         />
-        <Button asChild variant="outline">
-          <Link href={`/treinos/${s.id}/editar`}>
-            <Pencil className="h-4 w-4" />
-            Editar
-          </Link>
-        </Button>
+        <EditarTreinoBotao href={`/treinos/${s.id}/editar`} concluido={concluido} />
       </div>
 
       {/* Cabeçalho */}
@@ -109,6 +167,12 @@ export default async function DetalheSessaoPage({
           <span className="rounded-full bg-primary/5 px-2.5 py-0.5 text-legenda text-primary">
             {s.escalao.nome}
           </span>
+          {concluido && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-cinza-100 px-2.5 py-0.5 text-legenda font-medium text-cinza-600">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Concluído
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap gap-4 text-corpo-sec text-cinza-600">
           {s.duracaoMin && (
@@ -136,6 +200,7 @@ export default async function DetalheSessaoPage({
       {/* Melhoria 3/4.2 — arranque do modo treino (condução em campo). */}
       <IniciarTreinoBotao
         sessaoId={s.id}
+        concluido={concluido}
         exercicios={exerciciosResolvidos.map((e) => ({
           id: e.id,
           nome: e.nome,
@@ -187,6 +252,14 @@ export default async function DetalheSessaoPage({
           categoriaPrincipal: b.categoriaPrincipal,
           duracaoMin: b.duracaoMin,
         }))}
+      />
+
+      {/* §3.16 — duelos Mano-a-Mano agendados/ad-hoc nesta sessão. */}
+      <BlocoManoManoSessao
+        sessaoId={s.id}
+        duelos={duelosSessao}
+        competicoes={competicoesSessao}
+        presentesAtletaIds={presentesAtletaIds}
       />
 
       {/* P4.8 (§8.20): RPE da sessão — alimenta a análise de carga/ACWR do escalão.

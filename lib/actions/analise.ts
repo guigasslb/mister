@@ -626,7 +626,13 @@ export interface AnaliticoEscalao {
   golosSofridos: number;
   golosMarcadosMedia: number;
   golosSofridosMedia: number;
+  /** Sessões programadas (todas as criadas no escalão/época — o total). */
   sessoes: number;
+  /**
+   * Sessões executadas (já realizadas: `data < agora`). As sessões futuras
+   * ficam programadas mas ainda não executadas (§10.2). Subconjunto de `sessoes`.
+   */
+  sessoesExecutadas: number;
   nAtletas: number;
   taxaPresencaMedia: number;
   marcadores: RankingAtleta[];
@@ -793,6 +799,12 @@ export async function obterAnaliticoEscalao(
       },
     }),
   ]);
+
+  // Sessões executadas (§10.2): já realizadas = `data < agora`. Reutiliza a lista
+  // já lida (que traz `data`) — sem query adicional. As futuras ficam programadas
+  // mas por executar. Simetria com a imutabilidade do passado (§8.9.1).
+  const agora = Date.now();
+  const sessoesExecutadas = sessoes.filter((s) => s.data.getTime() < agora).length;
 
   // Resultados V/E/D + golos.
   let vitorias = 0;
@@ -971,6 +983,7 @@ export async function obterAnaliticoEscalao(
     golosMarcadosMedia: jogosComResultado > 0 ? golosMarcados / jogosComResultado : 0,
     golosSofridosMedia: jogosComResultado > 0 ? golosSofridos / jogosComResultado : 0,
     sessoes: sessoes.length,
+    sessoesExecutadas,
     nAtletas,
     // Cap a 1 (100%): atletas que saíram a meio da época podem gerar presenças
     // sem contribuir para o denominador de slots atual, o que inflaria a taxa
@@ -1078,7 +1091,10 @@ export interface EscalaoResumoClube {
   derrotas: number;
   golosMarcados: number;
   golosSofridos: number;
+  /** Sessões programadas do escalão (todas as criadas na época). */
   sessoes: number;
+  /** Sessões executadas do escalão (já realizadas: `data < agora`). */
+  sessoesExecutadas: number;
   taxaPresencaMedia: number;
 }
 
@@ -1105,6 +1121,8 @@ export interface AnaliticoClubeEpoca {
     golosMarcados: number;
     golosSofridos: number;
     sessoes: number;
+    /** Total de sessões executadas do clube na época (já realizadas). */
+    sessoesExecutadas: number;
     taxaPresencaMediaGlobal: number;
   };
   /**
@@ -1150,7 +1168,7 @@ export async function obterAnaliticoClubeEpoca(
   const escalaoIds = escaloes.map((e) => e.id);
   const filtroEpocaEscaloes = { epocaId: epoca.id, escalaoId: { in: escalaoIds } };
 
-  const [jogos, sessoes, participacoes, presencas] = await Promise.all([
+  const [jogos, sessoes, sessoesExecutadas, participacoes, presencas] = await Promise.all([
     prisma.jogo.findMany({
       where: filtroEpocaEscaloes,
       select: { escalaoId: true, golosMarcados: true, golosSofridos: true },
@@ -1158,6 +1176,12 @@ export async function obterAnaliticoClubeEpoca(
     prisma.sessao.groupBy({
       by: ["escalaoId"],
       where: filtroEpocaEscaloes,
+      _count: { _all: true },
+    }),
+    // Sessões executadas por escalão (§10.2): já realizadas = `data < agora`.
+    prisma.sessao.groupBy({
+      by: ["escalaoId"],
+      where: { ...filtroEpocaEscaloes, data: { lt: new Date() } },
       _count: { _all: true },
     }),
     prisma.atletaEscalao.groupBy({
@@ -1186,6 +1210,9 @@ export async function obterAnaliticoClubeEpoca(
   );
   const sessoesPorEscalao = new Map<string, number>(
     sessoes.map((s) => [s.escalaoId, s._count._all]),
+  );
+  const sessoesExecutadasPorEscalao = new Map<string, number>(
+    sessoesExecutadas.map((s) => [s.escalaoId, s._count._all]),
   );
   const presencasPorEscalao = new Map<string, number>(
     presencas.map((p) => [p.escalaoId, p._count._all]),
@@ -1218,6 +1245,7 @@ export async function obterAnaliticoClubeEpoca(
     const j = jogosPorEscalao.get(e.id);
     const nAtletas = nAtletasPorEscalao.get(e.id) ?? 0;
     const nSessoes = sessoesPorEscalao.get(e.id) ?? 0;
+    const nSessoesExecutadas = sessoesExecutadasPorEscalao.get(e.id) ?? 0;
     const nPresencas = presencasPorEscalao.get(e.id) ?? 0;
     const slots = nAtletas * nSessoes;
     return {
@@ -1232,6 +1260,7 @@ export async function obterAnaliticoClubeEpoca(
       golosMarcados: j?.golosMarcados ?? 0,
       golosSofridos: j?.golosSofridos ?? 0,
       sessoes: nSessoes,
+      sessoesExecutadas: nSessoesExecutadas,
       taxaPresencaMedia: slots > 0 ? nPresencas / slots : 0,
     };
   });
@@ -1246,11 +1275,12 @@ export async function obterAnaliticoClubeEpoca(
       acc.golosMarcados += r.golosMarcados;
       acc.golosSofridos += r.golosSofridos;
       acc.sessoes += r.sessoes;
+      acc.sessoesExecutadas += r.sessoesExecutadas;
       return acc;
     },
     {
       nAtletas: 0, jogos: 0, vitorias: 0, empates: 0, derrotas: 0,
-      golosMarcados: 0, golosSofridos: 0, sessoes: 0,
+      golosMarcados: 0, golosSofridos: 0, sessoes: 0, sessoesExecutadas: 0,
     },
   );
   const slotsGlobais = resumos.reduce((acc, r) => acc + r.nAtletas * r.sessoes, 0);

@@ -6,6 +6,8 @@ import {
   domingo,
   numeroSemana,
   semanaSobrepoePlaneamento,
+  inicioDoDia,
+  treinoConcluido,
 } from "@/lib/semana";
 
 const d = (s: string) => new Date(`${s}T12:00:00`);
@@ -49,6 +51,28 @@ describe("lib/semana — helpers puros", () => {
     expect(semanaSobrepoePlaneamento(seg, dom, d("2026-08-31"), d("2026-09-06"))).toBe(true);
     expect(semanaSobrepoePlaneamento(seg, dom, d("2026-09-05"), d("2026-09-12"))).toBe(true);
     expect(semanaSobrepoePlaneamento(seg, dom, d("2026-09-07"), d("2026-09-13"))).toBe(false);
+  });
+
+  it("inicioDoDia zera a hora mantendo o dia local", () => {
+    const inicio = inicioDoDia(d("2026-09-02"));
+    expect(inicio.getFullYear()).toBe(2026);
+    expect(inicio.getMonth()).toBe(8); // setembro
+    expect(inicio.getDate()).toBe(2);
+    expect(inicio.getHours()).toBe(0);
+    expect(inicio.getMinutes()).toBe(0);
+    expect(inicio.getSeconds()).toBe(0);
+  });
+
+  it("treinoConcluido: true só quando a data é estritamente anterior a hoje", () => {
+    const agora = d("2026-09-10"); // referência de "hoje"
+    // Ontem (qualquer hora) → concluído.
+    expect(treinoConcluido(d("2026-09-09"), agora)).toBe(true);
+    expect(treinoConcluido(new Date("2026-09-09T23:59:00"), agora)).toBe(true);
+    // Hoje (mesmo de manhã) → ainda não concluído (pode acontecer mais logo).
+    expect(treinoConcluido(new Date("2026-09-10T00:00:00"), agora)).toBe(false);
+    expect(treinoConcluido(new Date("2026-09-10T20:00:00"), agora)).toBe(false);
+    // Amanhã → futuro, não concluído.
+    expect(treinoConcluido(d("2026-09-11"), agora)).toBe(false);
   });
 });
 

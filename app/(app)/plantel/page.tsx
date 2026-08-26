@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
-import { escaloesLegiveis } from "@/lib/permissoes";
+import { escaloesLegiveis, obterEscalaoDoUtilizador } from "@/lib/permissoes";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { CampoPesquisa } from "@/components/layout/CampoPesquisa";
 import { AvatarAtleta } from "@/components/plantel/AvatarAtleta";
@@ -46,9 +46,21 @@ export default async function PlantelPage({
     q,
     incluirInativos: incluirInativosRaw,
   } = await searchParams;
-  // Query params não confiáveis: valida como CUID; inválido/ausente → sem filtro.
-  const escParse = z.string().cuid().safeParse(escalaoIdRaw);
-  const escalaoId = escParse.success ? escParse.data : undefined;
+  // Resolução do escalão em contexto. O sentinel "todos" é tratado ANTES da
+  // validação CUID (não é um CUID válido). `escalaoIdRaw` pode ser:
+  //   undefined/"" → primeira visita: escalão do treinador (ou "Todos" se null);
+  //   "todos"      → sentinel explícito da tab "Todos" (sem filtro);
+  //   "<cuid>"     → escalão específico (validado como CUID; inválido → sem filtro).
+  let escalaoId: string | undefined;
+  if (!escalaoIdRaw || escalaoIdRaw === "") {
+    const def = await obterEscalaoDoUtilizador();
+    escalaoId = def ?? undefined;
+  } else if (escalaoIdRaw === "todos") {
+    escalaoId = undefined;
+  } else {
+    const escParse = z.string().cuid().safeParse(escalaoIdRaw);
+    escalaoId = escParse.success ? escParse.data : undefined;
+  }
   const secParse = z.string().cuid().safeParse(seccaoIdRaw);
   const seccaoIdParam = secParse.success ? secParse.data : undefined;
   // Por defeito o plantel mostra só ativos; `?incluirInativos=1` inclui os que
@@ -163,7 +175,7 @@ export default async function PlantelPage({
       {multiSeccao && seccoesComEscaloes.length > 0 && (
         <div className="-mb-px flex flex-wrap gap-0 border-b border-cinza-200">
           <Link
-            href="/plantel"
+            href="/plantel?escalaoId=todos"
             className={`${CLS_TAB_BASE} ${tabTodos ? CLS_TAB_ATIVO : CLS_TAB_INATIVO}`}
           >
             Todas as secções
@@ -190,8 +202,8 @@ export default async function PlantelPage({
           <Link
             href={
               multiSeccao && seccaoAtivaId
-                ? `/plantel?seccaoId=${seccaoAtivaId}`
-                : "/plantel"
+                ? `/plantel?seccaoId=${seccaoAtivaId}&escalaoId=todos`
+                : "/plantel?escalaoId=todos"
             }
             className={`${CLS_TAB_BASE} ${!escalaoId ? CLS_TAB_ATIVO : CLS_TAB_INATIVO}`}
           >

@@ -199,6 +199,11 @@ export default async function JogosPage({
                       {j.escalao.nome}
                       {j.competicao ? ` · ${j.competicao}` : ""}
                     </p>
+                    {j.criador && (
+                      <p className="mt-0.5 text-[10px] text-cinza-400">
+                        Criado por {j.criador.nome}
+                      </p>
+                    )}
                   </div>
                   {temResultado && (
                     <div className="text-titulo-seccao font-bold text-cinza-900">
