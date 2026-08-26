@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { cookies } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -11,6 +10,7 @@ import { eAdminPlataforma } from "@/lib/admin-guard";
 import { temLicencaValida } from "@/lib/licenca";
 import { BarraTopo } from "@/components/layout/BarraTopo";
 import { Navegacao } from "@/components/layout/Navegacao";
+import { MarcaAguaClube } from "@/components/layout/MarcaAguaClube";
 import { ScrollTopo } from "@/components/layout/ScrollTopo";
 import { ServicoIndisponivel } from "@/components/layout/ServicoIndisponivel";
 import { GuardaLicenca } from "@/components/layout/GuardaLicenca";
@@ -168,9 +168,6 @@ export default async function AppLayout({
           <div className="flex flex-1 overflow-hidden">
             <Navegacao
               mostrarComecar={plantelVazio}
-              // Agenda visível a todos os treinadores autenticados: obterAgendaClube
-              // já faz o scoping pelos escalões legíveis de cada membro (§6.4).
-              mostrarAgenda={true}
               // Atalho "Backoffice" (/admin) só para admins de plataforma. O acesso
               // é sempre re-validado server-side por exigirAdminPlataforma no grupo
               // (admin); a prop só controla a visibilidade do item de navegação.
@@ -180,16 +177,7 @@ export default async function AppLayout({
             <ScrollTopo />
             <main className="app-surface flex-1 overflow-y-auto p-4 pb-20 md:pb-8 md:p-8">
               {/* Marca de água do clube (logótipo), visível em todos os tamanhos */}
-              {clube.logoUrl && (
-                <Image
-                  src={clube.logoUrl}
-                  alt=""
-                  aria-hidden={true}
-                  fill
-                  sizes="100vw"
-                  className="club-watermark"
-                />
-              )}
+              {clube.logoUrl && <MarcaAguaClube logoUrl={clube.logoUrl} />}
               <div className="app-content animar-entrada mx-auto max-w-[1200px]">
                 {!epocaAtiva && (
                   <div className="mb-4 rounded-md border border-ambar-500/30 bg-ambar-500/10 px-4 py-3 text-corpo text-cinza-900">

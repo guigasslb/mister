@@ -16,7 +16,7 @@ import {
   verificarConflitoSchema,
   type VerificarConflitoInput,
 } from "@/lib/schemas/agenda";
-import type { Prisma, Epoca, TipoSessao } from "@prisma/client";
+import type { Prisma, Epoca, TipoSessao, TipoJogo, CasaFora } from "@prisma/client";
 
 /**
  * Vista agregada da atividade de TODOS os escalões do clube (P2.2 — §8.x).
@@ -24,16 +24,25 @@ import type { Prisma, Epoca, TipoSessao } from "@prisma/client";
  * escalões numa única linha temporal, sem navegar escalão a escalão.
  *
  * É uma leitura agregada — não há entidade nova nem migração: combina os dados
- * que já existem em `Sessao` (treinos) e `Jogo` num único stream cronológico.
+ * que já existem em `Sessao` (treinos), `Jogo` e `Reuniao` num único stream
+ * cronológico.
  */
 export interface EventoAgenda {
   id: string;
-  tipo: "TREINO" | "JOGO";
+  tipo: "TREINO" | "JOGO" | "REUNIAO";
   data: Date;
   escalaoNome: string;
-  /** Título legível: objetivo/tipo do treino ou "vs Adversário" no jogo. */
+  /** Título legível: objetivo/tipo do treino, "vs Adversário" no jogo, título da reunião. */
   titulo: string;
   local?: string | null;
+  /** Tipo de sessão — só presente em eventos de tipo TREINO. */
+  tipoSessao?: TipoSessao;
+  /** Tipo de jogo (oficial/amigável) — só presente em eventos de tipo JOGO. */
+  tipoJogo?: TipoJogo;
+  /** Casa/Fora — só presente em eventos de tipo JOGO. */
+  casaFora?: CasaFora;
+  /** Descrição da reunião — só presente em eventos de tipo REUNIAO. */
+  descricao?: string;
 }
 
 export interface FiltrosAgenda {
@@ -41,6 +50,8 @@ export interface FiltrosAgenda {
   /** Mês 1–12 (com `ano`) para focar num mês específico. */
   mes?: number;
   ano?: number;
+  /** Restringe a agenda a um único tipo de evento (filtro server-side). */
+  tipo?: "TREINO" | "JOGO" | "REUNIAO";
 }
 
 /** Rótulo pt-PT do tipo de sessão, usado como título quando não há objetivo. */
@@ -101,52 +112,119 @@ export async function obterAgendaClube(
 
   const janela = resolverJanela(filtros.mes, filtros.ano);
 
+  // Que tipos de evento incluir. Sem `filtros.tipo`, incluem-se os três
+  // (comportamento atual de agregação completa).
+  const incluirTreinos = !filtros.tipo || filtros.tipo === "TREINO";
+  const incluirJogos = !filtros.tipo || filtros.tipo === "JOGO";
+  const incluirReunioes = !filtros.tipo || filtros.tipo === "REUNIAO";
+
   // Âmbito de leitura por escalão (mesmo padrão de listarSessoes/listarJogos).
   const legiveis = await escaloesLegiveis();
   let filtroEscalao: Prisma.SessaoWhereInput & Prisma.JogoWhereInput = {};
+  // Sessões/Jogos ficam vazios quando não há escalões legíveis e não foi pedido
+  // um escalão específico — mas as reuniões de CLUBE continuam visíveis a
+  // qualquer membro (ver `reuniaoWhere`), pelo que não fazemos short-circuit.
+  let semEscaloesLegiveis = false;
   if (filtros.escalaoId) {
     if (!(await podeLerEscalao(filtros.escalaoId))) return ok([]);
     filtroEscalao = { escalaoId: filtros.escalaoId };
   } else if (legiveis !== "TODOS") {
-    if (legiveis.length === 0) return ok([]);
-    filtroEscalao = { escalaoId: { in: legiveis } };
+    if (legiveis.length === 0) semEscaloesLegiveis = true;
+    else filtroEscalao = { escalaoId: { in: legiveis } };
   }
 
-  const [sessoes, jogos] = await Promise.all([
-    prisma.sessao.findMany({
-      where: {
-        epocaId: ctx.epoca.id,
-        escalao: { clubeId: ctx.clubeId },
-        data: janela,
-        ...filtroEscalao,
-      },
-      select: {
-        id: true,
-        data: true,
-        local: true,
-        objetivo: true,
-        tipoSessao: true,
-        escalao: { select: { nome: true } },
-      },
-      orderBy: { data: "asc" },
-    }),
-    prisma.jogo.findMany({
-      where: {
-        epocaId: ctx.epoca.id,
-        escalao: { clubeId: ctx.clubeId },
-        data: janela,
-        ...filtroEscalao,
-      },
-      select: {
-        id: true,
-        data: true,
-        local: true,
-        adversario: true,
-        escalao: { select: { nome: true } },
-      },
-      orderBy: { data: "asc" },
-    }),
+  // Âmbito das reuniões (mesmo padrão de `listarReunioes`): as de CLUBE são
+  // visíveis a qualquer membro; as de ESCALAO respeitam a legibilidade. Com um
+  // escalão específico selecionado, restringe-se a esse escalão (simetria com
+  // o filtro de treinos/jogos).
+  const reuniaoWhere: Prisma.ReuniaoWhereInput = {
+    clubeId: ctx.clubeId,
+    data: janela,
+    ...(filtros.escalaoId
+      ? { escalaoId: filtros.escalaoId }
+      : {
+          OR: [
+            { ambito: "CLUBE" },
+            legiveis === "TODOS"
+              ? { ambito: "ESCALAO" }
+              : { escalaoId: { in: legiveis } },
+          ],
+        }),
+  };
+
+  const [sessoes, jogos, reunioes] = await Promise.all([
+    incluirTreinos && !semEscaloesLegiveis
+      ? prisma.sessao.findMany({
+          where: {
+            epocaId: ctx.epoca.id,
+            escalao: { clubeId: ctx.clubeId },
+            data: janela,
+            ...filtroEscalao,
+          },
+          select: {
+            id: true,
+            data: true,
+            local: true,
+            objetivo: true,
+            tipoSessao: true,
+            escalao: { select: { nome: true } },
+          },
+          orderBy: { data: "asc" },
+        })
+      : Promise.resolve([]),
+    incluirJogos && !semEscaloesLegiveis
+      ? prisma.jogo.findMany({
+          where: {
+            epocaId: ctx.epoca.id,
+            escalao: { clubeId: ctx.clubeId },
+            data: janela,
+            ...filtroEscalao,
+          },
+          select: {
+            id: true,
+            data: true,
+            local: true,
+            adversario: true,
+            tipo: true,
+            casaFora: true,
+            escalao: { select: { nome: true } },
+          },
+          orderBy: { data: "asc" },
+        })
+      : Promise.resolve([]),
+    incluirReunioes
+      ? prisma.reuniao.findMany({
+          where: reuniaoWhere,
+          select: {
+            id: true,
+            data: true,
+            titulo: true,
+            escalaoId: true,
+            ordemTrabalhos: true,
+          },
+          orderBy: { data: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
+
+  // Reuniao só tem `escalaoId` (FK), sem relação Prisma para Escalao — resolver
+  // os nomes dos escalões referenciados num único query adicional (só quando há
+  // reuniões de escalão). Reuniões de CLUBE (escalaoId null) ficam "Geral".
+  const escalaoIdsReuniao = [
+    ...new Set(
+      reunioes
+        .map((r) => r.escalaoId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const nomesEscaloes = new Map<string, string>();
+  if (escalaoIdsReuniao.length > 0) {
+    const escaloes = await prisma.escalao.findMany({
+      where: { id: { in: escalaoIdsReuniao }, clubeId: ctx.clubeId },
+      select: { id: true, nome: true },
+    });
+    for (const e of escaloes) nomesEscaloes.set(e.id, e.nome);
+  }
 
   const eventos: EventoAgenda[] = [
     ...sessoes.map((s): EventoAgenda => ({
@@ -156,6 +234,7 @@ export async function obterAgendaClube(
       escalaoNome: s.escalao.nome,
       titulo: s.objetivo?.trim() || ROTULO_TIPO_SESSAO[s.tipoSessao],
       local: s.local,
+      tipoSessao: s.tipoSessao,
     })),
     ...jogos.map((j): EventoAgenda => ({
       id: j.id,
@@ -164,6 +243,18 @@ export async function obterAgendaClube(
       escalaoNome: j.escalao.nome,
       titulo: `vs ${j.adversario}`,
       local: j.local,
+      tipoJogo: j.tipo,
+      casaFora: j.casaFora,
+    })),
+    ...reunioes.map((r): EventoAgenda => ({
+      id: r.id,
+      tipo: "REUNIAO",
+      data: r.data,
+      escalaoNome: r.escalaoId ? nomesEscaloes.get(r.escalaoId) ?? "Geral" : "Geral",
+      titulo: r.titulo,
+      // Reuniao não tem coluna `local`; e a descrição da reunião é o texto livre
+      // da ordem de trabalhos (o schema não tem coluna `descricao`).
+      descricao: r.ordemTrabalhos ?? undefined,
     })),
   ];
 

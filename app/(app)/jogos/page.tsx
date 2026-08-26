@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { z } from "zod";
 import type { Modalidade } from "@prisma/client";
-import { Plus, Home, Plane, ClipboardList, Trophy, Eye } from "lucide-react";
+import { Plus, Home, Plane, ClipboardList, Trophy, Eye, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listarJogos } from "@/lib/actions/jogos";
 import { listarEscaloes } from "@/lib/actions/escaloes";
@@ -99,6 +99,12 @@ export default async function JogosPage({
       <div className="flex items-center justify-between">
         <h1>Jogos</h1>
         <div className="flex flex-wrap gap-2">
+          <Button asChild variant="ghost">
+            <Link href="/agenda?vista=lista&tipo=JOGO">
+              <CalendarDays className="h-4 w-4" />
+              Ver na Agenda
+            </Link>
+          </Button>
           <Button asChild variant="outline">
             <Link href="/jogos/competicoes">
               <Trophy className="h-4 w-4" />

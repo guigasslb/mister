@@ -18,6 +18,8 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     sessao: { findMany: vi.fn() },
     jogo: { findMany: vi.fn() },
+    reuniao: { findMany: vi.fn() },
+    escalao: { findMany: vi.fn() },
   },
 }));
 
@@ -37,6 +39,8 @@ beforeEach(() => {
   vi.mocked(podeLerEscalao).mockResolvedValue(true);
   vi.mocked(prisma.sessao.findMany).mockResolvedValue([]);
   vi.mocked(prisma.jogo.findMany).mockResolvedValue([]);
+  vi.mocked(prisma.reuniao.findMany).mockResolvedValue([]);
+  vi.mocked(prisma.escalao.findMany).mockResolvedValue([]);
 });
 
 describe("obterAgendaClube", () => {
@@ -153,5 +157,118 @@ describe("obterAgendaClube", () => {
     };
     expect(whereSessao.data.gte).toEqual(new Date(2026, 7, 1, 0, 0, 0, 0));
     expect(whereSessao.data.lte).toEqual(new Date(2026, 8, 0, 23, 59, 59, 999));
+  });
+
+  it("expõe tipoSessao no treino e tipo/casaFora no jogo", async () => {
+    vi.mocked(prisma.sessao.findMany).mockResolvedValue([
+      {
+        id: "s1",
+        data: new Date("2026-08-10T18:00:00"),
+        local: "Pavilhão A",
+        objetivo: "Bola parada",
+        tipoSessao: "ABERTO",
+        escalao: { nome: "Sub-15" },
+      },
+    ] as never);
+    vi.mocked(prisma.jogo.findMany).mockResolvedValue([
+      {
+        id: "j1",
+        data: new Date("2026-08-11T20:00:00"),
+        local: "Fora",
+        adversario: "Águias FC",
+        tipo: "AMIGAVEL",
+        casaFora: "FORA",
+        escalao: { nome: "Seniores" },
+      },
+    ] as never);
+
+    const r = await obterAgendaClube();
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(r.dados[0]).toMatchObject({ tipo: "TREINO", tipoSessao: "ABERTO" });
+    expect(r.dados[1]).toMatchObject({ tipo: "JOGO", tipoJogo: "AMIGAVEL", casaFora: "FORA" });
+  });
+
+  it("inclui reuniões, resolvendo o nome do escalão e a descrição", async () => {
+    vi.mocked(prisma.reuniao.findMany).mockResolvedValue([
+      {
+        id: "r1",
+        data: new Date("2026-08-05T19:00:00"),
+        titulo: "Reunião de planeamento",
+        escalaoId: "esc-1",
+        ordemTrabalhos: "1. Balanço\n2. Calendário",
+      },
+      {
+        id: "r2",
+        data: new Date("2026-08-06T19:00:00"),
+        titulo: "Assembleia de clube",
+        escalaoId: null,
+        ordemTrabalhos: null,
+      },
+    ] as never);
+    vi.mocked(prisma.escalao.findMany).mockResolvedValue([
+      { id: "esc-1", nome: "Sub-17" },
+    ] as never);
+
+    const r = await obterAgendaClube();
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+
+    const reuniaoEscalao = r.dados.find((e) => e.id === "r1");
+    const reuniaoClube = r.dados.find((e) => e.id === "r2");
+    expect(reuniaoEscalao).toMatchObject({
+      tipo: "REUNIAO",
+      titulo: "Reunião de planeamento",
+      escalaoNome: "Sub-17",
+      descricao: "1. Balanço\n2. Calendário",
+    });
+    expect(reuniaoClube).toMatchObject({
+      tipo: "REUNIAO",
+      escalaoNome: "Geral",
+    });
+    expect(reuniaoClube?.descricao).toBeUndefined();
+  });
+
+  it("filtro tipo=TREINO só consulta sessões", async () => {
+    await obterAgendaClube({ tipo: "TREINO" });
+    expect(prisma.sessao.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.jogo.findMany).not.toHaveBeenCalled();
+    expect(prisma.reuniao.findMany).not.toHaveBeenCalled();
+  });
+
+  it("filtro tipo=JOGO só consulta jogos", async () => {
+    await obterAgendaClube({ tipo: "JOGO" });
+    expect(prisma.jogo.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.sessao.findMany).not.toHaveBeenCalled();
+    expect(prisma.reuniao.findMany).not.toHaveBeenCalled();
+  });
+
+  it("filtro tipo=REUNIAO só consulta reuniões", async () => {
+    await obterAgendaClube({ tipo: "REUNIAO" });
+    expect(prisma.reuniao.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.sessao.findMany).not.toHaveBeenCalled();
+    expect(prisma.jogo.findMany).not.toHaveBeenCalled();
+  });
+
+  it("mostra reuniões de CLUBE mesmo sem escalões legíveis", async () => {
+    vi.mocked(escaloesLegiveis).mockResolvedValue([]);
+    vi.mocked(prisma.reuniao.findMany).mockResolvedValue([
+      {
+        id: "r3",
+        data: new Date("2026-08-07T19:00:00"),
+        titulo: "Assembleia",
+        escalaoId: null,
+        ordemTrabalhos: null,
+      },
+    ] as never);
+
+    const r = await obterAgendaClube();
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    // Sessões/jogos não são consultados; a reunião de clube aparece.
+    expect(prisma.sessao.findMany).not.toHaveBeenCalled();
+    expect(prisma.jogo.findMany).not.toHaveBeenCalled();
+    expect(r.dados).toHaveLength(1);
+    expect(r.dados[0]).toMatchObject({ id: "r3", tipo: "REUNIAO", escalaoNome: "Geral" });
   });
 });

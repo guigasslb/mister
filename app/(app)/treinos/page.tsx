@@ -186,6 +186,12 @@ export default async function TreinosPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1>Treinos</h1>
         <div className="flex flex-wrap gap-2">
+          <Button asChild variant="ghost">
+            <Link href="/agenda?vista=lista&tipo=TREINO">
+              <CalendarDays className="h-4 w-4" />
+              Ver na Agenda
+            </Link>
+          </Button>
           <Button asChild variant="outline">
             <Link href="/treinos/periodizacao">
               <CalendarRange className="h-4 w-4" />

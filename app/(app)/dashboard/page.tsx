@@ -145,8 +145,14 @@ export default async function DashboardPage() {
         participacoes: { some: { epocaId: epoca.id, estado: "ATIVO" } },
       },
     }),
-    prisma.sessao.count({ where: { epocaId: epoca.id, escalao: { clubeId } } }),
-    prisma.jogo.count({ where: { epocaId: epoca.id, escalao: { clubeId } } }),
+    // Mini-resumo da época: apenas sessões/jogos JÁ REALIZADOS (data <= agora);
+    // eventos futuros/previstos não contam para o "resumo da época".
+    prisma.sessao.count({
+      where: { epocaId: epoca.id, escalao: { clubeId }, data: { lte: agora } },
+    }),
+    prisma.jogo.count({
+      where: { epocaId: epoca.id, escalao: { clubeId }, data: { lte: agora } },
+    }),
     // Eventos de HOJE (para os lembretes) — sessões e jogos do clube na época.
     prisma.sessao.findMany({
       where: { epocaId: epoca.id, escalao: { clubeId }, data: janelaHoje },
@@ -216,7 +222,15 @@ export default async function DashboardPage() {
   const lembretes = construirLembretesHoje(sessoesHojeLite, jogosHojeLite, agora);
 
   // Época "nova" (sem qualquer dado) → empty state motivacional.
-  const epocaVazia = nAtletas === 0 && nSessoes === 0 && nJogos === 0;
+  // `nSessoes`/`nJogos` contam só eventos JÁ REALIZADOS; para não tratar como
+  // vazia uma época que só tem eventos futuros agendados, considera-se também
+  // a existência de sessão/jogos futuros.
+  const epocaVazia =
+    nAtletas === 0 &&
+    nSessoes === 0 &&
+    nJogos === 0 &&
+    !proximaSessao &&
+    proximosJogos.length === 0;
 
   // Escalões com atletas (para o contador por escalão).
   const escaloesComAtletas = escaloesContagem.filter((e) => e._count.participacoes > 0);

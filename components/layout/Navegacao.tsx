@@ -30,21 +30,22 @@ const CHAVE_COLAPSO = "mister:sidebar-colapsada";
 const MQ_DESKTOP = "(min-width: 1280px)";
 
 const ITEM_COMECAR = { href: "/vitoria-rapida", label: "Começar", icon: Rocket };
-// Agenda agregada de todos os escalões — visível a todos os treinadores; o
-// scoping pelos escalões legíveis é feito em obterAgendaClube (§6.4, F P2.2).
-const ITEM_AGENDA = { href: "/agenda", label: "Agenda", icon: CalendarRange };
 // Backoffice interno (/admin) — SÓ visível a admins de plataforma
 // (Utilizador.isAdmin na BD, §21.1). Colocado no fim da lista, isolado das
 // vistas de clube. O acesso é sempre re-validado server-side por
 // `exigirAdminPlataforma` no layout do grupo (admin); este item é só o atalho.
 const ITEM_ADMIN = { href: "/admin", label: "Backoffice", icon: ShieldCheck };
 
-// Ordem pensada para a bottom-nav (móvel): os 4 primeiros são fixos. Jogos vem
-// antes de Exercícios porque, no dia-a-dia do treinador, é mais crítico.
+// Ordem pensada para a bottom-nav (móvel): os 4 primeiros são fixos. A Agenda é
+// a vista central do produto (treinos + jogos + reuniões), por isso é item
+// primário logo a seguir a Treinos; Jogos desce para o menu "Mais" no móvel. O
+// scoping da Agenda pelos escalões legíveis é feito em obterAgendaClube
+// (§6.4, F P2.2) — visível a todos os treinadores autenticados.
 const ITENS_BASE = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
   { href: "/plantel", label: "Plantel", icon: Users },
   { href: "/treinos", label: "Treinos", icon: CalendarCheck },
+  { href: "/agenda", label: "Agenda", icon: CalendarRange },
   { href: "/jogos", label: "Jogos", icon: Trophy },
   { href: "/mano-a-mano", label: "Mano-a-Mano", icon: Swords },
   { href: "/exercicios", label: "Exercícios", icon: Dumbbell },
@@ -57,19 +58,14 @@ const ITENS_BASE = [
 /**
  * @param mostrarComecar Mostra o atalho "Começar" (vitória rápida) — só quando
  * o plantel está vazio (F10 / §8.1).
- * @param mostrarAgenda Mostra o item "Agenda" (vista agregada de todos os
- * escalões) — disponível a todos os treinadores; obterAgendaClube faz o
- * scoping pelos escalões legíveis de cada membro (P2.2 / §8.x, §6.4).
  * @param mostrarAdmin Mostra o atalho "Backoffice" (/admin) — SÓ para admins de
  * plataforma (Utilizador.isAdmin, §21.1). Avaliado server-side no layout.
  */
 export function Navegacao({
   mostrarComecar = false,
-  mostrarAgenda = false,
   mostrarAdmin = false,
 }: {
   mostrarComecar?: boolean;
-  mostrarAgenda?: boolean;
   mostrarAdmin?: boolean;
 }) {
   const pathname = usePathname();
@@ -135,20 +131,10 @@ export function Navegacao({
         ? "justify-center"
         : "justify-end";
 
-  // Base + "Agenda" (Admin/DT): a Agenda entra a seguir a Jogos, junto às vistas
-  // transversais do clube (Analíticos, Comunicações…).
-  const ITENS_COM_AGENDA = mostrarAgenda
-    ? [
-        ...ITENS_BASE.slice(0, 5), // Início, Plantel, Treinos, Jogos, Exercícios
-        ITEM_AGENDA,
-        ...ITENS_BASE.slice(5),
-      ]
-    : ITENS_BASE;
-
   // "Começar" entra logo a seguir ao Início, para ficar visível na bottom-nav.
   const ITENS_COM_COMECAR = mostrarComecar
-    ? [ITENS_COM_AGENDA[0], ITEM_COMECAR, ...ITENS_COM_AGENDA.slice(1)]
-    : ITENS_COM_AGENDA;
+    ? [ITENS_BASE[0], ITEM_COMECAR, ...ITENS_BASE.slice(1)]
+    : ITENS_BASE;
 
   // Backoffice sempre no fim (isolado das vistas de clube) e só para admins.
   const ITENS = mostrarAdmin
