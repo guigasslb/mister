@@ -171,7 +171,7 @@ export type ParteTreinoValor = (typeof PARTES_TREINO)[number];
 export const LABEL_PARTE_TREINO: Record<ParteTreinoValor, string> = {
   AQUECIMENTO: "Aquecimento",
   PRINCIPAL: "Parte principal",
-  JOGO_REDUZIDO: "Jogo reduzido",
+  JOGO_REDUZIDO: "Jogo - campo inteiro/reduzido",
   RETORNO_CALMA: "Retorno à calma",
 };
 
