@@ -362,6 +362,37 @@ export function rotuloCampo(formato: FormatoJogo = FormatoJogo.FUTSAL_5): string
   }
 }
 
+// ─── Marcador de ponta de seta (partilhado) ──────────────────────────────────
+//
+// Bug corrigido: a definição anterior não tinha `viewBox` nem `markerUnits`
+// explícito. Sem `viewBox`, a auto-orientação (`orient="auto"`) é renderizada
+// de forma inconsistente no Chromium/WebKit quando o ângulo do trajecto ronda os
+// 180° (setas para a esquerda) — a cabeça aparecia deslocada/torta. Além disso o
+// `refX` estava a meio da cabeça (tip em x=6, refX=4), afastando o ponto de
+// referência da ponta real.
+//
+// Correcção: `viewBox` explícito dá um sistema de coordenadas bem definido ao
+// marcador, tornando `orient="auto"` fiável em TODAS as direcções; `refX` passa a
+// (quase) coincidir com a ponta para a cabeça assentar no fim da linha. O tamanho
+// visual mantém-se (viewBox 0–10 → markerWidth 6 com markerUnits=strokeWidth ⇒
+// ~12 unidades, igual ao anterior).
+export function SetaMarker({ id, cor }: { id: string; cor: string }) {
+  return (
+    <marker
+      id={id}
+      viewBox="0 0 10 10"
+      markerWidth={6}
+      markerHeight={6}
+      refX={9}
+      refY={5}
+      orient="auto"
+      markerUnits="strokeWidth"
+    >
+      <path d="M0,0 L10,5 L0,10 z" fill={cor} />
+    </marker>
+  );
+}
+
 // ─── Caminho suave a partir de pontos ────────────────────────────────────────
 
 function pontosParaPath(pontos: { x: number; y: number }[]): string {
@@ -537,16 +568,7 @@ export function ElementoSVG({
         <g>
           {decoracoes}
           <defs>
-            <marker
-              id={markerId}
-              markerWidth={6}
-              markerHeight={6}
-              refX={4}
-              refY={3}
-              orient="auto"
-            >
-              <path d="M0,0 L6,3 L0,6 Z" fill={cor} />
-            </marker>
+            <SetaMarker id={markerId} cor={cor} />
           </defs>
           <path
             d={d}

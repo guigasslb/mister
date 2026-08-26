@@ -67,3 +67,35 @@ describe("orientação da ponta das setas", () => {
     }
   }
 });
+
+// Regressão do marcador SVG (bug das setas para a esquerda): sem `viewBox` a
+// auto-orientação era mal renderizada no Chromium/WebKit a ~180°. O marcador tem
+// de ter `viewBox` + `orient="auto"` + `refX/refY` (ponta ~coincidente com o fim
+// da linha) para ficar correto em TODAS as direções.
+describe("marcador da ponta da seta", () => {
+  function markerHtml(estilo: Estilo): string {
+    const el: ElementoCampo = {
+      id: "s",
+      tipo: "seta",
+      estilo,
+      cor: "#000",
+      pontos: [
+        { x: 300, y: 100 },
+        { x: 100, y: 100 },
+      ],
+    };
+    return renderToStaticMarkup(createElement(ElementoSVG, { elemento: el }));
+  }
+
+  for (const estilo of ["movimento", "passe", "conducao"] as const) {
+    it(`${estilo}: marcador tem viewBox, orient=auto e refX/refY definidos`, () => {
+      const html = markerHtml(estilo);
+      const marker = html.match(/<marker[^>]*>/)?.[0] ?? "";
+      expect(marker).toContain('viewBox="0 0 10 10"');
+      expect(marker).toContain('orient="auto"');
+      // refX próximo da ponta (tip em x=10 no viewBox) e refY no eixo (y=5).
+      expect(marker).toMatch(/refX="9"/);
+      expect(marker).toMatch(/refY="5"/);
+    });
+  }
+});

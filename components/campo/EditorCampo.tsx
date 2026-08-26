@@ -36,6 +36,7 @@ import {
   CAMPO_H,
   LinhasCampo,
   ElementoSVG,
+  SetaMarker,
   rotuloCampo,
   CONE_CORES,
   CONE_COR_DEFAULT,
@@ -720,16 +721,7 @@ export function EditorCampo({
             onDoubleClick={desenhandoCaminho ? concluirCaminho : undefined}
           >
             <defs>
-              <marker
-                id="seta-fantasma"
-                markerWidth={6}
-                markerHeight={6}
-                refX={4}
-                refY={3}
-                orient="auto"
-              >
-                <path d="M0,0 L6,3 L0,6 Z" fill="#F5C518" />
-              </marker>
+              <SetaMarker id="seta-fantasma" cor="#F5C518" />
             </defs>
 
             <LinhasCampo formato={fmt} />
