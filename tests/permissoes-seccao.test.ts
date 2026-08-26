@@ -18,7 +18,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { exigirCapacidade, escaloesLegiveis } from "@/lib/permissoes";
+import { exigirCapacidade, escaloesLegiveis, podeLerEscalao } from "@/lib/permissoes";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -266,6 +266,60 @@ describe("escaloesLegiveis — âmbito SECCAO", () => {
     expect(
       (prisma.escalao.findMany as unknown as { mock: { calls: unknown[][] } }).mock.calls.length,
     ).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4b. escaloesLegiveis com âmbito PROPRIOS_ESCALOES (§6.5 — sem escalões alheios)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("escaloesLegiveis — âmbito PROPRIOS_ESCALOES", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("devolve APENAS os escalões atribuídos, nunca os `visivelOutrosTreinadores`", async () => {
+    setupMembro({
+      ambito: "PROPRIOS_ESCALOES",
+      capacidades: ["TREINOS_GERIR"],
+      escaloesAtribuidos: ["benjamins-a"],
+      seccoesCoordenadas: [],
+    });
+
+    const ids = await escaloesLegiveis();
+    expect(ids).toEqual(["benjamins-a"]);
+    // Não consulta escalões visíveis: um treinador de escalão não lê escalões alheios.
+    expect(prisma.escalao.findMany).not.toHaveBeenCalled();
+  });
+
+  it("sem escalões atribuídos devolve lista vazia (sem acesso a nenhum escalão)", async () => {
+    setupMembro({
+      ambito: "PROPRIOS_ESCALOES",
+      capacidades: ["TREINOS_GERIR"],
+      escaloesAtribuidos: [],
+      seccoesCoordenadas: [],
+    });
+
+    const ids = await escaloesLegiveis();
+    expect(ids).toEqual([]);
+    expect(prisma.escalao.findMany).not.toHaveBeenCalled();
+  });
+
+  it("podeLerEscalao: nega escalão alheio mesmo que `visivelOutrosTreinadores` (direct-nav)", async () => {
+    setupMembro({
+      ambito: "PROPRIOS_ESCALOES",
+      capacidades: ["TREINOS_GERIR"],
+      escaloesAtribuidos: ["benjamins-a"],
+      seccoesCoordenadas: [],
+    });
+
+    // Um treinador de âmbito próprio não lê o escalão dos Infantis, mesmo que este
+    // esteja marcado visível — nem sequer consulta a flag na BD.
+    const pode = await podeLerEscalao("infantis");
+    expect(pode).toBe(false);
+    expect(prisma.escalao.findFirst).not.toHaveBeenCalled();
+
+    // …mas continua a ler o seu próprio escalão.
+    const podeProprio = await podeLerEscalao("benjamins-a");
+    expect(podeProprio).toBe(true);
   });
 });
 

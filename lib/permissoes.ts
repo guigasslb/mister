@@ -169,10 +169,18 @@ export async function podeLerEscalao(escalaoId: string): Promise<boolean> {
 
   if (ctx.ambito === "TODO_CLUBE") return true;
   if (ctx.escaloesAtribuidos.includes(escalaoId)) return true;
-  // 🔁 v7 (§6.5/§6.9): o Coordenador lê todos os escalões da sua secção.
-  if (ctx.ambito === "SECCAO" && (await algumEscalaoNaSeccaoCoordenada([escalaoId], ctx)))
-    return true;
 
+  // 🔒 Âmbito PROPRIOS_ESCALOES (§6.5): a leitura restringe-se ESTRITAMENTE aos
+  // escalões atribuídos. Um treinador de escalão NÃO lê escalões alheios, mesmo
+  // que marcados `visivelOutrosTreinadores` — essa visibilidade concede leitura
+  // transversal apenas ao Coordenador de Secção (fora da sua secção), não ao
+  // treinador de âmbito próprio.
+  if (ctx.ambito === "PROPRIOS_ESCALOES") return false;
+
+  // 🔁 v7 (§6.5/§6.9): o Coordenador lê todos os escalões da(s) sua(s) secção(ões)…
+  if (await algumEscalaoNaSeccaoCoordenada([escalaoId], ctx)) return true;
+
+  // …e, fora da secção, os escalões marcados como visíveis a outros treinadores.
   const escalao = await prisma.escalao.findFirst({
     where: { id: escalaoId, clubeId: ctx.clube.id },
     select: { visivelOutrosTreinadores: true },
@@ -194,10 +202,16 @@ export async function podeLerAlgumEscalao(escalaoIds: string[]): Promise<boolean
   if (!ctx) return false;
   if (ctx.ambito === "TODO_CLUBE") return true;
   if (ids.some((id) => ctx.escaloesAtribuidos.includes(id))) return true;
-  // 🔁 v7 (§6.5/§6.9): o Coordenador lê todos os escalões da sua secção.
-  if (ctx.ambito === "SECCAO" && (await algumEscalaoNaSeccaoCoordenada(ids, ctx)))
-    return true;
 
+  // 🔒 Âmbito PROPRIOS_ESCALOES (§6.5): sem leitura de escalões alheios — só os
+  // atribuídos. `visivelOutrosTreinadores` não concede leitura ao treinador de
+  // escalão (ver `podeLerEscalao`).
+  if (ctx.ambito === "PROPRIOS_ESCALOES") return false;
+
+  // 🔁 v7 (§6.5/§6.9): o Coordenador lê todos os escalões da(s) sua(s) secção(ões)…
+  if (await algumEscalaoNaSeccaoCoordenada(ids, ctx)) return true;
+
+  // …e, fora da secção, os escalões marcados como visíveis a outros treinadores.
   const visivel = await prisma.escalao.findFirst({
     where: {
       id: { in: ids },
@@ -281,14 +295,25 @@ export const escaloesLegiveis = cache(async (): Promise<string[] | "TODOS"> => {
   if (!ctx) return [];
   if (ctx.ambito === "TODO_CLUBE") return "TODOS";
 
+  // 🔒 Âmbito PROPRIOS_ESCALOES (§6.5): a leitura restringe-se ESTRITAMENTE aos
+  // escalões atribuídos. Um treinador de escalão só vê/lê os seus escalões — a
+  // flag `visivelOutrosTreinadores` concede leitura transversal apenas ao
+  // Coordenador de Secção (fora da sua secção — ver ramo SECCAO abaixo), nunca
+  // ao treinador de âmbito próprio. Isto alinha as tabs de escalão e o filtro de
+  // dados: um treinador nunca vê escalões que não lhe estão atribuídos.
+  if (ctx.ambito === "PROPRIOS_ESCALOES") {
+    return [...new Set(ctx.escaloesAtribuidos)];
+  }
+
+  // Âmbito SECCAO: escalões atribuídos + os marcados visíveis (leitura fora da
+  // secção — §6.5 v7) + todos os da(s) secção(ões) coordenada(s) (§6.5/§6.9).
   const visiveis = await prisma.escalao.findMany({
     where: { clubeId: ctx.clube.id, visivelOutrosTreinadores: true },
     select: { id: true },
   });
 
-  // 🔁 v7 (§6.5/§6.9): o Coordenador lê todos os escalões da(s) sua(s) secção(ões).
   const daSeccao =
-    ctx.ambito === "SECCAO" && ctx.seccoesCoordenadas.length > 0
+    ctx.seccoesCoordenadas.length > 0
       ? await prisma.escalao.findMany({
           where: { clubeId: ctx.clube.id, seccaoId: { in: ctx.seccoesCoordenadas } },
           select: { id: true },
@@ -303,3 +328,19 @@ export const escaloesLegiveis = cache(async (): Promise<string[] | "TODOS"> => {
     ]),
   ];
 });
+
+/**
+ * Filtra uma lista de escalões (com `id`) aos que o membro atual pode LER
+ * (§6.4/§6.5). Serve para construir as tabs/filtros de escalão nas páginas,
+ * garantindo que a navegação só oferece escalões acessíveis e ficando alinhada
+ * com o filtro de dados aplicado nas Server Actions (que usam `escaloesLegiveis`/
+ * `podeLerEscalao`). Âmbito TODO_CLUBE → devolve a lista intacta.
+ */
+export async function filtrarEscaloesLegiveis<T extends { id: string }>(
+  escaloes: T[],
+): Promise<T[]> {
+  const legiveis = await escaloesLegiveis();
+  if (legiveis === "TODOS") return escaloes;
+  const permitidos = new Set(legiveis);
+  return escaloes.filter((e) => permitidos.has(e.id));
+}

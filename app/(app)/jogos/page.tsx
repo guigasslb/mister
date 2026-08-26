@@ -6,6 +6,7 @@ import { Plus, Home, Plane, ClipboardList, Trophy, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listarJogos } from "@/lib/actions/jogos";
 import { listarEscaloes } from "@/lib/actions/escaloes";
+import { filtrarEscaloesLegiveis } from "@/lib/permissoes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
 import { mapaModalidadePorEscalao } from "@/lib/modalidade-escalao";
 import { BadgeModalidade } from "@/components/plantel/BadgeModalidade";
@@ -62,7 +63,9 @@ export default async function JogosPage({
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
   if (!resJogos.sucesso) return <EstadoErro mensagem={resJogos.erro} />;
 
-  const escaloes = resEscaloes.dados;
+  // Tabs de escalão/modalidade: só os escalões legíveis (§6.4/§6.5), alinhado com
+  // o filtro server-side de `listarJogos` — um treinador nunca vê escalões alheios.
+  const escaloes = await filtrarEscaloesLegiveis(resEscaloes.dados);
   const seccoes = resSeccoes.sucesso ? resSeccoes.dados : [];
   const jogos = resJogos.dados;
 

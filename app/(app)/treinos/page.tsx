@@ -19,7 +19,7 @@ import { listarEscaloes } from "@/lib/actions/escaloes";
 import { listarPlaneamentos } from "@/lib/actions/periodizacao";
 import { listarReunioes } from "@/lib/actions/reunioes";
 import { obterEpocaAtiva } from "@/lib/epoca-context";
-import { obterEscalaoDoUtilizador } from "@/lib/permissoes";
+import { obterEscalaoDoUtilizador, filtrarEscaloesLegiveis } from "@/lib/permissoes";
 import {
   segundaFeira,
   domingo,
@@ -110,7 +110,10 @@ export default async function TreinosPage({
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
   if (!resSessoes.sucesso) return <EstadoErro mensagem={resSessoes.erro} />;
 
-  const escaloes = resEscaloes.dados;
+  // Tabs de escalão: só os escalões que o utilizador pode ler (§6.4/§6.5).
+  // Alinha as tabs com o filtro server-side de `listarSessoes` — um treinador de
+  // âmbito próprio nunca vê tabs (nem dados) de escalões que não lhe estão atribuídos.
+  const escaloes = await filtrarEscaloesLegiveis(resEscaloes.dados);
   const sessoes = resSessoes.dados;
   const planeamentos = resPlan.sucesso ? resPlan.dados : [];
 

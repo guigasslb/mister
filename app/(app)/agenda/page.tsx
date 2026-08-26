@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CalendarCheck, Trophy, MapPin, CalendarDays } from "lucide-react";
 import { obterAgendaClube, type EventoAgenda } from "@/lib/actions/agenda";
 import { listarEscaloes } from "@/lib/actions/escaloes";
-import { obterEscalaoDoUtilizador } from "@/lib/permissoes";
+import { obterEscalaoDoUtilizador, filtrarEscaloesLegiveis } from "@/lib/permissoes";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { FiltroEscalaoAgenda } from "@/components/agenda/FiltroEscalaoAgenda";
 
@@ -71,7 +71,9 @@ export default async function AgendaPage({
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
   if (!resAgenda.sucesso) return <EstadoErro mensagem={resAgenda.erro} />;
 
-  const escaloes = resEscaloes.dados;
+  // Filtro de escalão: só os escalões legíveis (§6.4/§6.5), alinhado com o filtro
+  // server-side de `obterAgendaClube` — não oferecer escalões alheios a um treinador.
+  const escaloes = await filtrarEscaloesLegiveis(resEscaloes.dados);
   const eventos = resAgenda.dados;
   const grupos = agruparPorDia(eventos);
 
