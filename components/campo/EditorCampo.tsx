@@ -47,6 +47,7 @@ import { TimelinePassos } from "./TimelinePassos";
 import {
   construirKeyframes,
   elementoEmPonto,
+  pontosSemRepetidos,
   DURACAO_PADRAO,
   type Pos,
 } from "./animacao";
@@ -192,6 +193,12 @@ export function EditorCampo({
   const [historico, setHistorico] = useState<DiagramaCampo[]>([]);
   const [caminhoAtual, setCaminhoAtual] = useState<{ x: number; y: number }[]>([]);
   const [arrastando, setArrastando] = useState<string | null>(null);
+  // Estado de arrasto de uma seta/linha (trajecto): pontos originais + origem do
+  // ponteiro, para transladar todo o trajecto pelo delta desde o início do drag.
+  const arrastarPathRef = useRef<{
+    pontos: { x: number; y: number }[];
+    origem: { x: number; y: number };
+  } | null>(null);
   const [textoInline, setTextoInline] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -276,6 +283,40 @@ export function EditorCampo({
     }
   }
 
+  // Translada todos os pontos de uma seta/linha por (dx,dy), limitando o delta
+  // para que nenhum ponto saia do campo. `pontosBase` são os pontos de partida
+  // (capturados no início do drag ou os atuais no caso do teclado).
+  function transladarPath(
+    id: string,
+    pontosBase: { x: number; y: number }[],
+    dx: number,
+    dy: number,
+  ) {
+    const xs = pontosBase.map((p) => p.x);
+    const ys = pontosBase.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const cdx = Math.max(-minX, Math.min(CAMPO_W - maxX, dx));
+    const cdy = Math.max(-minY, Math.min(CAMPO_H - maxY, dy));
+    aplicarElementos(
+      elementos.map((el) =>
+        el.id === id && "pontos" in el
+          ? { ...el, pontos: pontosBase.map((p) => ({ x: p.x + cdx, y: p.y + cdy })) }
+          : el,
+      ),
+    );
+  }
+
+  function moverPath(
+    id: string,
+    info: { pontos: { x: number; y: number }[]; origem: { x: number; y: number } },
+    coords: { x: number; y: number },
+  ) {
+    transladarPath(id, info.pontos, coords.x - info.origem.x, coords.y - info.origem.y);
+  }
+
   function proximoNumero(cor: CorJogador): number {
     const numeros = elementos
       .filter((el) => el.tipo === "jogador" && el.cor === cor)
@@ -299,6 +340,13 @@ export function EditorCampo({
             // B2: captura o snapshot ANTES de mover (para o undo).
             drag.snapshotRef.current = snapshotAtual();
             // B1: mantém o ponteiro capturado mesmo se sair do <svg>.
+            drag.iniciarCaptura(e);
+            setArrastando(alvo.id);
+          } else if ("pontos" in alvo && keyframeActivo < 0) {
+            // Setas/linhas: arrastáveis apenas na base (não participam em passos
+            // de animação). Guarda os pontos originais + origem do ponteiro.
+            drag.snapshotRef.current = snapshotAtual();
+            arrastarPathRef.current = { pontos: alvo.pontos, origem: { x, y } };
             drag.iniciarCaptura(e);
             setArrastando(alvo.id);
           }
@@ -392,7 +440,12 @@ export function EditorCampo({
     if (ferramenta !== "selecionar" || !arrastando) return;
     const coords = drag.paraCoordenadas(e);
     if (!coords) return;
-    moverElemento(arrastando, coords.x, coords.y);
+    const info = arrastarPathRef.current;
+    if (info) {
+      moverPath(arrastando, info, coords);
+    } else {
+      moverElemento(arrastando, coords.x, coords.y);
+    }
   }
 
   function handlePointerUp(e: React.PointerEvent) {
@@ -405,6 +458,7 @@ export function EditorCampo({
       }
       drag.terminarCaptura(e);
       setArrastando(null);
+      arrastarPathRef.current = null;
     }
   }
 
@@ -447,20 +501,30 @@ export function EditorCampo({
         return;
     }
     e.preventDefault();
-    const alvo = elementosRender.find(
-      (el) => el.id === selecionadoId && "x" in el,
-    );
-    if (!alvo || !("x" in alvo)) return;
-    const nx = fixar(alvo.x + dx, CAMPO_W);
-    const ny = fixar(alvo.y + dy, CAMPO_H);
+    const alvo = elementosRender.find((el) => el.id === selecionadoId);
+    if (!alvo) return;
     // Cada movimento por teclado regista um snapshot no histórico.
-    registarHistorico();
-    moverElemento(selecionadoId, nx, ny);
-    anunciar(`Elemento movido para ${Math.round(nx)}, ${Math.round(ny)}`);
+    if ("x" in alvo) {
+      const nx = fixar(alvo.x + dx, CAMPO_W);
+      const ny = fixar(alvo.y + dy, CAMPO_H);
+      registarHistorico();
+      moverElemento(selecionadoId, nx, ny);
+      anunciar(`Elemento movido para ${Math.round(nx)}, ${Math.round(ny)}`);
+    } else if ("pontos" in alvo && keyframeActivo < 0) {
+      // Setas/linhas: transladar todo o trajecto (só na base — não em passos).
+      registarHistorico();
+      transladarPath(selecionadoId, alvo.pontos, dx, dy);
+      anunciar("Trajecto movido");
+    }
   }
 
   function concluirCaminho() {
-    if (caminhoAtual.length < 2) {
+    // Remove pontos coincidentes consecutivos (ex.: os cliques do duplo-clique de
+    // conclusão caem no mesmo sítio) — assim o último segmento nunca fica
+    // degenerado e a ponta da seta orienta-se na direção correta (bug das setas
+    // para a esquerda que apareciam invertidas).
+    const pontos = pontosSemRepetidos(caminhoAtual);
+    if (pontos.length < 2) {
       setCaminhoAtual([]);
       return;
     }
@@ -473,13 +537,13 @@ export function EditorCampo({
           tipo: "seta",
           estilo: estiloSeta,
           cor: "#1A1D29",
-          pontos: caminhoAtual,
+          pontos,
         },
       ]);
     } else {
       aplicarElementos([
         ...elementos,
-        { id: novoId(), tipo: "linha", cor: "#1A1D29", pontos: caminhoAtual },
+        { id: novoId(), tipo: "linha", cor: "#1A1D29", pontos },
       ]);
     }
     setCaminhoAtual([]);

@@ -69,7 +69,28 @@ export function ancoraElemento(el: ElementoCampo): Pos {
   return el.pontos[0] ?? { x: 0, y: 0 };
 }
 
+// Distância de um ponto (px,py) ao segmento [a,b] (em unidades).
+function distanciaAoSegmento(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
 // Hit-test com raio configurável (em unidades). Procura de cima para baixo.
+// Setas/linhas: mede a distância aos SEGMENTOS do trajecto (não só aos vértices),
+// para que clicar sobre o corpo da seta a selecione (corrige o bug em que só
+// clicar exactamente num extremo funcionava).
 export function elementoEmPonto(
   elementos: ElementoCampo[],
   x: number,
@@ -80,13 +101,35 @@ export function elementoEmPonto(
     const el = elementos[i];
     if ("x" in el && "y" in el) {
       if (Math.hypot(el.x - x, el.y - y) <= raioHit) return el;
-    } else if (el.pontos.length) {
-      for (const p of el.pontos) {
-        if (Math.hypot(p.x - x, p.y - y) <= raioHit) return el;
+    } else if (el.pontos.length === 1) {
+      const p = el.pontos[0];
+      if (Math.hypot(p.x - x, p.y - y) <= raioHit) return el;
+    } else if (el.pontos.length > 1) {
+      for (let j = 1; j < el.pontos.length; j++) {
+        const a = el.pontos[j - 1];
+        const b = el.pontos[j];
+        if (distanciaAoSegmento(x, y, a.x, a.y, b.x, b.y) <= raioHit) return el;
       }
     }
   }
   return null;
+}
+
+/**
+ * Remove pontos consecutivos coincidentes (ou quase) de um trajecto. Garante que
+ * o último segmento nunca fica degenerado (comprimento ≈0) — essencial para o
+ * `orient="auto"` do `markerEnd` orientar a ponta na direção REAL do movimento.
+ * Sem isto, concluir uma seta por duplo-clique deixa pontos repetidos no fim: o
+ * último segmento passa a ter comprimento zero e a ponta cai no default (0° →
+ * direita), invertendo as setas desenhadas para a esquerda.
+ */
+export function pontosSemRepetidos(pontos: Pos[], eps = 0.5): Pos[] {
+  const out: Pos[] = [];
+  for (const p of pontos) {
+    const u = out[out.length - 1];
+    if (!u || Math.hypot(p.x - u.x, p.y - u.y) > eps) out.push(p);
+  }
+  return out;
 }
 
 // Rótulo acessível de um elemento (aria-label).

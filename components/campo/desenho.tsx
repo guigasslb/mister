@@ -1,6 +1,6 @@
 import { FormatoJogo } from "@prisma/client";
 import type { ElementoCampo, TamanhoEscadinha } from "@/lib/schemas/exercicio";
-import { ancoraElemento, rotuloElemento } from "./animacao";
+import { ancoraElemento, rotuloElemento, pontosSemRepetidos } from "./animacao";
 
 // Dimensões internas do campo (secção 13.1): 1 unidade = 10 cm, campo 400×200.
 // 🔁 v7 (§11.5): o espaço de coordenadas interno mantém-se 400×200 para TODOS os
@@ -469,9 +469,30 @@ export function ElementoSVG({
       />
     ) : null;
 
+  // Alvo de hit/toque invisível para setas/linhas: uma faixa espessa sobre o
+  // trajecto (stroke largo transparente) para aumentar a área de clique/toque e
+  // servir de alvo de foco de teclado — paridade com o círculo dos elementos-ponto.
+  const hitPath =
+    !temPonto && "pontos" in elemento && raioHit > 0 ? (
+      <path
+        d={pontosParaPath(pontosSemRepetidos(elemento.pontos))}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={Math.max(raioHit, 8)}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        tabIndex={0}
+        role="button"
+        aria-label={rotuloElemento(elemento)}
+        style={{ cursor: "grab", outline: "none" }}
+        onFocus={onFocarHit ? () => onFocarHit(elemento.id) : undefined}
+      />
+    ) : null;
+
   const decoracoes = (
     <>
       {hit}
+      {hitPath}
       {anelSelecao}
       {anelFoco}
     </>
@@ -565,9 +586,11 @@ export function ElementoSVG({
             ? undefined
             : undefined;
       const isConducao = elemento.estilo === "conducao";
-      const d = isConducao
-        ? pathOndulado(elemento.pontos)
-        : pontosParaPath(elemento.pontos);
+      // Remove pontos repetidos no fim (duplo-clique) para o último segmento não
+      // ficar degenerado — senão o markerEnd/orient="auto" cai no default (0°) e
+      // as setas para a esquerda aparecem invertidas.
+      const pontos = pontosSemRepetidos(elemento.pontos);
+      const d = isConducao ? pathOndulado(pontos) : pontosParaPath(pontos);
       const markerId = `seta-${elemento.id}`;
       const cor = corParaHex(elemento.cor);
       return (
@@ -593,7 +616,7 @@ export function ElementoSVG({
         <g>
           {decoracoes}
           <path
-            d={pontosParaPath(elemento.pontos)}
+            d={pontosParaPath(pontosSemRepetidos(elemento.pontos))}
             fill="none"
             stroke={corParaHex(elemento.cor)}
             strokeWidth={1.5}

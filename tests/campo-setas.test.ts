@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { ElementoSVG } from "@/components/campo/desenho";
+import { elementoEmPonto, pontosSemRepetidos } from "@/components/campo/animacao";
 import type { ElementoCampo } from "@/lib/schemas/exercicio";
 
 // Regressão da orientação da ponta das setas no editor de campo (secção 13).
@@ -103,4 +104,85 @@ describe("marcador da ponta da seta", () => {
       expect(marker).toMatch(/refY="5"/);
     });
   }
+});
+
+// Regressão do BUG 1 (setas para a esquerda invertidas): concluir uma seta por
+// duplo-clique deixa pontos coincidentes no fim do trajecto (cada clique do
+// duplo-clique adiciona um ponto no mesmo sítio). O último segmento fica com
+// comprimento zero → `orient="auto"` cai no default (0° → direita) → a seta para
+// a esquerda aparece com a ponta no lado errado. O render tem de remover esses
+// pontos repetidos para o último segmento manter a direção real.
+describe("setas com pontos repetidos no fim (conclusão por duplo-clique)", () => {
+  function anguloUltimoSegmento(d: string): number {
+    const nums = (d.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    const pts: Array<[number, number]> = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) pts.push([nums[i], nums[i + 1]]);
+    const a = pts[pts.length - 2];
+    const b = pts[pts.length - 1];
+    return (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+  }
+
+  for (const estilo of ["movimento", "passe", "conducao"] as const) {
+    it(`${estilo} — esquerda com pontos duplicados: ponta continua a apontar para a esquerda (≈180°)`, () => {
+      const el: ElementoCampo = {
+        id: "s",
+        tipo: "seta",
+        estilo,
+        cor: "#000",
+        // Duplo-clique de conclusão duplica o ponto final.
+        pontos: [
+          { x: 300, y: 100 },
+          { x: 100, y: 100 },
+          { x: 100, y: 100 },
+        ],
+      };
+      const ang = Math.abs(anguloUltimoSegmento(trajectoDaSeta(el)));
+      // Sem a correção o último segmento era degenerado (0°). Agora ≈180°.
+      expect(ang).toBeGreaterThan(179);
+    });
+  }
+
+  it("pontosSemRepetidos remove coincidentes consecutivos e preserva a direção", () => {
+    const limpo = pontosSemRepetidos([
+      { x: 300, y: 100 },
+      { x: 100, y: 100 },
+      { x: 100, y: 100 },
+      { x: 100.2, y: 100 },
+    ]);
+    expect(limpo).toEqual([
+      { x: 300, y: 100 },
+      { x: 100, y: 100 },
+    ]);
+  });
+});
+
+// Regressão do BUG 2 (não é possível selecionar uma seta já criada): o hit-test
+// tem de medir a distância aos SEGMENTOS do trajecto, não só aos vértices, para
+// que clicar sobre o corpo da seta a selecione.
+describe("selecção de setas/linhas pelo corpo (hit-test por segmento)", () => {
+  const seta: ElementoCampo = {
+    id: "seta1",
+    tipo: "seta",
+    estilo: "movimento",
+    cor: "#000",
+    pontos: [
+      { x: 100, y: 100 },
+      { x: 300, y: 100 },
+    ],
+  };
+
+  it("selecciona ao clicar no MEIO do corpo (longe dos vértices)", () => {
+    const alvo = elementoEmPonto([seta], 200, 102, 10);
+    expect(alvo?.id).toBe("seta1");
+  });
+
+  it("selecciona ao clicar sobre um vértice", () => {
+    const alvo = elementoEmPonto([seta], 100, 100, 10);
+    expect(alvo?.id).toBe("seta1");
+  });
+
+  it("NÃO selecciona ao clicar longe do trajecto", () => {
+    const alvo = elementoEmPonto([seta], 200, 160, 10);
+    expect(alvo).toBeNull();
+  });
 });
