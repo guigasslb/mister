@@ -22,15 +22,25 @@ type Linha = Record<string, unknown> & { partilhasClube?: { clubeId: string }[] 
 
 /**
  * Mini-intérprete recursivo das cláusulas produzidas por `lib/biblioteca.ts`.
- * Suporta os operadores efetivamente usados pelo módulo: igualdades simples e o
+ * Suporta os operadores efetivamente usados pelo módulo: igualdades simples, o
  * quantificador `some` sobre relações (usado em `partilhasClube` e no caminho de
- * relações da visibilidade por escalão partilhado — `autor.membros.some...`).
+ * relações da visibilidade por escalão partilhado) e a disjunção `OR` aninhada
+ * (usada na cobertura de escalão ciente do âmbito — `escaloesCobertoPor`).
  * Se o módulo passar a gerar operadores fora deste conjunto, os testes falham
  * (intencional: obriga a rever a semântica de visibilidade).
  */
 function matchWhere(where: unknown, node: unknown): boolean {
   if (where === null || typeof where !== "object") return node === where;
   const w = where as Record<string, unknown>;
+  if ("OR" in w) {
+    const arms = (w.OR ?? []) as unknown[];
+    // Numa cláusula com OR, os restantes campos combinam-se em AND com a disjunção.
+    const resto = Object.fromEntries(Object.entries(w).filter(([k]) => k !== "OR"));
+    return (
+      arms.some((arm) => matchWhere(arm, node)) &&
+      matchWhere(resto, node)
+    );
+  }
   if ("some" in w) {
     const arr = Array.isArray(node) ? node : [];
     return arr.some((el) => matchWhere(w.some, el));
@@ -48,32 +58,125 @@ function visivel(filtro: { OR?: unknown }, linha: Linha): boolean {
 
 /**
  * Constrói o subgrafo `autor` de uma linha de exercício para exercitar a
- * visibilidade por escalão partilhado. `escaloes` descreve os escalões que o autor
- * coordena no clube ativo (CLUBE) e, para cada um, os utilizadores atribuídos a
- * esse escalão nesse clube. Reflete o caminho de relações do filtro:
- * autor → membros(deste clube) → atribuicoes → escalao → atribuicoes → membroClube.
+ * visibilidade por escalão partilhado no caso PROPRIOS_ESCALOES. `escaloes`
+ * descreve os escalões que o autor coordena no clube ativo (CLUBE) e, para cada um,
+ * os utilizadores ATRIBUÍDOS (atribuição explícita) a esse escalão nesse clube.
+ * Reflete o modelo de dados que o filtro navega — cada nó de escalão carrega o
+ * `clubeId`, as atribuições explícitas e os membros do clube (todos de âmbito
+ * PROPRIOS_ESCALOES aqui) — sem depender da forma exata da cláusula gerada.
  */
 function comEscaloesDoAutor(
   linha: Linha,
   escaloes: { membros: string[] }[],
   clubeDoAutor: string = CLUBE,
 ): Linha {
+  const escalaoNode = (esc: { membros: string[] }) => ({
+    clubeId: clubeDoAutor,
+    atribuicoes: esc.membros.map((utilizadorId) => ({
+      membroClube: { clubeId: clubeDoAutor, utilizadorId },
+    })),
+    clube: {
+      membros: esc.membros.map((utilizadorId) => ({
+        utilizadorId,
+        perfil: { ambito: "PROPRIOS_ESCALOES" },
+      })),
+    },
+    seccao: undefined,
+  });
+  const nodes = escaloes.map(escalaoNode);
   return {
     ...linha,
     autor: {
       membros: [
         {
           clubeId: clubeDoAutor,
-          atribuicoes: escaloes.map((esc) => ({
-            escalao: {
-              atribuicoes: esc.membros.map((utilizadorId) => ({
-                membroClube: { clubeId: clubeDoAutor, utilizadorId },
-              })),
-            },
-          })),
+          perfil: { ambito: "PROPRIOS_ESCALOES" },
+          atribuicoes: nodes.map((escalao) => ({ escalao })),
+          clube: { escaloes: nodes },
+          seccoes: [],
         },
       ],
     },
+  };
+}
+
+// ─── Modelo de mundo para exercitar os três âmbitos (§6.3/§6.5/§6.9) ──────────
+
+type AmbitoTexto = "TODO_CLUBE" | "SECCAO" | "PROPRIOS_ESCALOES";
+type MembroMundo = {
+  utilizadorId: string;
+  ambito: AmbitoTexto;
+  /** Escalões atribuídos (só relevante para PROPRIOS_ESCALOES). */
+  escaloes?: string[];
+  /** Secções coordenadas (só relevante para SECCAO). */
+  seccoes?: string[];
+};
+type EscalaoMundo = { id: string; seccaoId?: string };
+
+/**
+ * Constrói uma linha de exercício 🎒 pessoal (autor = `autorId`) a partir de um
+ * "mundo" de escalões e membros do clube, modelando fielmente a cobertura de
+ * escalão por âmbito: PROPRIOS_ESCALOES (atribuição explícita), TODO_CLUBE (todos
+ * os escalões do clube) e SECCAO (escalões da secção coordenada). Independente da
+ * forma da cláusula gerada — modela os dados, não o filtro.
+ */
+function linhaAutorMundo(
+  autorId: string,
+  escaloes: EscalaoMundo[],
+  membros: MembroMundo[],
+  clubeDoMundo: string = CLUBE,
+): Linha {
+  const escalaoNode = (e: EscalaoMundo) => ({
+    clubeId: clubeDoMundo,
+    atribuicoes: membros
+      .filter((m) => m.ambito === "PROPRIOS_ESCALOES" && (m.escaloes ?? []).includes(e.id))
+      .map((m) => ({ membroClube: { clubeId: clubeDoMundo, utilizadorId: m.utilizadorId } })),
+    clube: {
+      membros: membros.map((m) => ({
+        utilizadorId: m.utilizadorId,
+        perfil: { ambito: m.ambito },
+      })),
+    },
+    seccao: e.seccaoId
+      ? {
+          membros: membros
+            .filter((m) => m.ambito === "SECCAO" && (m.seccoes ?? []).includes(e.seccaoId!))
+            .map((m) => ({
+              papel: "COORDENADOR",
+              membroClube: { clubeId: clubeDoMundo, utilizadorId: m.utilizadorId },
+            })),
+        }
+      : undefined,
+  });
+
+  const autor = membros.find((m) => m.utilizadorId === autorId)!;
+  const todosNodes = escaloes.map(escalaoNode);
+  const membroAutor = {
+    clubeId: clubeDoMundo,
+    perfil: { ambito: autor.ambito },
+    atribuicoes:
+      autor.ambito === "PROPRIOS_ESCALOES"
+        ? escaloes
+            .filter((e) => (autor.escaloes ?? []).includes(e.id))
+            .map((e) => ({ escalao: escalaoNode(e) }))
+        : [],
+    clube: { escaloes: todosNodes },
+    seccoes:
+      autor.ambito === "SECCAO"
+        ? (autor.seccoes ?? []).map((sid) => ({
+            papel: "COORDENADOR",
+            seccao: { escaloes: escaloes.filter((e) => e.seccaoId === sid).map(escalaoNode) },
+          }))
+        : [],
+  };
+
+  return {
+    proprietario: "TREINADOR",
+    autorId,
+    clubeProprietarioId: null,
+    clubeId: clubeDoMundo,
+    partilhasClube: [],
+    autor: { membros: [membroAutor] },
   };
 }
 
@@ -167,6 +270,98 @@ describe("exercício 🎒 pessoal — visível a quem partilha um escalão com o
   it("mantém a visibilidade do próprio autor mesmo sem escalões (aba 🎒)", () => {
     const linha = comEscaloesDoAutor(exercicioPessoal(EU), []);
     expect(veExercicio(linha, CLUBE, EU)).toBe(true);
+  });
+});
+
+// ─── 🎒 Escalão partilhado por ÂMBITO (TODO_CLUBE / SECCAO), não só atribuição ─
+
+describe("exercício 🎒 pessoal — cobertura de escalão por âmbito (§6.3/§6.5/§6.9)", () => {
+  it("autor TODO_CLUBE: visível a quem cobre qualquer escalão do clube", () => {
+    // Ex.: Diretor Técnico (autor, TODO_CLUBE) e um treinador de escalão (COLEGA).
+    const linha = linhaAutorMundo(EU, [{ id: "e1" }], [
+      { utilizadorId: EU, ambito: "TODO_CLUBE" },
+      { utilizadorId: COLEGA, ambito: "PROPRIOS_ESCALOES", escaloes: ["e1"] },
+    ]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(true);
+  });
+
+  it("autor TODO_CLUBE: NÃO visível a quem não cobre nenhum escalão", () => {
+    const linha = linhaAutorMundo(EU, [{ id: "e1" }], [
+      { utilizadorId: EU, ambito: "TODO_CLUBE" },
+      { utilizadorId: COLEGA, ambito: "PROPRIOS_ESCALOES", escaloes: [] },
+    ]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(false);
+  });
+
+  it("utilizador TODO_CLUBE vê o pessoal de um autor com escalão atribuído (bug reportado)", () => {
+    // Hugo (COLEGA) é Diretor Técnico (TODO_CLUBE); o treinador A (EU) tem o escalão
+    // atribuído. Antes da correção, Hugo não via — não tinha AtribuicaoEscalao.
+    const linha = linhaAutorMundo(EU, [{ id: "e1" }], [
+      { utilizadorId: EU, ambito: "PROPRIOS_ESCALOES", escaloes: ["e1"] },
+      { utilizadorId: COLEGA, ambito: "TODO_CLUBE" },
+    ]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(true);
+  });
+
+  it("dois membros TODO_CLUBE partilham os escalões do clube", () => {
+    const linha = linhaAutorMundo(EU, [{ id: "e1" }], [
+      { utilizadorId: EU, ambito: "TODO_CLUBE" },
+      { utilizadorId: COLEGA, ambito: "TODO_CLUBE" },
+    ]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(true);
+  });
+
+  it("clube sem escalões: mesmo dois TODO_CLUBE não partilham nada", () => {
+    const linha = linhaAutorMundo(EU, [], [
+      { utilizadorId: EU, ambito: "TODO_CLUBE" },
+      { utilizadorId: COLEGA, ambito: "TODO_CLUBE" },
+    ]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(false);
+  });
+
+  it("autor SECCAO: visível a quem cobre um escalão da secção coordenada", () => {
+    const linha = linhaAutorMundo(EU, [{ id: "e1", seccaoId: "s1" }], [
+      { utilizadorId: EU, ambito: "SECCAO", seccoes: ["s1"] },
+      { utilizadorId: COLEGA, ambito: "PROPRIOS_ESCALOES", escaloes: ["e1"] },
+    ]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(true);
+  });
+
+  it("utilizador SECCAO vê o pessoal de um autor com escalão na sua secção", () => {
+    const linha = linhaAutorMundo(EU, [{ id: "e1", seccaoId: "s1" }], [
+      { utilizadorId: EU, ambito: "PROPRIOS_ESCALOES", escaloes: ["e1"] },
+      { utilizadorId: COLEGA, ambito: "SECCAO", seccoes: ["s1"] },
+    ]);
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(true);
+  });
+
+  it("autor SECCAO: NÃO visível a quem coordena outra secção", () => {
+    const linha = linhaAutorMundo(
+      EU,
+      [
+        { id: "e1", seccaoId: "s1" },
+        { id: "e2", seccaoId: "s2" },
+      ],
+      [
+        { utilizadorId: EU, ambito: "SECCAO", seccoes: ["s1"] },
+        { utilizadorId: COLEGA, ambito: "SECCAO", seccoes: ["s2"] },
+      ],
+    );
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(false);
+  });
+
+  it("a cobertura por âmbito continua scoped ao clube ativo", () => {
+    // Autor e COLEGA são ambos TODO_CLUBE, mas de OUTRO_CLUBE.
+    const linha = linhaAutorMundo(
+      EU,
+      [{ id: "e1" }],
+      [
+        { utilizadorId: EU, ambito: "TODO_CLUBE" },
+        { utilizadorId: COLEGA, ambito: "TODO_CLUBE" },
+      ],
+      OUTRO_CLUBE,
+    );
+    expect(veExercicio(linha, CLUBE, COLEGA)).toBe(false);
   });
 });
 

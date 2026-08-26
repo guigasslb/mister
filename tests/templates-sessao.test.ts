@@ -412,8 +412,31 @@ describe("criarSessaoDeTemplateSchema", () => {
 // ─── Visibilidade das bibliotecas ────────────────────────────────────────────
 
 describe("filtros de visibilidade (secção 3.3)", () => {
-  it("inclui pessoais do próprio, pessoais de colegas com escalão partilhado, do clube (novo e legado) e partilhados", () => {
+  it("inclui pessoais do próprio, pessoais de colegas com escalão partilhado (ciente do âmbito), do clube (novo e legado) e partilhados", () => {
     const filtro = filtroExerciciosVisiveis("clube1", "u1");
+    // Cobertura de escalão do utilizador atual, ciente do âmbito (§6.3/§6.5/§6.9):
+    // atribuição explícita (PROPRIOS), perfil TODO_CLUBE, ou coordenação de secção.
+    const cobertoPeloUtilizador = {
+      clubeId: "clube1",
+      OR: [
+        { atribuicoes: { some: { membroClube: { clubeId: "clube1", utilizadorId: "u1" } } } },
+        {
+          clube: {
+            membros: { some: { utilizadorId: "u1", perfil: { ambito: "TODO_CLUBE" } } },
+          },
+        },
+        {
+          seccao: {
+            membros: {
+              some: {
+                papel: "COORDENADOR",
+                membroClube: { clubeId: "clube1", utilizadorId: "u1" },
+              },
+            },
+          },
+        },
+      ],
+    };
     expect(filtro.OR).toEqual([
       { proprietario: "TREINADOR", autorId: "u1" },
       {
@@ -422,15 +445,21 @@ describe("filtros de visibilidade (secção 3.3)", () => {
           membros: {
             some: {
               clubeId: "clube1",
-              atribuicoes: {
-                some: {
-                  escalao: {
-                    atribuicoes: {
-                      some: { membroClube: { clubeId: "clube1", utilizadorId: "u1" } },
+              OR: [
+                { atribuicoes: { some: { escalao: cobertoPeloUtilizador } } },
+                {
+                  perfil: { ambito: "TODO_CLUBE" },
+                  clube: { escaloes: { some: cobertoPeloUtilizador } },
+                },
+                {
+                  seccoes: {
+                    some: {
+                      papel: "COORDENADOR",
+                      seccao: { escaloes: { some: cobertoPeloUtilizador } },
                     },
                   },
                 },
-              },
+              ],
             },
           },
         },

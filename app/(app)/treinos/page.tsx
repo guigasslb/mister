@@ -175,11 +175,11 @@ export default async function TreinosPage({
         fim,
         numero: epoca ? numeroSemana(new Date(epoca.dataInicio), inicio) : idx + 1,
         nome: nomeSemana(inicio, fim),
-        sessoes: [...ss].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()),
+        sessoes: [...ss].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()),
       };
     })
-    // Mais recente primeiro.
-    .sort((a, b) => b.inicio.getTime() - a.inicio.getTime());
+    // Mais antiga primeiro (semana mais próxima no topo, mais distante no fundo).
+    .sort((a, b) => a.inicio.getTime() - b.inicio.getTime());
 
   return (
     <div className="space-y-6">

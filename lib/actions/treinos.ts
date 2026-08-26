@@ -138,7 +138,7 @@ export async function listarSessoes(escalaoId?: string): Promise<Resultado<Sessa
       ...filtroEscalao,
     },
     include: INCLUDE_LISTA,
-    orderBy: { data: "desc" },
+    orderBy: { data: "asc" },
   });
   return ok(sessoes);
 }
