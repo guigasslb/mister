@@ -68,10 +68,13 @@ describe("orientação da ponta das setas", () => {
   }
 });
 
-// Regressão do marcador SVG (bug das setas para a esquerda): sem `viewBox` a
-// auto-orientação era mal renderizada no Chromium/WebKit a ~180°. O marcador tem
-// de ter `viewBox` + `orient="auto"` + `refX/refY` (ponta ~coincidente com o fim
-// da linha) para ficar correto em TODAS as direções.
+// Regressão do marcador SVG (bug das setas para a esquerda): a cabeça aparecia
+// deslocada/torta a ~180°. Causas: `refX` não coincidia com a ponta (tip em x=10,
+// refX=9) e `markerUnits="strokeWidth"` remapeava o viewBox, amplificando o
+// desalinhamento na direção de deslocamento. Correção robusta: `viewBox` +
+// `orient="auto"` + `markerUnits="userSpaceOnUse"` (dimensões fixas, sem depender
+// do traço) + `refX=10 refY=5` (ponta EXACTA do triângulo assente no fim da
+// linha) — correto em TODAS as direções.
 describe("marcador da ponta da seta", () => {
   function markerHtml(estilo: Estilo): string {
     const el: ElementoCampo = {
@@ -88,13 +91,15 @@ describe("marcador da ponta da seta", () => {
   }
 
   for (const estilo of ["movimento", "passe", "conducao"] as const) {
-    it(`${estilo}: marcador tem viewBox, orient=auto e refX/refY definidos`, () => {
+    it(`${estilo}: marcador tem viewBox, orient=auto, userSpaceOnUse e refX/refY na ponta`, () => {
       const html = markerHtml(estilo);
       const marker = html.match(/<marker[^>]*>/)?.[0] ?? "";
       expect(marker).toContain('viewBox="0 0 10 10"');
       expect(marker).toContain('orient="auto"');
-      // refX próximo da ponta (tip em x=10 no viewBox) e refY no eixo (y=5).
-      expect(marker).toMatch(/refX="9"/);
+      // Dimensões fixas, independentes da espessura do traço.
+      expect(marker).toContain('markerUnits="userSpaceOnUse"');
+      // refX na ponta exacta (tip em x=10 no viewBox) e refY no eixo (y=5).
+      expect(marker).toMatch(/refX="10"/);
       expect(marker).toMatch(/refY="5"/);
     });
   }

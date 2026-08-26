@@ -364,29 +364,35 @@ export function rotuloCampo(formato: FormatoJogo = FormatoJogo.FUTSAL_5): string
 
 // ─── Marcador de ponta de seta (partilhado) ──────────────────────────────────
 //
-// Bug corrigido: a definição anterior não tinha `viewBox` nem `markerUnits`
-// explícito. Sem `viewBox`, a auto-orientação (`orient="auto"`) é renderizada
-// de forma inconsistente no Chromium/WebKit quando o ângulo do trajecto ronda os
-// 180° (setas para a esquerda) — a cabeça aparecia deslocada/torta. Além disso o
-// `refX` estava a meio da cabeça (tip em x=6, refX=4), afastando o ponto de
-// referência da ponta real.
+// Bug das setas para a esquerda (2 tentativas anteriores): a cabeça aparecia
+// deslocada/torta ou "no meio" da linha — o corpo parecia sair da ponta em vez de
+// chegar a ela. Duas causas cumulativas:
 //
-// Correcção: `viewBox` explícito dá um sistema de coordenadas bem definido ao
-// marcador, tornando `orient="auto"` fiável em TODAS as direcções; `refX` passa a
-// (quase) coincidir com a ponta para a cabeça assentar no fim da linha. O tamanho
-// visual mantém-se (viewBox 0–10 → markerWidth 6 com markerUnits=strokeWidth ⇒
-// ~12 unidades, igual ao anterior).
+//   1. `refX` NÃO coincidia com a ponta do triângulo (tip em x=10 no viewBox, mas
+//      refX=9). O ponto de ancoragem — que assenta no fim da linha — ficava 1
+//      unidade atrás da ponta, fazendo a ponta ultrapassar o fim da linha.
+//   2. `markerUnits="strokeWidth"` escala o marcador pela espessura do traço E
+//      remapeia o viewBox (0–10) para um viewport 6×6 (escala 0,6). Isto amplifica
+//      o desalinhamento do refX ao longo da direção de deslocamento; a ~180°
+//      (setas para a esquerda) empurra a cabeça rodada para fora do fim da linha.
+//
+// Correção robusta: `markerUnits="userSpaceOnUse"` com dimensões FIXAS (12×12),
+// independentes da espessura do traço; `viewBox="0 0 10 10"` mantém o sistema de
+// coordenadas bem definido para o `orient="auto"`; e `refX=10 refY=5` ancora
+// EXACTAMENTE a ponta do triângulo (M0,0 L10,5 L0,10 → tip em (10,5)) ao fim da
+// linha. A ponta assenta no ponto final em todas as direções (0/45/90/135/180/
+// 225/270/315°). Tamanho visual ~12 unidades, igual ao anterior.
 export function SetaMarker({ id, cor }: { id: string; cor: string }) {
   return (
     <marker
       id={id}
       viewBox="0 0 10 10"
-      markerWidth={6}
-      markerHeight={6}
-      refX={9}
+      markerWidth={12}
+      markerHeight={12}
+      refX={10}
       refY={5}
       orient="auto"
-      markerUnits="strokeWidth"
+      markerUnits="userSpaceOnUse"
     >
       <path d="M0,0 L10,5 L0,10 z" fill={cor} />
     </marker>
