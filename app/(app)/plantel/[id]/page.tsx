@@ -30,6 +30,7 @@ import { GerarRelatorioBotao } from "@/components/relatorios/GerarRelatorioBotao
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { ApagarAtletaDefinitivamenteButton } from "@/components/plantel/ApagarAtletaDefinitivamenteButton";
 import { ToggleAtivoAtleta } from "@/components/plantel/ToggleAtivoAtleta";
+import { BadgeInscricao } from "@/components/plantel/BadgeInscricao";
 import { LABEL_POSICAO } from "@/lib/schemas/atleta";
 
 function calcularIdade(dataNascimento: Date): number {
@@ -166,7 +167,10 @@ export default async function PerfilAtletaPage({
       <div className="flex items-center gap-5">
         <AvatarAtleta nome={a.nome} tamanho="xl" fotoUrl={a.fotoUrl} />
         <div>
-          <h1 className="leading-tight">{a.nome}</h1>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="leading-tight">{a.nome}</h1>
+            <BadgeInscricao inscrito={a.inscrito} />
+          </div>
           <p className="mt-1 text-corpo-sec text-cinza-600">{metaPartes.join(" · ")}</p>
         </div>
       </div>

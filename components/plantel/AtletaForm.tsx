@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -45,6 +46,7 @@ export type AtletaParaEdicao = {
   posicoes: Posicao[];
   observacoes: string | null;
   fotoUrl: string | null;
+  inscrito: boolean;
   encarregadoNome: string | null;
   encarregadoContacto: string | null;
   encarregadoEmail: string | null;
@@ -70,6 +72,9 @@ export function AtletaForm({
   );
   const [escalaoId, setEscalaoId] = useState<string>("");
   const [tipoParticipacao, setTipoParticipacao] = useState<TipoParticipacao>("PRINCIPAL");
+  // Estado de inscrição (secção 8): editável aqui. Gerido em estado local (o
+  // Switch não é um input nativo) e enviado no objeto `pessoal`.
+  const [inscrito, setInscrito] = useState(atleta?.inscrito ?? false);
 
   // Modalidade em contexto para o seletor de posições (§3.2): na criação deriva do
   // escalão selecionado; na edição não há escalão em contexto → mostra todas.
@@ -126,6 +131,7 @@ export function AtletaForm({
       dataIngresso: ingressoRaw !== "" ? ingressoRaw : undefined,
       observacoes: val("observacoes") || undefined,
       fotoUrl: val("fotoUrl"),
+      inscrito,
       encarregadoNome: val("encarregadoNome") || undefined,
       encarregadoContacto: val("encarregadoContacto") || undefined,
       encarregadoEmail: val("encarregadoEmail"),
@@ -220,6 +226,26 @@ export function AtletaForm({
           <Label htmlFor="fotoUrl">Fotografia (URL)</Label>
           <Input id="fotoUrl" name="fotoUrl" defaultValue={atleta?.fotoUrl ?? ""} placeholder="https://…" />
           {erros.fotoUrl && <p className="text-legenda text-vermelho-600">{erros.fotoUrl}</p>}
+        </div>
+
+        {/* Inscrição (secção 8): estado editável do atleta no clube/federação. */}
+        <div className="flex min-h-[44px] items-center justify-between gap-4 rounded-lg border border-cinza-200 px-4 py-2">
+          <div>
+            <Label htmlFor="inscrito" className="cursor-pointer select-none">
+              Inscrito
+            </Label>
+            <p className="text-legenda text-cinza-400">
+              {inscrito
+                ? "O atleta está inscrito."
+                : "O atleta ainda está por inscrever."}
+            </p>
+          </div>
+          <Switch
+            id="inscrito"
+            checked={inscrito}
+            onCheckedChange={setInscrito}
+            aria-label={inscrito ? "Marcar como por inscrever" : "Marcar como inscrito"}
+          />
         </div>
       </div>
 

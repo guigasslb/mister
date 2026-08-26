@@ -228,6 +228,7 @@ describe("listarAtletas (agrupamento por secção/modalidade — §8.5)", () => 
     observacoes: null,
     fotoUrl: null,
     ativo: true,
+    inscrito: false,
     dataIngresso: null,
     encarregadoNome: null,
     encarregadoContacto: null,

@@ -502,6 +502,10 @@ model Atleta {
   observacoes    String?   @db.Text
   fotoUrl        String? // por URL (sem upload por agora)
   ativo          Boolean   @default(true)
+  // Inscrição federativa/no clube (secção 8 — plantel): distingue quem já está
+  // formalmente inscrito de quem falta inscrever. Independente de `ativo` (um
+  // atleta ativo pode ainda estar por inscrever). Default false: nasce por inscrever.
+  inscrito       Boolean   @default(false)
   dataIngresso   DateTime? // para a taxa de presença (secção 10); fallback = criadoEm
 
   // Dados do encarregado de educação (RGPD — minimização).

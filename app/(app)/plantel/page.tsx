@@ -14,6 +14,9 @@ import { AvatarAtleta } from "@/components/plantel/AvatarAtleta";
 import { BadgeTipoParticipacao } from "@/components/plantel/BadgesParticipacao";
 import { BadgeModalidade } from "@/components/plantel/BadgeModalidade";
 import { FiltroInativos } from "@/components/plantel/FiltroInativos";
+import { BadgeInscricao } from "@/components/plantel/BadgeInscricao";
+import { SeletorVistaPlantel } from "@/components/plantel/SeletorVistaPlantel";
+import { ListaInscricoes } from "@/components/plantel/ListaInscricoes";
 import { ABREV_POSICAO } from "@/lib/schemas/atleta";
 import { mapaModalidadePorEscalao } from "@/lib/modalidade-escalao";
 
@@ -38,6 +41,7 @@ export default async function PlantelPage({
     seccaoId?: string;
     q?: string;
     incluirInativos?: string;
+    vista?: string;
   }>;
 }) {
   const {
@@ -45,7 +49,10 @@ export default async function PlantelPage({
     seccaoId: seccaoIdRaw,
     q,
     incluirInativos: incluirInativosRaw,
+    vista: vistaRaw,
   } = await searchParams;
+  // Vista do plantel: cartões (default) ou lista de inscrições (§8).
+  const vistaInscricoes = vistaRaw === "inscricoes";
   // Resolução do escalão em contexto. O sentinel "todos" é tratado ANTES da
   // validação CUID (não é um CUID válido). `escalaoIdRaw` pode ser:
   //   undefined/"" → primeira visita: escalão do treinador (ou "Todos" se null);
@@ -235,7 +242,10 @@ export default async function PlantelPage({
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <CampoPesquisa placeholder="Pesquisar atleta por nome…" />
-        <FiltroInativos />
+        <div className="flex flex-wrap items-center gap-4">
+          <FiltroInativos />
+          <SeletorVistaPlantel />
+        </div>
       </div>
 
       {semAcessoEscalao ? (
@@ -262,12 +272,15 @@ export default async function PlantelPage({
         />
       ) : (
         <>
-          {haDuplicados && (
+          {haDuplicados && !vistaInscricoes && (
             <p className="flex items-center gap-1.5 rounded-md bg-ambar-500/10 px-3 py-2 text-corpo-sec text-ambar-600">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
               Há atletas do mesmo escalão com o mesmo número (assinalados a laranja).
             </p>
           )}
+          {vistaInscricoes ? (
+            <ListaInscricoes atletas={atletas} />
+          ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
             {atletas.map((a) => {
               const ctx = a.participacaoContexto;
@@ -286,11 +299,14 @@ export default async function PlantelPage({
                 <AvatarAtleta nome={a.nome} tamanho="lg" fotoUrl={a.fotoUrl} />
                 <div className="w-full">
                   <p className="truncate text-corpo font-semibold text-cinza-900">{a.nome}</p>
-                  {!a.ativo && (
-                    <span className="mt-1 inline-flex items-center rounded-full border border-cinza-300 bg-cinza-100 px-2 py-0.5 text-legenda font-medium text-cinza-600">
-                      Inativo
-                    </span>
-                  )}
+                  <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
+                    {!a.ativo && (
+                      <span className="inline-flex items-center rounded-full border border-cinza-300 bg-cinza-100 px-2 py-0.5 text-legenda font-medium text-cinza-600">
+                        Inativo
+                      </span>
+                    )}
+                    <BadgeInscricao inscrito={a.inscrito} />
+                  </div>
                   <p className="text-legenda text-cinza-600">
                     {numero != null && (
                       <span className={dup ? "font-semibold text-ambar-600" : ""}>
@@ -338,6 +354,7 @@ export default async function PlantelPage({
               );
             })}
           </div>
+          )}
           <p className="text-corpo-sec text-cinza-600">
             {atletas.length} {atletas.length === 1 ? "atleta" : "atletas"}
           </p>

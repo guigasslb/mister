@@ -64,6 +64,8 @@ export interface AtletaPessoal {
   observacoes: string | null;
   fotoUrl: string | null;
   ativo: boolean;
+  /** Inscrição federativa/no clube (secção 8 — plantel). */
+  inscrito: boolean;
   dataIngresso: Date | null;
   encarregadoNome: string | null;
   encarregadoContacto: string | null;
@@ -96,6 +98,7 @@ const SELECT_PESSOAL = {
   observacoes: true,
   fotoUrl: true,
   ativo: true,
+  inscrito: true,
   dataIngresso: true,
   encarregadoNome: true,
   encarregadoContacto: true,
@@ -383,6 +386,8 @@ export async function criarAtleta(dados: unknown): Promise<Resultado<Atleta>> {
         // Default explícito: um atleta nasce ativo salvo indicação em contrário
         // (ex.: criado logo como experimental/inativo).
         ativo: pessoal.ativo ?? true,
+        // Inscrição (secção 8): por omissão nasce «por inscrever».
+        inscrito: pessoal.inscrito ?? false,
         numero,
       },
     });
@@ -471,6 +476,9 @@ export async function atualizarAtleta(
       // pessoais não deve reativar/desativar um atleta de forma implícita
       // (o estado é gerido por `toggleAtivoAtleta`/`apagarAtleta`).
       ...(parsed.data.ativo !== undefined ? { ativo: parsed.data.ativo } : {}),
+      // `inscrito` é editável no formulário do atleta (secção 8). Só se escreve
+      // quando fornecido, para não repor o valor a partir de callers que o omitam.
+      ...(parsed.data.inscrito !== undefined ? { inscrito: parsed.data.inscrito } : {}),
     },
   });
   revalidatePath(PATH);

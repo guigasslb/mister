@@ -38,6 +38,9 @@ export const atletaPessoalSchema = z.object({
   // (`toggleAtivoAtleta`, `apagarAtleta`). Na criação, o default `true` é
   // aplicado explicitamente em `criarAtleta`.
   ativo: z.boolean().optional(),
+  // Inscrição federativa/no clube (secção 8 — plantel): editável no formulário do
+  // atleta. Opcional; quando ausente, a action assume `false` (por inscrever).
+  inscrito: z.boolean().optional(),
   encarregadoNome: z.string().max(100).optional(),
   encarregadoContacto: z.string().max(40).optional(),
   encarregadoEmail: z.string().email("Email inválido").optional().or(z.literal("")),
