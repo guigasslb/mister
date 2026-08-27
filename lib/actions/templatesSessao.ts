@@ -159,9 +159,10 @@ async function exerciciosVisiveis(
   utilizadorId: string,
 ): Promise<boolean> {
   const unicos = [...new Set(ids)];
+  const filtroVisivel = await filtroExerciciosVisiveis(clubeId, utilizadorId);
   const encontrados = await prisma.exercicio.count({
     where: {
-      AND: [{ id: { in: unicos } }, filtroExerciciosVisiveis(clubeId, utilizadorId)],
+      AND: [{ id: { in: unicos } }, filtroVisivel],
     },
   });
   return encontrados === unicos.length;

@@ -36,7 +36,9 @@ vi.mock("@/lib/db", () => ({
       update: vi.fn(),
     },
     modeloSessaoExercicio: { createMany: vi.fn(), deleteMany: vi.fn() },
-    escalao: { findFirst: vi.fn() },
+    escalao: { findFirst: vi.fn(), findMany: vi.fn() },
+    // filtroExerciciosVisiveis (pré-computação por escalão partilhado) consulta membroClube.
+    membroClube: { findFirst: vi.fn(), findMany: vi.fn() },
     epoca: { findFirst: vi.fn() },
     sessao: { create: vi.fn() },
     sessaoExercicio: { createMany: vi.fn() },
@@ -411,63 +413,71 @@ describe("criarSessaoDeTemplateSchema", () => {
 
 // ─── Visibilidade das bibliotecas ────────────────────────────────────────────
 
-describe("filtros de visibilidade (secção 3.3)", () => {
-  it("inclui pessoais do próprio, pessoais de colegas com escalão partilhado (ciente do âmbito), do clube (novo e legado) e partilhados", () => {
-    const filtro = filtroExerciciosVisiveis("clube1", "u1");
-    // Cobertura de escalão do utilizador atual, ciente do âmbito (§6.3/§6.5/§6.9):
-    // atribuição explícita (PROPRIOS), perfil TODO_CLUBE, ou coordenação de secção.
-    const cobertoPeloUtilizador = {
-      clubeId: "clube1",
-      OR: [
-        { atribuicoes: { some: { membroClube: { clubeId: "clube1", utilizadorId: "u1" } } } },
-        {
-          clube: {
-            membros: { some: { utilizadorId: "u1", perfil: { ambito: "TODO_CLUBE" } } },
-          },
-        },
-        {
-          seccao: {
-            membros: {
-              some: {
-                papel: "COORDENADOR",
-                membroClube: { clubeId: "clube1", utilizadorId: "u1" },
-              },
-            },
-          },
-        },
-      ],
-    };
+describe("filtroExerciciosVisiveis — pré-computação por escalão partilhado (secção 3.3)", () => {
+  // A visibilidade por escalão partilhado (alternativa 2) é pré-computada em SQL simples
+  // (`autoresComEscalaoPartilhado`) e aplicada como `autorId in (...)`. Ver a nota no topo
+  // de lib/biblioteca.ts: o subquery correlacionado profundo anterior não era traduzido
+  // fielmente pelo Prisma (o filtro devolvia vazio mesmo com dados válidos).
+
+  it("inclui pessoais do próprio, pessoais de colegas via autorId in (...), do clube (novo e legado) e partilhados", async () => {
+    // Viewer PROPRIOS_ESCALOES com o escalão e1 atribuído.
+    mocked(prisma.membroClube.findFirst).mockResolvedValue({
+      perfil: { ambito: "PROPRIOS_ESCALOES" },
+      atribuicoes: [{ escalaoId: "e1" }],
+      seccoes: [],
+    });
+    // Autores que cobrem e1 no clube (o próprio u1 e o colega u2).
+    mocked(prisma.membroClube.findMany).mockResolvedValue([
+      { utilizadorId: "u1" },
+      { utilizadorId: "u2" },
+    ]);
+
+    const filtro = await filtroExerciciosVisiveis("clube1", "u1");
     expect(filtro.OR).toEqual([
       { proprietario: "TREINADOR", autorId: "u1" },
-      {
-        proprietario: "TREINADOR",
-        autor: {
-          membros: {
-            some: {
-              clubeId: "clube1",
-              OR: [
-                { atribuicoes: { some: { escalao: cobertoPeloUtilizador } } },
-                {
-                  perfil: { ambito: "TODO_CLUBE" },
-                  clube: { escaloes: { some: cobertoPeloUtilizador } },
-                },
-                {
-                  seccoes: {
-                    some: {
-                      papel: "COORDENADOR",
-                      seccao: { escaloes: { some: cobertoPeloUtilizador } },
-                    },
-                  },
-                },
-              ],
-            },
-          },
-        },
-      },
+      { proprietario: "TREINADOR", autorId: { in: ["u1", "u2"] } },
       { proprietario: "CLUBE", clubeProprietarioId: "clube1" },
       { proprietario: "CLUBE", clubeProprietarioId: null, clubeId: "clube1" },
       { partilhasClube: { some: { clubeId: "clube1" } } },
     ]);
+  });
+
+  it("omite a alternativa de colegas quando o utilizador não cobre nenhum escalão do clube", async () => {
+    mocked(prisma.membroClube.findFirst).mockResolvedValue({
+      perfil: { ambito: "PROPRIOS_ESCALOES" },
+      atribuicoes: [],
+      seccoes: [],
+    });
+
+    const filtro = await filtroExerciciosVisiveis("clube1", "u1");
+    expect(filtro.OR).toEqual([
+      { proprietario: "TREINADOR", autorId: "u1" },
+      { proprietario: "CLUBE", clubeProprietarioId: "clube1" },
+      { proprietario: "CLUBE", clubeProprietarioId: null, clubeId: "clube1" },
+      { partilhasClube: { some: { clubeId: "clube1" } } },
+    ]);
+    // Sem escalões cobertos não chega a consultar os autores.
+    expect(prisma.membroClube.findMany).not.toHaveBeenCalled();
+  });
+
+  it("viewer TODO_CLUBE cobre todos os escalões do clube e vê os colegas que os cobrem", async () => {
+    mocked(prisma.membroClube.findFirst).mockResolvedValue({
+      perfil: { ambito: "TODO_CLUBE" },
+      atribuicoes: [],
+      seccoes: [],
+    });
+    mocked(prisma.escalao.findMany).mockResolvedValue([{ id: "e1" }, { id: "e2" }]);
+    mocked(prisma.membroClube.findMany).mockResolvedValue([{ utilizadorId: "u9" }]);
+
+    const filtro = await filtroExerciciosVisiveis("clube1", "u1");
+    expect(prisma.escalao.findMany).toHaveBeenCalledWith({
+      where: { clubeId: "clube1" },
+      select: { id: true },
+    });
+    expect(filtro.OR).toContainEqual({
+      proprietario: "TREINADOR",
+      autorId: { in: ["u9"] },
+    });
   });
 
   it("templates: pessoais do próprio + do clube ativo", () => {

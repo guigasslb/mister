@@ -28,6 +28,9 @@ vi.mock("@/lib/permissoes", () => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     exercicio: { findMany: vi.fn(), findFirst: vi.fn() },
+    // filtroExerciciosVisiveis (pré-computação por escalão partilhado) consulta estes modelos.
+    membroClube: { findFirst: vi.fn(), findMany: vi.fn() },
+    escalao: { findMany: vi.fn() },
   },
 }));
 

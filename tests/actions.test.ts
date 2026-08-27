@@ -26,7 +26,9 @@ vi.mock("@/lib/permissoes", () => ({
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    escalao: { findFirst: vi.fn() },
+    escalao: { findFirst: vi.fn(), findMany: vi.fn() },
+    // filtroExerciciosVisiveis (pré-computação por escalão partilhado) consulta membroClube.
+    membroClube: { findFirst: vi.fn(), findMany: vi.fn() },
     atleta: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     atletaEscalao: { create: vi.fn(), findFirst: vi.fn() },
     exercicio: { findFirst: vi.fn(), delete: vi.fn() },

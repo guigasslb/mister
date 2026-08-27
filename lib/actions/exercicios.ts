@@ -109,10 +109,12 @@ export async function listarExercicios(
 
   const termo = (q ?? "").trim();
 
+  const filtroVisivel = await filtroExerciciosVisiveis(ctx.clubeId, ctx.utilizadorId);
+
   const exercicios = await prisma.exercicio.findMany({
     where: {
       AND: [
-        filtroExerciciosVisiveis(ctx.clubeId, ctx.utilizadorId),
+        filtroVisivel,
         ...(parteTreino ? [{ parteTreino }] : []),
         ...(categoriaPrincipal ? [{ categoriaPrincipal }] : []),
         ...(termo ? [{ nome: { contains: termo, mode: "insensitive" as const } }] : []),
@@ -135,8 +137,10 @@ export async function obterExercicio(id: string): Promise<Resultado<ExercicioBib
   const ctx = await contextoLeitura();
   if (ctx.estado === "erro") return erro(ctx.erro);
 
+  const filtroVisivel = await filtroExerciciosVisiveis(ctx.clubeId, ctx.utilizadorId);
+
   const exercicio = await prisma.exercicio.findFirst({
-    where: { AND: [{ id }, filtroExerciciosVisiveis(ctx.clubeId, ctx.utilizadorId)] },
+    where: { AND: [{ id }, filtroVisivel] },
     include: {
       partilhasClube: { where: { clubeId: ctx.clubeId }, select: { id: true } },
       criador: { select: { id: true, nome: true } },
@@ -197,8 +201,10 @@ export async function atualizarExercicio(
   const parsed = exercicioSchema.safeParse(dados);
   if (!parsed.success) return erroDeValidacao(parsed.error);
 
+  const filtroVisivel = await filtroExerciciosVisiveis(clubeId, utilizadorId);
+
   const existe = await prisma.exercicio.findFirst({
-    where: { AND: [{ id }, filtroExerciciosVisiveis(clubeId, utilizadorId)] },
+    where: { AND: [{ id }, filtroVisivel] },
   });
   if (!existe) return erro("Exercício não encontrado");
 
@@ -244,8 +250,10 @@ export async function apagarExercicio(id: string): Promise<Resultado<void>> {
   const clubeId = perm.ctx.clube.id;
   const utilizadorId = perm.ctx.utilizadorId;
 
+  const filtroVisivel = await filtroExerciciosVisiveis(clubeId, utilizadorId);
+
   const existe = await prisma.exercicio.findFirst({
-    where: { AND: [{ id }, filtroExerciciosVisiveis(clubeId, utilizadorId)] },
+    where: { AND: [{ id }, filtroVisivel] },
   });
   if (!existe) return erro("Exercício não encontrado");
 
@@ -286,8 +294,10 @@ export async function duplicarExercicio(id: string): Promise<Resultado<Exercicio
 
   // O filtro de visibilidade garante que o utilizador vê o exercício no clube
   // ativo (pessoal próprio ou biblioteca do clube) antes de o poder duplicar.
+  const filtroVisivel = await filtroExerciciosVisiveis(clubeId, utilizadorId);
+
   const original = await prisma.exercicio.findFirst({
-    where: { AND: [{ id }, filtroExerciciosVisiveis(clubeId, utilizadorId)] },
+    where: { AND: [{ id }, filtroVisivel] },
   });
   if (!original) return erro("Exercício não encontrado");
 
@@ -342,8 +352,10 @@ export async function partilharExercicioNoClube(dados: unknown): Promise<Resulta
 
   // Buscar com o filtro de visibilidade garante que o membro vê o exercício
   // no clube ativo antes de o poder contribuir (code review F3 — M1).
+  const filtroVisivel = await filtroExerciciosVisiveis(clubeId, utilizadorId);
+
   const exercicio = await prisma.exercicio.findFirst({
-    where: { AND: [{ id: exercicioId }, filtroExerciciosVisiveis(clubeId, utilizadorId)] },
+    where: { AND: [{ id: exercicioId }, filtroVisivel] },
     select: { id: true, autorId: true, proprietario: true },
   });
   if (!exercicio) return erro("Exercício não encontrado");
