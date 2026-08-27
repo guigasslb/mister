@@ -26,6 +26,7 @@ export type ExercicioImpressao = {
 
 export type DadosImpressaoTreino = {
   clubeNome: string;
+  clubeLogoUrl: string | null;
   epocaNome: string | null;
   escalaoNome: string;
   data: Date;
@@ -102,6 +103,7 @@ function MetaExercicio({ rotulo, valor }: { rotulo: string; valor: string }) {
 export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) {
   const {
     clubeNome,
+    clubeLogoUrl,
     epocaNome,
     escalaoNome,
     data,
@@ -117,13 +119,26 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
     <article className="mx-auto max-w-[820px] bg-white px-8 py-8 text-cinza-900 print:px-0 print:py-0">
       {/* Cabeçalho: logótipo Mister (produto) + clube/época no contexto da página.
           §BRAND: o logótipo do clube nunca fica em lockup ao lado do produto. */}
-      <header className="mb-6 flex items-start justify-between border-b-2 border-cinza-200 pb-5">
+      <header className="mb-6 flex items-start justify-between gap-4 border-b-2 border-cinza-200 pb-5">
         <Logo variant="light" size={24} />
-        <div className="text-right">
-          <p className="font-display text-subtitulo font-semibold text-cinza-900">
-            {clubeNome}
-          </p>
-          {epocaNome && <p className="text-legenda text-cinza-600">Época {epocaNome}</p>}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 text-right">
+            <p className="truncate font-display text-subtitulo font-semibold text-cinza-900">
+              {clubeNome}
+            </p>
+            {epocaNome && (
+              <p className="text-legenda text-cinza-600">Época {epocaNome}</p>
+            )}
+          </div>
+          {clubeLogoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={clubeLogoUrl}
+              alt={clubeNome}
+              data-print-logo
+              className="h-10 w-10 flex-shrink-0 object-contain"
+            />
+          )}
         </div>
       </header>
 
@@ -301,9 +316,11 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
 
       {/* Rodapé — nunca forçar quebra antes (evita página em branco no fim) e
           manter íntegro na mesma página. */}
-      <footer className="mt-8 flex break-inside-avoid items-center justify-between border-t border-cinza-200 pt-4 text-legenda text-cinza-500 [break-before:avoid]">
-        <span>{clubeNome}</span>
-        <span>Impresso em {formatarDataImpressao(new Date())} · Mister</span>
+      <footer className="mt-8 flex break-inside-avoid items-center justify-between gap-4 border-t border-cinza-200 pt-4 text-legenda text-cinza-500 [break-before:avoid]">
+        <span className="min-w-0 truncate">{clubeNome}</span>
+        <span className="flex-shrink-0 text-right">
+          Impresso em {formatarDataImpressao(new Date())} · Mister
+        </span>
       </footer>
     </article>
   );

@@ -64,6 +64,7 @@ export default async function ImprimirTreinoPage({
 
   const dados: DadosImpressaoTreino = {
     clubeNome: membro?.clube.nome ?? "Clube",
+    clubeLogoUrl: membro?.clube.logoUrl ?? null,
     epocaNome: epoca?.nome ?? null,
     escalaoNome: s.escalao.nome,
     data: s.data,
@@ -76,7 +77,7 @@ export default async function ImprimirTreinoPage({
   };
 
   return (
-    <div className="min-h-screen bg-white text-cinza-900 print:min-h-0">
+    <div className="bg-white text-cinza-900">
       {/* Barra de ações — escondida na impressão. */}
       <div
         data-print-hidden
@@ -89,6 +90,13 @@ export default async function ImprimirTreinoPage({
           ← Voltar ao treino
         </a>
         <BotaoImprimir />
+      </div>
+
+      {/* Aviso apenas em ecrã: os cabeçalhos/rodapés nativos do browser não são
+          removíveis de forma fiável via CSS (Chrome). */}
+      <div className="mx-auto mt-4 max-w-[820px] rounded border border-amber-200 bg-amber-50 p-3 px-4 text-sm text-amber-800 print:hidden">
+        <strong>Dica:</strong> Nas opções de impressão do browser, desativa
+        &quot;Cabeçalhos e rodapés&quot; para um resultado mais limpo.
       </div>
 
       <TreinoPrintTemplate dados={dados} />
