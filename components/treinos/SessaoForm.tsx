@@ -193,9 +193,9 @@ export function SessaoForm({
       escalaoId: escalaoId || undefined,
       tipoSessao,
       // §8.9.1: a ligação à semana (planeamento) é automática pela data no backend.
-      // Só o momento na semana (MD-X) é escolhido aqui, e apenas para treinos NORMAL.
+      // O momento na semana (MD-X) é escolhido aqui e aplica-se a qualquer tipo de sessão.
       momentoSemana:
-        tipoSessao === "NORMAL" && momentoSemana !== SENTINEL_NONE
+        momentoSemana !== SENTINEL_NONE
           ? (momentoSemana as MomentoSemana)
           : undefined,
       duracaoMin: duracaoRaw !== "" ? Number(duracaoRaw) : undefined,
@@ -295,28 +295,26 @@ export function SessaoForm({
         </div>
       )}
 
-      {/* Momento na semana (MD-X) — só treino normal (§8.9.1) */}
-      {tipoSessao === "NORMAL" && (
-        <div className="space-y-1.5">
-          <Label>Momento na semana</Label>
-          <Select value={momentoSemana} onValueChange={setMomentoSemana}>
-            <SelectTrigger>
-              <SelectValue placeholder="Opcional (MD-1, MD-2, …)" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={SENTINEL_NONE}>— Sem momento —</SelectItem>
-              {MOMENTOS_SEMANA.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {LABEL_MOMENTO_SEMANA[m]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-legenda text-cinza-500">
-            Marca o dia por relação com o jogo. A semana forma-se automaticamente pela data.
-          </p>
-        </div>
-      )}
+      {/* Momento na semana (MD-X) — disponível para qualquer tipo de sessão (§8.9.1) */}
+      <div className="space-y-1.5">
+        <Label>Momento na semana</Label>
+        <Select value={momentoSemana} onValueChange={setMomentoSemana}>
+          <SelectTrigger>
+            <SelectValue placeholder="Opcional (MD-1, MD-2, …)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SENTINEL_NONE}>— Sem momento —</SelectItem>
+            {MOMENTOS_SEMANA.map((m) => (
+              <SelectItem key={m} value={m}>
+                {LABEL_MOMENTO_SEMANA[m]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-legenda text-cinza-500">
+          Marca o dia por relação com o jogo. A semana forma-se automaticamente pela data.
+        </p>
+      </div>
 
       {/* Objetivo */}
       <div className="space-y-1.5">

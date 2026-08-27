@@ -79,7 +79,7 @@ function PlaneamentoForm({
     (planeamento?.modoSemana as ModoSemana | null) ?? "ESTRUTURADO",
   );
   const [notaSemana, setNotaSemana] = useState(planeamento?.notaSemana ?? "");
-  const [avancado, setAvancado] = useState(false);
+  const [avancado, setAvancado] = useState(true);
   const isCreate = !planeamento;
 
   // Pré-preenchimento inteligente ao criar: actualiza ao mudar escalão ou tipo
@@ -258,7 +258,7 @@ function PlaneamentoForm({
         </div>
       </div>
 
-      {/* Mesociclo — campo interno/avançado, escondido por defeito (§8.9.1) */}
+      {/* Mesociclo — visível por defeito; toggle "Avançado" permite recolher (§8.9.1) */}
       <div className="space-y-1.5">
         <button
           type="button"

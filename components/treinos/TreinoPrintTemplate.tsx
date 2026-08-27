@@ -38,14 +38,22 @@ export type DadosImpressaoTreino = {
 };
 
 function formatarDataLonga(data: Date): string {
-  return new Date(data).toLocaleString("pt-PT", {
+  const d = new Date(data);
+  // `pt-PT` devolve o dia da semana/mês em minúsculas ("quinta-feira, 27 de
+  // agosto de 2026"); capitalizamos apenas a primeira letra da frase para não
+  // ficar "Quinta-Feira De Agosto" (evita depender do CSS `capitalize`).
+  const dataStr = d.toLocaleDateString("pt-PT", {
     weekday: "long",
-    day: "2-digit",
+    day: "numeric",
     month: "long",
     year: "numeric",
+  });
+  const horaStr = d.toLocaleTimeString("pt-PT", {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const dataCapitalizada = dataStr.charAt(0).toUpperCase() + dataStr.slice(1);
+  return `${dataCapitalizada} às ${horaStr}`;
 }
 
 function formatarDataImpressao(data: Date): string {
@@ -64,11 +72,11 @@ function DiagramaImpressao({ diagrama, nome }: { diagrama: unknown; nome: string
   if (!diag.success || diag.data.elementos.length === 0) return null;
 
   return (
-    <div className="w-[240px] flex-shrink-0 overflow-hidden rounded-md border border-cinza-300 bg-white">
+    <div className="h-[120px] w-[240px] flex-shrink-0 overflow-hidden rounded-md border border-cinza-300 bg-white">
       <MiniaturaCampo
         diagrama={diag.data}
         largura={240}
-        className="w-full"
+        className="h-full w-full"
       />
       <p className="sr-only">{`Diagrama de campo do exercício ${nome}`}</p>
     </div>
@@ -132,10 +140,10 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
             {escalaoNome}
           </span>
         </div>
-        <h1 className="font-display text-titulo-pagina font-bold capitalize text-cinza-900">
+        <h1 className="font-display text-titulo-pagina font-bold text-cinza-900">
           Plano de treino
         </h1>
-        <p className="mt-1 text-corpo capitalize text-cinza-600">
+        <p className="mt-1 text-corpo text-cinza-600">
           {formatarDataLonga(data)}
         </p>
       </div>
@@ -143,6 +151,7 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
       {/* Resumo da sessão */}
       <section className="mb-8 break-inside-avoid rounded-lg border border-cinza-200 p-5">
         <h2
+          data-brand
           className="mb-3 text-legenda font-bold uppercase tracking-wide"
           style={{ color: MISTER_LARANJA }}
         >
@@ -187,6 +196,7 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
       {/* Lista de exercícios (sequência numerada) */}
       <section>
         <h2
+          data-brand
           className="mb-4 text-legenda font-bold uppercase tracking-wide"
           style={{ color: MISTER_LARANJA }}
         >
@@ -289,8 +299,9 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
         )}
       </section>
 
-      {/* Rodapé */}
-      <footer className="mt-8 flex items-center justify-between border-t border-cinza-200 pt-4 text-legenda text-cinza-500">
+      {/* Rodapé — nunca forçar quebra antes (evita página em branco no fim) e
+          manter íntegro na mesma página. */}
+      <footer className="mt-8 flex break-inside-avoid items-center justify-between border-t border-cinza-200 pt-4 text-legenda text-cinza-500 [break-before:avoid]">
         <span>{clubeNome}</span>
         <span>Impresso em {formatarDataImpressao(new Date())} · Mister</span>
       </footer>

@@ -465,10 +465,28 @@ html.dark .landing-root h3 {
    independentemente do tema persistido pelo visitante.
    ═══════════════════════════════════════════════════════════════════════════ */
 @media print {
+  /* Margens da página controladas por CSS. Ao definir `@page margin`, os
+     browsers modernos suprimem os seus próprios cabeçalhos/rodapés nativos
+     (URL, data, número de página) da impressão. */
+  @page {
+    margin: 1.5cm 1.5cm 1.5cm 1.5cm;
+  }
+
   html,
   body {
     background: #ffffff !important;
     color: #141210 !important;
+    /* Garantir que cores de acento (laranja da marca, badges) saem na impressão. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Ocultar a camada de texto dos SVG na impressão: os browsers extraem os
+     <text> do SVG como texto selecionável do PDF, sobrepondo-se ao desenho
+     (artefactos tipo "ppiittoo"). Os rótulos do campo são ilegíveis a esta
+     escala, por isso escondê-los é a solução mais robusta. */
+  svg text {
+    display: none !important;
   }
 
   /* Superfícies (cartões, painéis, fundos) → branco, sem sombra nem gradiente */
@@ -490,10 +508,17 @@ html.dark .landing-root h3 {
   .text-cinza-500 { color: #6c665f !important; }
   .text-cinza-400 { color: #6c665f !important; }
   .text-cinza-300 { color: #6c665f !important; }
-  h1,
-  h2,
-  h3 {
+  h1:not([data-brand]),
+  h2:not([data-brand]),
+  h3:not([data-brand]) {
     color: #141210 !important;
+  }
+
+  /* Cabeçalhos com a cor da marca Mister mantêm o laranja também na impressão. */
+  [data-brand] {
+    color: #f0531e !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   /* Bordas e separadores → cinza claro visível */

@@ -76,7 +76,7 @@ export default async function ImprimirTreinoPage({
   };
 
   return (
-    <div className="min-h-screen bg-white text-cinza-900">
+    <div className="min-h-screen bg-white text-cinza-900 print:min-h-0">
       {/* Barra de ações — escondida na impressão. */}
       <div
         data-print-hidden
