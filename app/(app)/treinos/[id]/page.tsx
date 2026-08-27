@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { MapPin, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { EditarTreinoBotao } from "@/components/treinos/EditarTreinoBotao";
+import { ExportarTreinoPdfBotao } from "@/components/treinos/ExportarTreinoPdfBotao";
 import { treinoConcluido } from "@/lib/semana";
 import { obterSessao } from "@/lib/actions/treinos";
 import { listarExercicios } from "@/lib/actions/exercicios";
@@ -159,7 +160,10 @@ export default async function DetalheSessaoPage({
             { label: s.escalao.nome },
           ]}
         />
-        <EditarTreinoBotao href={`/treinos/${s.id}/editar`} concluido={concluido} />
+        <div className="flex items-center gap-2">
+          <ExportarTreinoPdfBotao sessaoId={s.id} />
+          <EditarTreinoBotao href={`/treinos/${s.id}/editar`} concluido={concluido} />
+        </div>
       </div>
 
       {/* Cabeçalho */}

@@ -12,7 +12,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { EstadoVazio } from "@/components/layout/EstadosUI";
 import {
   atualizarLembrete,
   marcarVisto,
@@ -80,129 +79,132 @@ export function LembretesPainel({
   }
 
   // Destaque visual (cor da marca — laranja #F0531E) só quando há lembretes
-  // pendentes; sem pendentes, o painel fica discreto para não pesar no topo.
+  // pendentes; sem pendentes, o painel colapsa numa linha discreta para não
+  // pesar no topo do dashboard.
   const destaque = lembretes.length > 0;
 
+  // Diálogo de criação (partilhado pelos dois estados). Só é montado o ramo
+  // ativo, pelo que manter duas instâncias não duplica estado nem DOM.
+  const dialogNovo = podeGerir && (
+    <Dialog open={criar} onOpenChange={setCriar}>
+      <DialogTrigger asChild>
+        {destaque ? (
+          <Button variant="outline" size="sm">
+            <Plus className="h-4 w-4" /> Novo lembrete
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-legenda text-cinza-500 hover:text-cinza-900"
+          >
+            <Plus className="h-3.5 w-3.5" /> Novo lembrete
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Novo lembrete</DialogTitle>
+        </DialogHeader>
+        <CriarLembreteForm membros={membros} onDone={() => setCriar(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+
+  // Estado vazio: indicador discreto de uma só linha, altura mínima.
+  if (!destaque) {
+    return (
+      <div className="flex min-h-[28px] items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-legenda text-cinza-400">
+          <Bell className="h-3.5 w-3.5" />
+          Sem lembretes
+        </p>
+        {dialogNovo}
+      </div>
+    );
+  }
+
+  // Estado com lembretes: painel compacto e destacado.
   return (
     <div
-      className={
-        destaque
-          ? "animar-entrada space-y-3 rounded-xl border border-laranja-500/45 bg-laranja-50 p-4 shadow-card sm:p-5"
-          : "space-y-3"
-      }
-      role={destaque ? "region" : undefined}
-      aria-label={destaque ? "Lembretes pendentes" : undefined}
+      className="animar-entrada space-y-2.5 rounded-xl border border-laranja-500/45 bg-laranja-50 p-3 shadow-card sm:p-4"
+      role="region"
+      aria-label="Lembretes pendentes"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          {destaque && (
-            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-laranja-500/15 text-laranja-600">
-              <Bell className="h-4 w-4" />
-            </span>
-          )}
-          <p
-            className={
-              destaque
-                ? "text-corpo-sec font-bold uppercase tracking-wide text-laranja-600"
-                : "text-legenda font-semibold uppercase tracking-wide text-cinza-400"
-            }
-          >
+          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-laranja-500/15 text-laranja-600">
+            <Bell className="h-4 w-4" />
+          </span>
+          <p className="text-corpo-sec font-bold uppercase tracking-wide text-laranja-600">
             Lembretes
           </p>
-          {destaque && (
-            <span className="rounded-full bg-laranja-500/15 px-2 py-0.5 text-legenda font-semibold tabular-nums text-laranja-600">
-              {lembretes.length}
-            </span>
-          )}
+          <span className="rounded-full bg-laranja-500/15 px-2 py-0.5 text-legenda font-semibold tabular-nums text-laranja-600">
+            {lembretes.length}
+          </span>
         </div>
-        {podeGerir && (
-          <Dialog open={criar} onOpenChange={setCriar}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Plus className="h-4 w-4" /> Novo lembrete
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Novo lembrete</DialogTitle>
-              </DialogHeader>
-              <CriarLembreteForm membros={membros} onDone={() => setCriar(false)} />
-            </DialogContent>
-          </Dialog>
-        )}
+        {dialogNovo}
       </div>
 
-      {lembretes.length === 0 ? (
-        <EstadoVazio
-          titulo="Sem lembretes pendentes"
-          descricao="Quando houver tarefas por fazer, aparecem aqui."
-        />
-      ) : (
-        <ul className="animar-cascata space-y-2">
-          {lembretes.map((l) => {
-            const novo = l.souDestinatario && !l.visto;
-            return (
-              <li
-                key={l.id}
-                className="card-base flex items-start gap-3 p-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-corpo font-semibold text-cinza-900">{l.titulo}</p>
-                    {novo && (
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-legenda font-semibold uppercase tracking-wide text-primary">
-                        Novo
-                      </span>
-                    )}
-                  </div>
-                  {l.descricao && (
-                    <p className="mt-0.5 text-corpo-sec text-cinza-600">{l.descricao}</p>
-                  )}
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-legenda text-cinza-500">
-                    {l.dataLimite && (
-                      <span
-                        className={
-                          atrasado(l.dataLimite)
-                            ? "inline-flex items-center gap-1 font-medium text-vermelho-600"
-                            : "inline-flex items-center gap-1"
-                        }
-                      >
-                        <CalendarClock className="h-3.5 w-3.5" />
-                        {dataCurta(l.dataLimite)}
-                      </span>
-                    )}
-                    <span>
-                      {l.souCriador ? "Criado por ti" : `De ${l.criadoPorNome}`}
+      <ul className="animar-cascata space-y-1.5">
+        {lembretes.map((l) => {
+          const novo = l.souDestinatario && !l.visto;
+          return (
+            <li key={l.id} className="card-base flex items-start gap-3 p-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-corpo-sec font-semibold text-cinza-900">{l.titulo}</p>
+                  {novo && (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-legenda font-semibold uppercase tracking-wide text-primary">
+                      Novo
                     </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-shrink-0 items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pending}
-                    onClick={() => marcarFeito(l)}
-                  >
-                    <Check className="h-4 w-4" /> Feito
-                  </Button>
-                  {l.souCriador && podeGerir && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      disabled={pending}
-                      aria-label="Eliminar lembrete"
-                      onClick={() => eliminar(l.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-cinza-500" />
-                    </Button>
                   )}
                 </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                {l.descricao && (
+                  <p className="mt-0.5 text-corpo-sec text-cinza-600">{l.descricao}</p>
+                )}
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-legenda text-cinza-500">
+                  {l.dataLimite && (
+                    <span
+                      className={
+                        atrasado(l.dataLimite)
+                          ? "inline-flex items-center gap-1 font-medium text-vermelho-600"
+                          : "inline-flex items-center gap-1"
+                      }
+                    >
+                      <CalendarClock className="h-3.5 w-3.5" />
+                      {dataCurta(l.dataLimite)}
+                    </span>
+                  )}
+                  <span>{l.souCriador ? "Criado por ti" : `De ${l.criadoPorNome}`}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-shrink-0 items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => marcarFeito(l)}
+                >
+                  <Check className="h-4 w-4" /> Feito
+                </Button>
+                {l.souCriador && podeGerir && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={pending}
+                    aria-label="Eliminar lembrete"
+                    onClick={() => eliminar(l.id)}
+                  >
+                    <Trash2 className="h-4 w-4 text-cinza-500" />
+                  </Button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
