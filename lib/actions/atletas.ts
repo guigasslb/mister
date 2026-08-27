@@ -711,3 +711,88 @@ export async function obterEstatisticasAtleta(
     }),
   );
 }
+
+// ─── Aniversários próximos (dashboard) ───────────────────────────────────────
+
+/** Atleta cujo aniversário cai nos próximos 7 dias (hoje incluído). */
+export interface AtletaAniversario {
+  id: string;
+  nome: string;
+  dataNascimento: Date;
+  fotoUrl: string | null;
+  /** `true` se faz anos hoje (mesmo dia e mês). */
+  eHoje: boolean;
+  /** Dias inteiros até ao próximo aniversário (0 = hoje). */
+  diasAte: number;
+  /** Idade que o atleta vai completar neste aniversário. */
+  idadeCompleta: number;
+}
+
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+/**
+ * Atletas do clube cujo aniversário cai nos próximos 7 dias (hoje incluído).
+ *
+ * Atemporal por natureza: NÃO filtra por época. O cálculo do próximo aniversário
+ * e do número de dias é feito em JS (não em SQL) sobre datas normalizadas à
+ * meia-noite UTC, comparando apenas dia e mês (a hora de `dataNascimento` é
+ * irrelevante).
+ */
+export async function obterAniversariosProximos(): Promise<
+  Resultado<AtletaAniversario[]>
+> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const atletas = await prisma.atleta.findMany({
+    where: { clubeId, ativo: true, dataNascimento: { not: null } },
+    select: { id: true, nome: true, dataNascimento: true, fotoUrl: true },
+  });
+
+  // Hoje à meia-noite UTC — base comum para comparar só a componente de data.
+  const agora = new Date();
+  const hoje = Date.UTC(
+    agora.getUTCFullYear(),
+    agora.getUTCMonth(),
+    agora.getUTCDate(),
+  );
+  const anoAtual = agora.getUTCFullYear();
+
+  const resultado: AtletaAniversario[] = [];
+
+  for (const atleta of atletas) {
+    // O filtro `dataNascimento: { not: null }` garante o valor; o narrowing
+    // explícito evita o non-null assertion (TypeScript strict).
+    const nascimento = atleta.dataNascimento;
+    if (nascimento === null) continue;
+
+    const mes = nascimento.getUTCMonth();
+    const dia = nascimento.getUTCDate();
+
+    // Próximo aniversário no ano corrente; se já passou (comparando só a data),
+    // usa o ano seguinte.
+    let anoProximo = anoAtual;
+    let proximo = Date.UTC(anoProximo, mes, dia);
+    if (proximo < hoje) {
+      anoProximo = anoAtual + 1;
+      proximo = Date.UTC(anoProximo, mes, dia);
+    }
+
+    const diasAte = Math.round((proximo - hoje) / MS_POR_DIA);
+    if (diasAte > 7) continue;
+
+    resultado.push({
+      id: atleta.id,
+      nome: atleta.nome,
+      dataNascimento: nascimento,
+      fotoUrl: atleta.fotoUrl,
+      eHoje: diasAte === 0,
+      diasAte,
+      idadeCompleta: anoProximo - nascimento.getUTCFullYear(),
+    });
+  }
+
+  resultado.sort((a, b) => a.diasAte - b.diasAte || a.nome.localeCompare(b.nome));
+
+  return ok(resultado);
+}

@@ -25,6 +25,7 @@ import { obterSeccoes } from "@/lib/actions/seccoes";
 import { obterReunioesParaDashboard } from "@/lib/actions/reunioes";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { BadgeModalidade } from "@/components/plantel/BadgeModalidade";
+import { AniversariosWidget } from "@/components/plantel/AniversariosWidget";
 import {
   construirLembretesHoje,
   type EventoLite,
@@ -484,6 +485,9 @@ export default async function DashboardPage() {
             </div>
           </div>
         ))}
+
+      {/* Aniversários de atletas (hoje + próximos 7 dias) */}
+      <AniversariosWidget />
         </>
       )}
 
