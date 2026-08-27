@@ -163,7 +163,10 @@ describe("gerarPdfAnalitico", () => {
     expect(eHtmlImprimivel(r.html)).toBe(true);
     expect(r.titulo).toBe("Estatísticas gerais — Sport Clube");
     expect(r.html).toContain("Sport Clube");
-    expect(r.html).toContain("Geral do clube");
+    // Blocos do relatório geral redesenhado (paridade com os painéis).
+    expect(r.html).toContain("Geral");
+    expect(r.html).toContain("Resultados");
+    expect(r.html).toContain("Por escalão");
   });
 
   it("propaga «Sem permissão» como 403", async () => {

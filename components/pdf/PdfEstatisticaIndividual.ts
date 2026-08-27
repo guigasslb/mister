@@ -1,10 +1,13 @@
 // Relatório imprimível — Estatística individual (Dossier do Treinador, ref. PDF 1).
 //
-// Tabela por atleta com o bloco "Jogos" (golos, assistências, jogos utilizados,
-// tempo de jogo, cartões) e a assiduidade (presenças e taxa). Alimentado pelo
-// AnaliticoEscalao já calculado — os atletas apresentados são a UNIÃO dos que
-// surgem nos rankings agregados desse analítico (marcadores, assistentes, mais
-// utilizados, assiduidade e disciplina), em paridade exata com o export CSV
+// Tabela por atleta com o bloco "Jogos oficiais" (golos, assistências, jogos
+// utilizados, tempo de jogo, cartões) e a "Assiduidade" (presenças e taxa),
+// no mesmo layout do relatório de referência do clube: cabeçalho com escudo,
+// grupos de colunas, valores destacados na cor do clube e a taxa de presença
+// em semáforo (verde/âmbar/vermelho). Alimentado pelo AnaliticoEscalao já
+// calculado — os atletas apresentados são a UNIÃO dos que surgem nos rankings
+// agregados desse analítico (marcadores, assistentes, mais utilizados,
+// assiduidade e disciplina), em paridade exata com o export CSV
 // (`exportarAnaliticoEscalaoCsv`). Zero recálculo, zero queries adicionais.
 //
 // Produz uma STRING de HTML imprimível (ver `comum.ts`); usado só server-side.
@@ -15,6 +18,7 @@ import {
   rodapeHtml,
   documentoHtml,
   corValida,
+  corPercentagem,
   esc,
   minutos,
   pct,
@@ -83,6 +87,13 @@ function montarLinhas(dados: AnaliticoEscalao): LinhaAtleta[] {
   );
 }
 
+/** Célula numérica: zeros esbatidos, valores destacados na cor indicada (ou dark). */
+function celula(valor: number, texto: string, cor?: string): string {
+  if (valor === 0) return `<td class="zero">${esc(texto)}</td>`;
+  const estilo = cor ? ` class="destaque" style="color:${cor}"` : ` class="destaque"`;
+  return `<td${estilo}>${esc(texto)}</td>`;
+}
+
 /** Título do documento (usado como nome sugerido em "Guardar como PDF"). */
 export function tituloEstatisticaIndividual(dados: AnaliticoEscalao): string {
   return `Estatística individual — ${dados.escalao.nome}`;
@@ -104,46 +115,59 @@ export function htmlEstatisticaIndividual(
             (l) => `
         <tr>
           <td class="esq destaque">${esc(l.nome)}</td>
-          <td class="destaque" style="color:${cor}">${esc(l.golos)}</td>
-          <td>${esc(l.assistencias)}</td>
-          <td>${esc(l.jogosUtilizados)}</td>
-          <td>${esc(minutos(l.tempo))}</td>
-          <td>${esc(l.amarelos)}</td>
-          <td>${esc(l.vermelhos)}</td>
-          <td>${esc(l.presencas)}</td>
-          <td class="destaque" style="color:${cor}">${esc(pct(l.taxaPresenca))}</td>
+          ${celula(l.golos, String(l.golos), cor)}
+          ${celula(l.assistencias, String(l.assistencias), cor)}
+          ${celula(l.jogosUtilizados, String(l.jogosUtilizados))}
+          ${celula(l.tempo, minutos(l.tempo))}
+          ${celula(l.amarelos, String(l.amarelos), "#B45309")}
+          ${celula(l.vermelhos, String(l.vermelhos), "#DC2626")}
+          ${celula(l.presencas, String(l.presencas))}
+          <td class="destaque" style="color:${corPercentagem(l.taxaPresenca)}">${esc(
+            pct(l.taxaPresenca),
+          )}</td>
         </tr>`,
           )
           .join("");
 
   const corpo = `
-    ${cabecalhoHtml(marca, "Estatística", `${esc(dados.escalao.nome)} · Individual`)}
+    ${cabecalhoHtml(marca, "Estatística", `${esc(marca.nome)} (${esc(marca.epoca)})`)}
+
     <div class="seccao">
-      <div class="seccao-titulo">
-        Jogos oficiais (${esc(dados.jogos)}) · Assiduidade (${esc(dados.sessoesExecutadas)} treinos)
+      <div class="banda-sub">
+        ${esc(dados.escalao.nome)} · Jogos oficiais (${esc(dados.jogos)}) · Assiduidade (${esc(
+          dados.sessoesExecutadas,
+        )} treinos)
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th class="esq">Atleta</th>
-            <th>Golos</th>
-            <th>Assist.</th>
-            <th>Jogos</th>
-            <th>Tempo</th>
-            <th>Amar.</th>
-            <th>Verm.</th>
-            <th>Presenças</th>
-            <th>Assid.</th>
-          </tr>
-        </thead>
-        <tbody>${corpoTabela}</tbody>
-      </table>
+      <div class="tabela-caixa">
+        <table>
+          <thead>
+            <tr>
+              <th class="esq grupo" rowspan="2">Atleta</th>
+              <th class="grupo" colspan="6">Jogos oficiais (${esc(dados.jogos)})</th>
+              <th class="grupo" colspan="2">Assiduidade (${esc(dados.sessoesExecutadas)} treinos)</th>
+            </tr>
+            <tr>
+              <th>Golos</th>
+              <th>Assist.</th>
+              <th>Jogos</th>
+              <th>Tempo</th>
+              <th>Amar.</th>
+              <th>Verm.</th>
+              <th>Presenças</th>
+              <th>Assid.</th>
+            </tr>
+          </thead>
+          <tbody>${corpoTabela}</tbody>
+        </table>
+      </div>
       <div class="nota">
-        Taxa de presença média da equipa: ${esc(pct(dados.taxaPresencaMedia))} · ${esc(
-          dados.nAtletas,
-        )} atletas
+        Taxa de presença média da equipa:
+        <strong style="color:${corPercentagem(dados.taxaPresencaMedia)}">${esc(
+          pct(dados.taxaPresencaMedia),
+        )}</strong> · ${esc(dados.nAtletas)} atletas · Golos destacados na cor do clube.
       </div>
     </div>
+
     ${rodapeHtml(geradoEm)}`;
 
   return documentoHtml(tituloEstatisticaIndividual(dados), corpo);

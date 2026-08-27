@@ -7,10 +7,25 @@
 // PDF". Sem dependências externas, sem WASM, 100% compatível com serverless.
 //
 // Estes helpers produzem STRINGS de HTML (não React/DOM) e são usados apenas no
-// pipeline server-side (`lib/pdf/gerar-pdf.ts` → route handler).
+// pipeline server-side (`lib/pdf/gerar-pdf.ts` → route handler). O design replica
+// os relatórios de referência do clube (cabeçalho com escudo + nome, tabelas
+// limpas, valores destacados na cor do clube, percentagens semáforo verde/âmbar/
+// vermelho).
 
 /** Laranja da marca Mister (fallback quando o clube não tem cor válida). */
 export const COR_MARCA = "#F0531E";
+
+/** Paleta neutra do relatório. */
+export const COR_TEXTO = "#141414";
+export const COR_MUTED = "#6B7280";
+export const COR_BORDA = "#E5E7EB";
+export const COR_ZERO = "#9CA3AF";
+
+/** Semáforo de percentagens (assiduidade, resultados). AA sobre branco. */
+export const COR_VERDE = "#15803D";
+export const COR_AMBAR = "#B45309";
+export const COR_VERMELHO = "#DC2626";
+export const COR_CINZA = "#6B7280";
 
 /** Identidade visual do clube injetada nos relatórios. */
 export interface MarcaClube {
@@ -41,6 +56,13 @@ export function minutos(n: number): string {
   return `${Math.round(n)}'`;
 }
 
+/** Cor semáforo de uma taxa 0–1: verde (≥75%), âmbar (≥50%), vermelho (<50%). */
+export function corPercentagem(taxa: number): string {
+  if (taxa >= 0.75) return COR_VERDE;
+  if (taxa >= 0.5) return COR_AMBAR;
+  return COR_VERMELHO;
+}
+
 /**
  * Escapa texto para inserção segura em HTML (nomes de atletas/clube/escalão são
  * dados de utilizador). Previne qualquer injeção no documento imprimível.
@@ -60,14 +82,15 @@ const CSS = `
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
-    font-family: Helvetica, Arial, sans-serif;
-    color: #1A1A1A;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: ${COR_TEXTO};
     font-size: 11px;
     line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  @page { size: A4; margin: 14mm 12mm; }
+  @page { size: A4; margin: 15mm; }
 
   /* Barra de ação (apenas em ecrã; nunca sai no PDF) */
   .barra-acoes {
@@ -78,7 +101,7 @@ const CSS = `
     justify-content: flex-end;
     padding: 12px 16px;
     background: #ffffff;
-    border-bottom: 1px solid #E5E7EB;
+    border-bottom: 1px solid ${COR_BORDA};
     z-index: 10;
   }
   .barra-acoes button {
@@ -93,115 +116,161 @@ const CSS = `
   }
   .barra-acoes .secundario {
     background: #F3F4F6;
-    color: #1A1A1A;
-    border: 1px solid #E5E7EB;
+    color: ${COR_TEXTO};
+    border: 1px solid ${COR_BORDA};
   }
 
   .folha { padding: 0; }
 
-  /* Cabeçalho */
+  /* ── Cabeçalho ─────────────────────────────────────────────── */
   .cabecalho {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    border-bottom: 2px solid #F0531E;
-    padding-bottom: 12px;
-    margin-bottom: 18px;
+    align-items: center;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #D1D5DB;
+    margin-bottom: 20px;
   }
-  .cabecalho-esq { display: flex; align-items: center; gap: 12px; }
-  .logo { width: 44px; height: 44px; object-fit: contain; }
-  .logo-placeholder {
-    width: 44px; height: 44px; border-radius: 6px;
+  .cab-esq { display: flex; align-items: center; gap: 14px; }
+  .cab-logo { width: 56px; height: 56px; object-fit: contain; }
+  .cab-logo-ph {
+    width: 56px; height: 56px; border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
-    color: #fff; font-size: 20px; font-weight: 700;
+    color: #fff; font-size: 26px; font-weight: 800;
   }
-  .clube-nome { font-size: 15px; font-weight: 700; }
-  .clube-epoca { font-size: 9px; color: #6B7280; margin-top: 2px; }
-  .cabecalho-dir { text-align: right; }
-  .titulo-doc { font-size: 11px; font-weight: 700; text-transform: uppercase; }
-  .subtitulo-doc { font-size: 9px; color: #6B7280; margin-top: 2px; }
+  .cab-nome { font-size: 22px; font-weight: 800; letter-spacing: -0.4px; line-height: 1.1; }
+  .cab-tag { font-size: 10px; color: ${COR_MUTED}; margin-top: 3px; }
+  .cab-dir { text-align: right; }
+  .cab-titulo { font-size: 15px; font-weight: 400; color: ${COR_MUTED}; }
+  .cab-sub { font-size: 15px; font-weight: 800; color: ${COR_TEXTO}; margin-top: 1px; }
 
-  /* Secções */
-  .seccao { margin-bottom: 16px; page-break-inside: avoid; }
-  .seccao-titulo {
-    font-size: 8px; font-weight: 700; color: #6B7280;
-    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;
+  /* ── Marca grande (relatório geral) ────────────────────────── */
+  .marca-grande { margin: 4px 0 22px; }
+  .marca-logo { width: 132px; height: 132px; object-fit: contain; display: block; }
+  .marca-logo-ph {
+    width: 132px; height: 132px; border-radius: 18px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 62px; font-weight: 800;
+  }
+  .marca-nome {
+    font-size: 26px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-top: 14px; line-height: 1.1;
   }
 
-  /* KPIs */
-  .kpi-linha { display: flex; gap: 10px; }
-  .kpi-cartao {
-    flex: 1; border: 1px solid #E5E7EB; border-radius: 6px; padding: 10px;
+  /* ── Secções ───────────────────────────────────────────────── */
+  .seccao { margin-bottom: 22px; page-break-inside: avoid; }
+  .bloco-titulo {
+    font-size: 16px; font-weight: 700; color: ${COR_TEXTO};
+    padding-bottom: 6px; border-bottom: 1px solid ${COR_BORDA}; margin-bottom: 14px;
   }
-  .kpi-valor { font-size: 22px; font-weight: 700; }
-  .kpi-rotulo { font-size: 8px; color: #6B7280; margin-top: 2px; text-transform: uppercase; }
+  .banda-sub {
+    font-size: 10px; font-weight: 700; color: ${COR_MUTED};
+    text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px;
+  }
 
-  /* Tabelas */
-  table { width: 100%; border-collapse: collapse; border: 1px solid #E5E7EB; border-radius: 4px; }
+  /* ── KPIs em faixa (relatório geral) ───────────────────────── */
+  .kpi-faixa {
+    display: flex; border: 1px solid ${COR_BORDA};
+    border-radius: 12px; overflow: hidden;
+  }
+  .kpi-cel {
+    flex: 1; padding: 16px 14px; border-right: 1px solid ${COR_BORDA};
+  }
+  .kpi-cel:last-child { border-right: none; }
+  .kpi-num { font-size: 38px; font-weight: 800; line-height: 1; }
+  .kpi-num-sub { font-size: 11px; font-weight: 700; color: ${COR_MUTED}; margin-top: 3px; }
+  .kpi-lbl { font-size: 11px; color: ${COR_MUTED}; margin-top: 7px; }
+
+  /* ── Grelha mensal de treinos ──────────────────────────────── */
+  .meses-grelha {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    border: 1px solid ${COR_BORDA}; border-radius: 12px; overflow: hidden;
+  }
+  .mes-cel {
+    padding: 12px 8px; text-align: center;
+    border-right: 1px solid ${COR_BORDA}; border-bottom: 1px solid ${COR_BORDA};
+  }
+  .mes-num { font-size: 24px; font-weight: 800; line-height: 1; }
+  .mes-lbl { font-size: 9px; color: ${COR_MUTED}; margin-top: 5px; text-transform: capitalize; }
+
+  /* ── Tabelas ───────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; }
   thead th {
-    background: #F9FAFB; padding: 6px; font-size: 7px; font-weight: 700;
-    color: #6B7280; text-transform: uppercase; text-align: center;
-    border-bottom: 1px solid #E5E7EB;
+    background: #F3F4F6; padding: 7px 8px; font-size: 8px; font-weight: 700;
+    color: ${COR_MUTED}; text-transform: uppercase; letter-spacing: 0.4px;
+    text-align: center; border-bottom: 1px solid #D1D5DB;
   }
   thead th.esq { text-align: left; }
-  tbody td { padding: 5px 6px; font-size: 8px; text-align: center; border-bottom: 1px solid #E5E7EB; }
+  thead th.grupo {
+    background: #ffffff; color: ${COR_TEXTO}; font-size: 9px;
+    border-bottom: 1px solid ${COR_BORDA};
+  }
+  tbody td {
+    padding: 6px 8px; font-size: 9px; text-align: center;
+    border-bottom: 1px solid ${COR_BORDA};
+  }
   tbody tr:last-child td { border-bottom: none; }
-  tbody tr:nth-child(even) { background: #F9FAFB; }
+  tbody tr:nth-child(even) { background: #FAFAFA; }
   td.esq { text-align: left; }
   .destaque { font-weight: 700; }
-  .vazio { color: #6B7280; text-align: left; }
+  .zero { color: ${COR_ZERO}; }
+  .vazio { color: ${COR_MUTED}; text-align: left; padding: 12px 8px; }
+  .tabela-caixa { border: 1px solid ${COR_BORDA}; border-radius: 12px; overflow: hidden; }
 
-  /* Barras (golos / rankings) */
-  .barra-linha { display: flex; align-items: center; margin-bottom: 5px; gap: 6px; }
-  .barra-rotulo { width: 120px; font-size: 8px; }
-  .barra-trilho { flex: 1; height: 10px; background: #E5E7EB; border-radius: 3px; overflow: hidden; }
-  .barra-preenchida { height: 10px; border-radius: 3px; }
-  .barra-valor { width: 34px; font-size: 8px; text-align: right; font-weight: 700; }
+  /* ── Barras (golos por escalão) ────────────────────────────── */
+  .barra-linha { display: flex; align-items: center; margin-bottom: 8px; gap: 10px; }
+  .barra-rotulo { width: 130px; font-size: 9px; font-weight: 600; }
+  .barra-trilho { flex: 1; height: 14px; background: #EEF0F2; border-radius: 4px; overflow: hidden; }
+  .barra-preenchida { height: 14px; border-radius: 4px; }
+  .barra-valor { width: 40px; font-size: 10px; text-align: right; font-weight: 800; }
 
-  .nota { font-size: 7px; color: #6B7280; margin-top: 6px; }
+  .nota { font-size: 9px; color: ${COR_MUTED}; margin-top: 10px; }
 
-  /* Rodapé */
+  /* ── Rodapé ────────────────────────────────────────────────── */
   .rodape {
     display: flex; justify-content: space-between;
-    font-size: 7px; color: #6B7280;
-    margin-top: 24px; padding-top: 8px; border-top: 1px solid #E5E7EB;
+    font-size: 8px; color: ${COR_MUTED};
+    margin-top: 28px; padding-top: 10px; border-top: 1px solid ${COR_BORDA};
   }
+  .rodape strong { color: ${COR_TEXTO}; font-weight: 700; }
 
   @media screen {
     body { background: #F3F4F6; }
     .folha {
       max-width: 210mm; margin: 16px auto; background: #ffffff;
-      padding: 16mm 14mm; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+      padding: 15mm; box-shadow: 0 1px 6px rgba(0,0,0,0.14);
     }
   }
   @media print {
     .barra-acoes { display: none !important; }
     body { background: #ffffff; }
     .folha { max-width: none; margin: 0; padding: 0; box-shadow: none; }
-    .rodape { position: fixed; bottom: 0; left: 0; right: 0; }
   }
 `;
 
-/** Cabeçalho comum: logótipo + nome/época do clube (esq.) e título do doc (dir.). */
-export function cabecalhoHtml(marca: MarcaClube, titulo: string, subtitulo: string): string {
+/**
+ * Cabeçalho comum: escudo + nome do clube e tagline (esq.) e o título do
+ * documento com o clube/época (dir.), separados por uma linha divisória.
+ */
+export function cabecalhoHtml(marca: MarcaClube, titulo: string, linha: string): string {
   const cor = corValida(marca.corPrimaria);
   const logo = marca.logo
-    ? `<img class="logo" src="${esc(marca.logo)}" alt="">`
-    : `<div class="logo-placeholder" style="background:${cor}">${esc(
-        (marca.nome[0] ?? "?").toUpperCase(),
+    ? `<img class="cab-logo" src="${esc(marca.logo)}" alt="">`
+    : `<div class="cab-logo-ph" style="background:${cor}">${esc(
+        (marca.nome.trim()[0] ?? "?").toUpperCase(),
       )}</div>`;
   return `
-    <div class="cabecalho" style="border-bottom-color:${cor}">
-      <div class="cabecalho-esq">
+    <div class="cabecalho">
+      <div class="cab-esq">
         ${logo}
         <div>
-          <div class="clube-nome">${esc(marca.nome)}</div>
-          <div class="clube-epoca">Época ${esc(marca.epoca)}</div>
+          <div class="cab-nome">${esc(marca.nome)}</div>
+          <div class="cab-tag">Dossier do Treinador</div>
         </div>
       </div>
-      <div class="cabecalho-dir">
-        <div class="titulo-doc" style="color:${cor}">${esc(titulo)}</div>
-        <div class="subtitulo-doc">${esc(subtitulo)}</div>
+      <div class="cab-dir">
+        <div class="cab-titulo">${esc(titulo)}</div>
+        <div class="cab-sub">${esc(linha)}</div>
       </div>
     </div>`;
 }
@@ -215,21 +284,12 @@ export function rodapeHtml(geradoEm: Date): string {
   });
   return `
     <div class="rodape">
-      <span>Mister · Dossier do Treinador</span>
+      <span><strong>Mister</strong> · Dossier do Treinador</span>
       <span>Gerado a ${esc(data)}</span>
     </div>`;
 }
 
-/** Cartão de KPI grande (valor destacado na cor do clube). */
-export function kpiHtml(valor: string, rotulo: string, cor: string): string {
-  return `
-    <div class="kpi-cartao">
-      <div class="kpi-valor" style="color:${cor}">${esc(valor)}</div>
-      <div class="kpi-rotulo">${esc(rotulo)}</div>
-    </div>`;
-}
-
-/** Barra horizontal proporcional ao máximo (ranking / golos). */
+/** Barra horizontal proporcional ao máximo (golos por escalão). */
 export function barraHtml(
   rotulo: string,
   valor: number,
