@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -45,11 +45,27 @@ function formatarTempo(segundos: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-/** Diagrama grande, ou placeholder cinzento com bola quando não existe (Melhoria 3.5). */
-function DiagramaGrande({ diagrama, nome }: { diagrama: unknown; nome: string }) {
-  // Memoiza o parse: `safeParse` cria um objeto novo a cada render e o
-  // `CampoAnimado` depende da identidade do diagrama (useMemo dos keyframes) —
-  // sem isto, cada render reinicia a animação (ciclo de renders no autoPlay).
+/**
+ * Diagrama grande, ou placeholder cinzento com bola quando não existe (Melhoria 3.5).
+ *
+ * Envolvido em `memo` com comparação por CONTEÚDO (ver comparador no fim): o
+ * cronómetro do ModoTreino re-renderiza o pai a cada segundo. Sem esta barreira,
+ * cada tick propaga para o `CampoAnimado` — mesmo que o `diagrama` chegue como
+ * nova referência de objeto (JSON do Prisma), o `useMemo([diagrama])` recomputa
+ * os keyframes e o `useEffect([aPlay, keyframes])` reinicia a animação, deixando
+ * o autoplay aparentemente estático. Com o `memo`, DiagramaGrande só re-renderiza
+ * quando o exercício muda de facto (novo `nome`/`diagrama`), mantendo os keyframes
+ * referencialmente estáveis e a animação a correr em ciclo.
+ */
+const DiagramaGrande = memo(function DiagramaGrande({
+  diagrama,
+  nome,
+}: {
+  diagrama: unknown;
+  nome: string;
+}) {
+  // Memoiza o parse: `safeParse` cria um objeto novo a cada render; mantém a
+  // identidade do diagrama estável enquanto este componente não re-renderiza.
   const diag = useMemo(() => diagramaSchema.safeParse(diagrama), [diagrama]);
   const dados = diag.success ? diag.data : null;
   const temDiagrama = dados !== null && dados.elementos.length > 0;
@@ -91,7 +107,12 @@ function DiagramaGrande({ diagrama, nome }: { diagrama: unknown; nome: string })
       </svg>
     </div>
   );
-}
+}, (anterior, seguinte) =>
+  // Só re-renderiza quando o exercício muda (nome/diagrama diferentes por conteúdo).
+  // O tick do cronómetro (segundos) não altera estes props, logo não atravessa esta
+  // barreira e a animação do CampoAnimado nunca é reiniciada por re-render do pai.
+  anterior.nome === seguinte.nome &&
+  JSON.stringify(anterior.diagrama) === JSON.stringify(seguinte.diagrama));
 
 /**
  * Modo treino (Melhoria 3) — condução da sessão em campo, ecrã cheio. Mostra o
