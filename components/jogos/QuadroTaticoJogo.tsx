@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Check, Pencil, Plus, RotateCcw } from "lucide-react";
@@ -62,6 +62,25 @@ export function QuadroTaticoJogo({
   // Snapshot do estado visível capturado no momento em que o editor abre, para
   // que "Cancelar" reponha exatamente esse estado (e não a formação viva atual).
   const snapshotAoAbrirRef = useRef<DiagramaCampo | null>(null);
+
+  // Enquanto o editor está aberto e o utilizador ainda NÃO editou (o buffer
+  // continua igual ao snapshot capturado ao abrir), o editor acompanha a
+  // formação viva: se `baseVisivel` mudar (ex.: marcar titulares com o editor
+  // já aberto), sincroniza o buffer para não ficar congelado no snapshot vazio.
+  // Assim que o utilizador começa a editar, deixa de sincronizar (mantém o
+  // controlo). `diagrama` e `snapshotAoAbrirRef.current` ficam fora das deps de
+  // propósito, para o effect reagir apenas a `baseVisivel`/`editar` e não criar
+  // um loop de atualização.
+  useEffect(() => {
+    if (!editar) return;
+    const bufferInalterado =
+      JSON.stringify(diagrama) === JSON.stringify(snapshotAoAbrirRef.current);
+    if (bufferInalterado) {
+      setDiagrama(baseVisivel);
+      snapshotAoAbrirRef.current = baseVisivel;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseVisivel, editar]);
 
   const temElementos = baseVisivel.elementos.length > 0;
 
