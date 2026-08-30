@@ -59,7 +59,10 @@ function calcularTotais(escaloes: EscalaoResumoClube[]) {
   let slotsGlobais = 0;
   let presencasGlobais = 0;
   for (const r of escaloes) {
-    const slots = r.nAtletas * r.sessoes;
+    // Slots = atletas × sessões EXECUTADAS (fechadas), em simetria com o servidor
+    // (obterAnaliticoClubeEpoca). O fallback (`?? r.sessoes`) cobre snapshots
+    // antigos sem `sessoesExecutadas`, evitando NaN na vista pública.
+    const slots = r.nAtletas * (r.sessoesExecutadas ?? r.sessoes);
     slotsGlobais += slots;
     presencasGlobais += Math.round(r.taxaPresencaMedia * slots);
   }

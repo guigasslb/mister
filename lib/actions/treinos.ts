@@ -119,7 +119,10 @@ async function contexto(): Promise<Contexto> {
   return { estado: "ok", clubeId, epoca };
 }
 
-export async function listarSessoes(escalaoId?: string): Promise<Resultado<SessaoLista[]>> {
+export async function listarSessoes(
+  escalaoId?: string,
+  estado?: "aberto" | "fechado",
+): Promise<Resultado<SessaoLista[]>> {
   const ctx = await contexto();
   if (ctx.estado === "erro") return erro(ctx.erro);
 
@@ -132,11 +135,17 @@ export async function listarSessoes(escalaoId?: string): Promise<Resultado<Sessa
     filtroEscalao = { escalaoId: { in: legiveis } };
   }
 
+  // Filtro opcional por estado de fecho (§ estado aberto/fechado): "aberto" →
+  // ainda por fechar; "fechado" → já finalizado pelo treinador.
+  const filtroEstado: Prisma.SessaoWhereInput =
+    estado === "aberto" ? { fechado: false } : estado === "fechado" ? { fechado: true } : {};
+
   const sessoes = await prisma.sessao.findMany({
     where: {
       epocaId: ctx.epoca.id,
       escalao: { clubeId: ctx.clubeId },
       ...filtroEscalao,
+      ...filtroEstado,
     },
     include: INCLUDE_LISTA,
     orderBy: { data: "asc" },
@@ -414,6 +423,48 @@ export async function apagarSessao(id: string): Promise<Resultado<void>> {
 
   await prisma.sessao.delete({ where: { id } });
   revalidatePath(PATH);
+  return ok(undefined);
+}
+
+/**
+ * Fecha a sessão de treino (`fechado = true`). Uma sessão fechada é considerada
+ * finalizada pelo treinador. Segue o padrão das restantes actions: clube do
+ * utilizador + capacidade TREINOS_GERIR no escalão da sessão.
+ */
+export async function fecharSessao(sessaoId: string): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const sessao = await prisma.sessao.findFirst({ where: { id: sessaoId, escalao: { clubeId } } });
+  if (!sessao) return erro("Sessão não encontrada");
+
+  const perm = await exigirCapacidade("TREINOS_GERIR", sessao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  await prisma.sessao.update({ where: { id: sessaoId }, data: { fechado: true } });
+  revalidatePath(PATH);
+  revalidatePath(`${PATH}/${sessaoId}`);
+  return ok(undefined);
+}
+
+/**
+ * Reabre a sessão de treino (`fechado = false`). Reverte o fecho, permitindo
+ * voltar a editar. Segue o padrão das restantes actions: clube do utilizador +
+ * capacidade TREINOS_GERIR no escalão da sessão.
+ */
+export async function reabrirSessao(sessaoId: string): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const sessao = await prisma.sessao.findFirst({ where: { id: sessaoId, escalao: { clubeId } } });
+  if (!sessao) return erro("Sessão não encontrada");
+
+  const perm = await exigirCapacidade("TREINOS_GERIR", sessao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  await prisma.sessao.update({ where: { id: sessaoId }, data: { fechado: false } });
+  revalidatePath(PATH);
+  revalidatePath(`${PATH}/${sessaoId}`);
   return ok(undefined);
 }
 

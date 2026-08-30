@@ -19,6 +19,7 @@ import { criarJogo, atualizarJogo } from "@/lib/actions/jogos";
 import { verificarConflitoAgenda } from "@/lib/actions/agenda";
 import type { ConflitoAgenda } from "@/lib/utils/agenda-conflitos";
 import { LABEL_CASA_FORA, LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
+import { instantToWallClockLisbon, wallClockLisbonToInstant } from "@/lib/utils-datas";
 import type {
   CasaFora,
   Escalao,
@@ -53,9 +54,7 @@ type CompeticaoBasica = { id: string; nome: string; escalaoId: string };
 
 function paraInputDateTime(date: Date | null | undefined): string {
   if (!date) return "";
-  const d = new Date(date);
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
+  return instantToWallClockLisbon(new Date(date));
 }
 
 type EscalaoBasico = Pick<Escalao, "id" | "nome"> & {
@@ -194,7 +193,7 @@ export function JogoForm({
 
     const dados = {
       data: fd.get("data")
-        ? new Date(String(fd.get("data"))).toISOString()
+        ? wallClockLisbonToInstant(String(fd.get("data"))).toISOString()
         : "",
       adversario: String(fd.get("adversario")),
       casaFora,

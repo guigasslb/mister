@@ -2,7 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { z } from "zod";
 import type { Modalidade } from "@prisma/client";
-import { Plus, Home, Plane, ClipboardList, Trophy, Eye, CalendarDays } from "lucide-react";
+import {
+  Plus,
+  Home,
+  Plane,
+  ClipboardList,
+  Trophy,
+  Eye,
+  CalendarDays,
+  CheckCircle2,
+  CircleAlert,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listarJogos } from "@/lib/actions/jogos";
 import { listarEscaloes } from "@/lib/actions/escaloes";
@@ -43,10 +53,15 @@ const ROTULO_MODALIDADE: Record<Modalidade, string> = {
 };
 
 /** Constrói uma query string a partir de pares definidos (ignora undefined). */
-function href(params: { escalaoId?: string; modalidade?: Modalidade }): string {
+function href(params: {
+  escalaoId?: string;
+  modalidade?: Modalidade;
+  estado?: "aberto" | "fechado";
+}): string {
   const qs = new URLSearchParams();
   if (params.modalidade) qs.set("modalidade", params.modalidade);
   if (params.escalaoId) qs.set("escalaoId", params.escalaoId);
+  if (params.estado) qs.set("estado", params.estado);
   const s = qs.toString();
   return s ? `/jogos?${s}` : "/jogos";
 }
@@ -54,20 +69,27 @@ function href(params: { escalaoId?: string; modalidade?: Modalidade }): string {
 export default async function JogosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ escalaoId?: string; modalidade?: string }>;
+  searchParams: Promise<{ escalaoId?: string; modalidade?: string; estado?: string }>;
 }) {
-  const { escalaoId: escalaoIdRaw, modalidade: modalidadeRaw } = await searchParams;
+  const {
+    escalaoId: escalaoIdRaw,
+    modalidade: modalidadeRaw,
+    estado: estadoRaw,
+  } = await searchParams;
 
   // Query params não confiáveis: valida antes de usar.
   const escParse = z.string().cuid().safeParse(escalaoIdRaw);
   const escalaoId = escParse.success ? escParse.data : undefined;
   const modParse = z.enum(["FUTSAL", "FUTEBOL"]).safeParse(modalidadeRaw);
   const modalidade = modParse.success ? modParse.data : undefined;
+  // Filtro por estado de fecho (§ estado aberto/fechado).
+  const estado: "aberto" | "fechado" | undefined =
+    estadoRaw === "aberto" || estadoRaw === "fechado" ? estadoRaw : undefined;
 
   const [resEscaloes, resSeccoes, resJogos] = await Promise.all([
     listarEscaloes(),
     obterSeccoes(),
-    listarJogos(escalaoId, modalidade),
+    listarJogos(escalaoId, modalidade, estado),
   ]);
 
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
@@ -136,7 +158,7 @@ export default async function JogosPage({
       {multiSeccao && modalidadesPresentes.length >= 2 && (
         <div className="-mb-px flex flex-wrap border-b border-cinza-200">
           <Link
-            href={href({})}
+            href={href({ estado })}
             className={`${CLS_TAB_BASE} ${!modalidade ? CLS_TAB_ATIVO : CLS_TAB_INATIVO}`}
           >
             Todos
@@ -144,7 +166,7 @@ export default async function JogosPage({
           {modalidadesPresentes.map((m) => (
             <Link
               key={m}
-              href={href({ modalidade: m })}
+              href={href({ modalidade: m, estado })}
               className={`${CLS_TAB_BASE} ${modalidade === m ? CLS_TAB_ATIVO : CLS_TAB_INATIVO}`}
             >
               {ROTULO_MODALIDADE[m]}
@@ -156,7 +178,7 @@ export default async function JogosPage({
       {escaloesVisiveis.length > 0 && (
         <div className="-mb-px flex flex-wrap border-b border-cinza-200">
           <Link
-            href={href({ modalidade })}
+            href={href({ modalidade, estado })}
             className={`${CLS_TAB_BASE} ${!escalaoId ? CLS_TAB_ATIVO : CLS_TAB_INATIVO}`}
           >
             Todos
@@ -164,7 +186,7 @@ export default async function JogosPage({
           {escaloesVisiveis.map((e) => (
             <Link
               key={e.id}
-              href={href({ escalaoId: e.id, modalidade })}
+              href={href({ escalaoId: e.id, modalidade, estado })}
               className={`${CLS_TAB_BASE} ${escalaoId === e.id ? CLS_TAB_ATIVO : CLS_TAB_INATIVO}`}
             >
               {e.nome}
@@ -172,6 +194,34 @@ export default async function JogosPage({
           ))}
         </div>
       )}
+
+      {/* Filtro por estado de fecho (§ estado aberto/fechado) */}
+      <div className="flex flex-wrap gap-1 rounded-md border border-cinza-200 p-1 w-fit">
+        <Link
+          href={href({ escalaoId, modalidade })}
+          className={`rounded px-3 py-1.5 text-corpo-sec font-medium transition-colors ${
+            !estado ? "bg-primary text-white" : "text-cinza-600 hover:bg-cinza-50"
+          }`}
+        >
+          Todos
+        </Link>
+        <Link
+          href={href({ escalaoId, modalidade, estado: "aberto" })}
+          className={`rounded px-3 py-1.5 text-corpo-sec font-medium transition-colors ${
+            estado === "aberto" ? "bg-primary text-white" : "text-cinza-600 hover:bg-cinza-50"
+          }`}
+        >
+          Por fechar
+        </Link>
+        <Link
+          href={href({ escalaoId, modalidade, estado: "fechado" })}
+          className={`rounded px-3 py-1.5 text-corpo-sec font-medium transition-colors ${
+            estado === "fechado" ? "bg-primary text-white" : "text-cinza-600 hover:bg-cinza-50"
+          }`}
+        >
+          Fechados
+        </Link>
+      </div>
 
       {jogos.length === 0 ? (
         <EstadoVazio
@@ -190,6 +240,9 @@ export default async function JogosPage({
         <ul className="space-y-3">
           {jogos.map((j) => {
             const temResultado = j.golosMarcados != null && j.golosSofridos != null;
+            // Jogo já realizado: data anterior ao momento atual. Só nesses faz
+            // sentido o estado de fecho (por fechar / fechado).
+            const passou = new Date(j.data).getTime() < Date.now();
             return (
               <li key={j.id}>
                 <Link
@@ -218,6 +271,19 @@ export default async function JogosPage({
                       </p>
                       {/* Badge de modalidade só quando o clube é multi-secção */}
                       {multiSeccao && <BadgeModalidade modalidade={j.modalidade} compacto />}
+                      {/* Estado de fecho (só em jogos já realizados) */}
+                      {passou &&
+                        (j.fechado ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-verde-600/30 bg-verde-600/10 px-2 py-0.5 text-legenda font-medium text-verde-600">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Fechado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-ambar-500/30 bg-ambar-500/10 px-2 py-0.5 text-legenda font-medium text-ambar-600">
+                            <CircleAlert className="h-3 w-3" />
+                            Por fechar
+                          </span>
+                        ))}
                     </div>
                     <p className="text-legenda text-cinza-500">
                       {j.escalao.nome}

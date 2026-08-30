@@ -235,6 +235,7 @@ export function PainelEscalao({
                   dados={pontosUtilizados}
                   titulo="Jogadores mais utilizados"
                   unidade="min"
+                  maxRows={pontosUtilizados.length}
                 />
               </div>
             )}

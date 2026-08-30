@@ -1,4 +1,4 @@
-// Ranking de assiduidade da equipa (top atletas por taxa de presença).
+// Ranking de assiduidade da equipa (todos os atletas por taxa de presença).
 // Presentacional puro: recebe o ranking já calculado em obterAnaliticoEscalao.
 // Barra de progresso horizontal com cor semântica (verde/âmbar/vermelho).
 

@@ -37,6 +37,7 @@ import {
   partilharModeloSessaoNoClube,
   apagarModeloSessao,
 } from "@/lib/actions/templatesSessao";
+import { wallClockLisbonToInstant } from "@/lib/utils-datas";
 
 /** Valor inicial do input datetime-local: próxima hora certa. */
 function proximaHoraCerta(): string {
@@ -73,7 +74,11 @@ export function CriarSessaoDeTemplateButton({
     e.preventDefault();
     setErro(null);
     startTransition(async () => {
-      const res = await criarSessaoDeTemplate({ modeloSessaoId, escalaoId, data });
+      const res = await criarSessaoDeTemplate({
+        modeloSessaoId,
+        escalaoId,
+        data: wallClockLisbonToInstant(data).toISOString(),
+      });
       if (res.sucesso) {
         toast.success("Sessão criada a partir do template");
         setAberto(false);

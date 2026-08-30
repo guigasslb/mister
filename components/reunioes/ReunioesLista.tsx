@@ -39,14 +39,14 @@ import {
   alternarAfixadaReuniao,
 } from "@/lib/actions/reunioes";
 import { LABEL_AMBITO_REUNIAO } from "@/lib/schemas/reuniao";
+import { instantToWallClockLisbon, wallClockLisbonToInstant } from "@/lib/utils-datas";
 import type { Reuniao } from "@prisma/client";
 
 type EscalaoBasico = { id: string; nome: string };
 
 function dtInput(d: Date | null | undefined): string {
   if (!d) return "";
-  const x = new Date(d);
-  return new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  return instantToWallClockLisbon(new Date(d));
 }
 
 function Form({
@@ -69,7 +69,7 @@ function Form({
     setErro(null);
     const dados = {
       titulo: String(fd.get("titulo")),
-      data: String(fd.get("data")),
+      data: wallClockLisbonToInstant(String(fd.get("data"))).toISOString(),
       ambito,
       escalaoId: ambito === "ESCALAO" ? escalaoId || undefined : undefined,
       participantes: String(fd.get("participantes") ?? "").trim() || undefined,

@@ -32,12 +32,87 @@ export function chaveDia(d: Date): string {
   return `${y}-${m}-${dia}`;
 }
 
-/** Combina o dia de `data` com a hora "HH:MM" (hora local). */
+// ─── Ancoragem ao fuso Europe/Lisbon (§ bug de timezone) ─────────────────────
+//
+// Em produção o processo Node corre em UTC. Usar `setHours` aplicaria a hora na
+// TZ do processo (UTC) e não em Lisboa, gerando +1h no Verão (WEST=UTC+1). Estas
+// funções ancoram a combinação data+hora ao fuso de Lisboa usando apenas `Intl`
+// nativo, sendo por isso independentes da TZ do processo.
+
+const FUSO_LISBOA = "Europe/Lisbon";
+
+const _fmtLisboa = new Intl.DateTimeFormat("en-GB", {
+  timeZone: FUSO_LISBOA,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+interface PartesData {
+  ano: number;
+  mes: number; // 1-12
+  dia: number;
+  hora: number; // 0-23
+  min: number;
+  seg: number;
+}
+
+/** Decompõe um instante nas suas partes de calendário/relógio no fuso de Lisboa. */
+function partesEmLisboa(instante: Date): PartesData {
+  const partes = _fmtLisboa.formatToParts(instante);
+  const valor = (tipo: string) => Number(partes.find((p) => p.type === tipo)!.value);
+  return {
+    ano: valor("year"),
+    mes: valor("month"),
+    dia: valor("day"),
+    hora: valor("hour"),
+    min: valor("minute"),
+    seg: valor("second"),
+  };
+}
+
+/** Offset (ms) do fuso de Lisboa face ao UTC no instante dado (ex.: +3600000 no Verão). */
+function offsetLisboaMs(instante: Date): number {
+  const p = partesEmLisboa(instante);
+  const comoUTC = Date.UTC(p.ano, p.mes - 1, p.dia, p.hora, p.min, p.seg);
+  return comoUTC - instante.getTime();
+}
+
+/**
+ * Converte uma hora de parede de Lisboa (ano/mês/dia/hora/min) no instante UTC
+ * correspondente, independente da TZ do processo Node.
+ */
+function horaParedeLisboaParaInstante(
+  ano: number,
+  mes: number,
+  dia: number,
+  hora: number,
+  min: number,
+): Date {
+  const palpiteUTC = Date.UTC(ano, mes - 1, dia, hora, min, 0);
+  const offset = offsetLisboaMs(new Date(palpiteUTC));
+  let instante = palpiteUTC - offset;
+  // Refinar uma vez para instantes junto às transições DST (offset pode mudar).
+  const offsetRefinado = offsetLisboaMs(new Date(instante));
+  if (offsetRefinado !== offset) instante = palpiteUTC - offsetRefinado;
+  return new Date(instante);
+}
+
+/**
+ * Combina o dia de `data` (interpretado no fuso de Lisboa) com a hora "HH:MM"
+ * (hora de parede de Lisboa) e devolve o instante UTC correspondente.
+ *
+ * Ancorado a Europe/Lisbon: o resultado é correto independentemente da TZ do
+ * processo Node (UTC em produção, Lisboa em desenvolvimento).
+ */
 export function combinarDataHora(data: Date, hora: string): Date {
   const [h, m] = hora.split(":").map(Number);
-  const dt = new Date(data);
-  dt.setHours(h, m, 0, 0);
-  return dt;
+  const { ano, mes, dia } = partesEmLisboa(data);
+  return horaParedeLisboaParaInstante(ano, mes, dia, h, m);
 }
 
 /** "HH:MM" (hora local) de uma data. */

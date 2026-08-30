@@ -130,6 +130,7 @@ const ERRO_FORMATO_FUTEBOL =
 export async function listarJogos(
   escalaoId?: string,
   modalidade?: Modalidade,
+  estado?: "aberto" | "fechado",
 ): Promise<Resultado<JogoListaItem[]>> {
   const ctx = await contexto();
   if (ctx.estado === "erro") return erro(ctx.erro);
@@ -143,6 +144,11 @@ export async function listarJogos(
     filtroEscalao = { escalaoId: { in: legiveis } };
   }
 
+  // Filtro opcional por estado de fecho (§ estado aberto/fechado): "aberto" →
+  // ainda por fechar; "fechado" → já finalizado pelo treinador.
+  const filtroEstado: Prisma.JogoWhereInput =
+    estado === "aberto" ? { fechado: false } : estado === "fechado" ? { fechado: true } : {};
+
   const jogos = await prisma.jogo.findMany({
     where: {
       epocaId: ctx.epoca.id,
@@ -151,6 +157,7 @@ export async function listarJogos(
       // 🔁 v7 (§10.8): filtro opcional por modalidade efetiva (secção do escalão
       // ou atividade pontual). Alimenta o seletor de secção do frontend (Fase 28).
       ...filtroModalidadeJogo(modalidade),
+      ...filtroEstado,
     },
     include: INCLUDE_LISTA,
     orderBy: { data: "desc" },
@@ -333,6 +340,48 @@ export async function apagarJogo(id: string): Promise<Resultado<void>> {
 
   await prisma.jogo.delete({ where: { id } });
   revalidatePath(PATH);
+  return ok(undefined);
+}
+
+/**
+ * Fecha o jogo (`fechado = true`). Um jogo fechado é considerado finalizado pelo
+ * treinador. Segue o padrão das restantes actions: clube do utilizador +
+ * capacidade JOGOS_GERIR no escalão do jogo.
+ */
+export async function fecharJogo(jogoId: string): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const jogo = await prisma.jogo.findFirst({ where: { id: jogoId, escalao: { clubeId } } });
+  if (!jogo) return erro("Jogo não encontrado");
+
+  const perm = await exigirCapacidade("JOGOS_GERIR", jogo.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  await prisma.jogo.update({ where: { id: jogoId }, data: { fechado: true } });
+  revalidatePath(PATH);
+  revalidatePath(`${PATH}/${jogoId}`);
+  return ok(undefined);
+}
+
+/**
+ * Reabre o jogo (`fechado = false`). Reverte o fecho, permitindo voltar a editar.
+ * Segue o padrão das restantes actions: clube do utilizador + capacidade
+ * JOGOS_GERIR no escalão do jogo.
+ */
+export async function reabrirJogo(jogoId: string): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const jogo = await prisma.jogo.findFirst({ where: { id: jogoId, escalao: { clubeId } } });
+  if (!jogo) return erro("Jogo não encontrado");
+
+  const perm = await exigirCapacidade("JOGOS_GERIR", jogo.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  await prisma.jogo.update({ where: { id: jogoId }, data: { fechado: false } });
+  revalidatePath(PATH);
+  revalidatePath(`${PATH}/${jogoId}`);
   return ok(undefined);
 }
 

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CalendarPlus,
   CheckCircle2,
+  CircleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listarSessoes, type SessaoLista } from "@/lib/actions/treinos";
@@ -80,9 +81,18 @@ type SemanaGrupo = {
 export default async function TreinosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ escalaoId?: string; vista?: string; mes?: string }>;
+  searchParams: Promise<{
+    escalaoId?: string;
+    vista?: string;
+    mes?: string;
+    estado?: string;
+  }>;
 }) {
-  const { escalaoId: escalaoIdRaw, vista, mes } = await searchParams;
+  const { escalaoId: escalaoIdRaw, vista, mes, estado: estadoRaw } = await searchParams;
+  // Filtro por estado de fecho (§ estado aberto/fechado). Query param não confiável:
+  // só "aberto"/"fechado" são aceites; qualquer outro valor → sem filtro.
+  const estado: "aberto" | "fechado" | undefined =
+    estadoRaw === "aberto" || estadoRaw === "fechado" ? estadoRaw : undefined;
   // Resolução do escalão em contexto. `escalaoIdRaw` pode ser:
   //   undefined/"" → primeira visita: usar o escalão do treinador (ou "Todos" se null);
   //   "todos"      → sentinel explícito da tab "Todos" (sem filtro);
@@ -101,7 +111,7 @@ export default async function TreinosPage({
 
   const [resEscaloes, resSessoes, resPlan, resReunioes, epoca] = await Promise.all([
     listarEscaloes(),
-    listarSessoes(escalaoId),
+    listarSessoes(escalaoId, estado),
     listarPlaneamentos(escalaoId),
     listarReunioes(),
     obterEpocaAtiva(),
@@ -135,6 +145,15 @@ export default async function TreinosPage({
   const qsEscalao = escalaoId ? `escalaoId=${escalaoId}&` : "";
   const hrefLista = `/treinos?${qsEscalao}vista=lista`;
   const hrefCalendario = `/treinos?${qsEscalao}vista=calendario`;
+
+  // Filtro por estado (§ estado aberto/fechado) — preserva escalão e vista=lista.
+  const hrefEstado = (e?: "aberto" | "fechado"): string => {
+    const qs = new URLSearchParams();
+    if (escalaoId) qs.set("escalaoId", escalaoId);
+    qs.set("vista", "lista");
+    if (e) qs.set("estado", e);
+    return `/treinos?${qs.toString()}`;
+  };
 
   // ── Agrupamento por semana (§8.9.1): a semana é resultado do agrupamento das
   //    sessões pela data (segunda a domingo), nunca uma pré-condição. Reutiliza os
@@ -264,6 +283,36 @@ export default async function TreinosPage({
         </Link>
       </div>
 
+      {/* Filtro por estado de fecho (só na vista de lista) */}
+      {!ehCalendario && (
+        <div className="flex flex-wrap gap-1 rounded-md border border-cinza-200 p-1 w-fit">
+          <Link
+            href={hrefEstado()}
+            className={`rounded px-3 py-1.5 text-corpo-sec font-medium transition-colors ${
+              !estado ? "bg-primary text-white" : "text-cinza-600 hover:bg-cinza-50"
+            }`}
+          >
+            Todos
+          </Link>
+          <Link
+            href={hrefEstado("aberto")}
+            className={`rounded px-3 py-1.5 text-corpo-sec font-medium transition-colors ${
+              estado === "aberto" ? "bg-primary text-white" : "text-cinza-600 hover:bg-cinza-50"
+            }`}
+          >
+            Por fechar
+          </Link>
+          <Link
+            href={hrefEstado("fechado")}
+            className={`rounded px-3 py-1.5 text-corpo-sec font-medium transition-colors ${
+              estado === "fechado" ? "bg-primary text-white" : "text-cinza-600 hover:bg-cinza-50"
+            }`}
+          >
+            Fechados
+          </Link>
+        </div>
+      )}
+
       {ehCalendario ? (
         sessoes.length === 0 && reunioesFuturas.length === 0 ? (
           <EstadoVazio
@@ -368,6 +417,18 @@ export default async function TreinosPage({
                                     Concluído
                                   </span>
                                 )}
+                                {concluido &&
+                                  (s.fechado ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-verde-600/30 bg-verde-600/10 px-2 py-0.5 text-legenda font-medium text-verde-600">
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      Fechado
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-ambar-500/30 bg-ambar-500/10 px-2 py-0.5 text-legenda font-medium text-ambar-600">
+                                      <CircleAlert className="h-3 w-3" />
+                                      Por fechar
+                                    </span>
+                                  ))}
                                 {momento && (
                                   <span
                                     className={`rounded px-1.5 py-0.5 text-legenda font-medium ${

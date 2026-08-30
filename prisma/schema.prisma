@@ -940,6 +940,8 @@ model Sessao {
   // Mano-a-Mano (§3.16): duelos 1×1 disputados no âmbito desta sessão de treino.
   duelosManoMano MatchManoMano[]
 
+  fechado Boolean @default(false) // false = aberto (por fechar); true = fechado pelo treinador
+
   @@index([epocaId, escalaoId, data])
   @@index([escalaoId])
   @@index([planeamentoId])
@@ -965,16 +967,16 @@ model RpeAtleta {
 }
 
 model SessaoExercicio {
-  id                String    @id @default(cuid())
+  id                String       @id @default(cuid())
   sessaoId          String
-  sessao            Sessao    @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
+  sessao            Sessao       @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
   exercicioId       String
-  exercicio         Exercicio @relation(fields: [exercicioId], references: [id])
-  ordem             Int       @default(0)
+  exercicio         Exercicio    @relation(fields: [exercicioId], references: [id])
+  ordem             Int          @default(0)
   duracaoMin        Int?
-  notas             String?   @db.Text
+  notas             String?      @db.Text
   series            Int?
-  descricaoOverride String?   @db.Text
+  descricaoOverride String?      @db.Text
   // Fase do treino a que este exercício pertence NESTA sessão (§3.5). Reutiliza o
   // enum ParteTreino já usado em Exercicio/ModeloSessaoExercicio: AQUECIMENTO |
   // PRINCIPAL | JOGO_REDUZIDO | RETORNO_CALMA. Null = sem fase atribuída (rows
@@ -1103,6 +1105,8 @@ model Jogo {
   eventos       EventoJogo[]
   // F5 (M15): scouting contextualizado no jogo (dia de jogo).
   observacoes   ObservacaoAdversario[]
+
+  fechado Boolean @default(false) // false = aberto (por fechar); true = fechado pelo treinador
 
   @@index([epocaId, escalaoId, data])
   @@index([competicaoId])

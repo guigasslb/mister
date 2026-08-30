@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { criarLembrete } from "@/lib/actions/lembretes";
+import { wallClockLisbonToInstant } from "@/lib/utils-datas";
 
 export type MembroBasico = { utilizadorId: string; nome: string };
 
@@ -40,7 +41,9 @@ export function CriarLembreteForm({
     const dados = {
       titulo: String(fd.get("titulo") ?? "").trim(),
       descricao: String(fd.get("descricao") ?? "").trim() || undefined,
-      dataLimite: dataLimiteRaw || undefined,
+      dataLimite: dataLimiteRaw
+        ? wallClockLisbonToInstant(dataLimiteRaw).toISOString()
+        : undefined,
       destinatarioIds,
     };
     startTransition(async () => {

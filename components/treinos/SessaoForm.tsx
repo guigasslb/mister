@@ -28,16 +28,14 @@ import {
   LABEL_MOMENTO_SEMANA,
   type MomentoSemana,
 } from "@/lib/schemas/treino";
+import { instantToWallClockLisbon, wallClockLisbonToInstant } from "@/lib/utils-datas";
 import type { Escalao, Sessao, TipoSessao } from "@prisma/client";
 
 const SENTINEL_NONE = "__none__";
 
 function paraInputDateTime(date: Date | null | undefined): string {
   if (!date) return "";
-  const d = new Date(date);
-  const off = d.getTimezoneOffset();
-  const local = new Date(d.getTime() - off * 60000);
-  return local.toISOString().slice(0, 16);
+  return instantToWallClockLisbon(new Date(date));
 }
 
 type EscalaoBasico = Pick<Escalao, "id" | "nome">;
@@ -189,7 +187,7 @@ export function SessaoForm({
     const duracaoRaw = String(fd.get("duracaoMin") ?? "").trim();
 
     const dados: DadosSessao = {
-      data: String(fd.get("data")),
+      data: wallClockLisbonToInstant(String(fd.get("data"))).toISOString(),
       escalaoId: escalaoId || undefined,
       tipoSessao,
       // §8.9.1: a ligação à semana (planeamento) é automática pela data no backend.

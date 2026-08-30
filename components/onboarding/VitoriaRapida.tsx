@@ -22,6 +22,7 @@ import { criarAtleta } from "@/lib/actions/atletas";
 import { criarSessaoDeTemplate, instalarTemplatesArranque } from "@/lib/actions/templatesSessao";
 import { criarJogo } from "@/lib/actions/jogos";
 import { cn } from "@/lib/utils";
+import { wallClockLisbonToInstant } from "@/lib/utils-datas";
 
 /** Estado da checklist (§8.1) guardado localmente por browser. */
 const CHAVE_PASSOS = "fc:vitoria-rapida:passos";
@@ -453,7 +454,7 @@ function PassoTreino({
       const res = await criarSessaoDeTemplate({
         modeloSessaoId: modeloId,
         escalaoId,
-        data,
+        data: wallClockLisbonToInstant(data).toISOString(),
       });
       if (res.sucesso) {
         toast.success("Treino criado");
@@ -572,7 +573,7 @@ function PassoConvocatoria({
     startTransition(async () => {
       const res = await criarJogo({
         adversario: adversario.trim(),
-        data,
+        data: wallClockLisbonToInstant(data).toISOString(),
         casaFora,
         escalaoId,
         tipo: "OFICIAL",

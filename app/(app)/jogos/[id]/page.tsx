@@ -14,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { JogoDetalhe } from "@/components/jogos/JogoDetalhe";
 import { ApagarJogoButton } from "@/components/jogos/ApagarJogoButton";
+import { FecharJogoButton } from "@/components/jogos/FecharJogoButton";
 import { ConvocatoriaWhatsApp } from "@/components/jogos/ConvocatoriaWhatsApp";
 import { BotoesPartilhaJogo } from "@/components/social/BotoesPartilhaJogo";
 import { LABEL_CASA_FORA } from "@/lib/schemas/jogo";
@@ -165,6 +166,10 @@ export default async function DetalheJogoPage({
 
   const temResultado = j.golosMarcados != null && j.golosSofridos != null;
 
+  // Jogo já realizado: data anterior ao momento atual. Só nesses se mostra o
+  // botão de fechar/reabrir (estado aberto/fechado).
+  const jogoPassou = new Date(j.data).getTime() < Date.now();
+
   // Disciplina (§3.7): a formação jovem não regista cartões nem suspensões.
   // Reutiliza a heurística de carga de treino (ambos ocultos na formação jovem).
   const escalaoJovemDisciplina = !mostrarCargaTreino(j.escalao.nome);
@@ -195,6 +200,7 @@ export default async function DetalheJogoPage({
               Editar
             </Link>
           </Button>
+          {jogoPassou && <FecharJogoButton jogoId={j.id} fechado={j.fechado} />}
           <ApagarJogoButton jogoId={j.id} />
         </div>
       </div>
