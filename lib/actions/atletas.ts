@@ -677,9 +677,7 @@ export async function obterEstatisticasAtleta(
     }),
     // Sessões do escalão de contexto na época, a partir do ingresso (secção 22.3).
     // Só sessões NORMAL contam para assiduidade — CAPTACAO/EVENTO/ABERTO não
-    // são treino regular e não devem inflar o denominador (BUG-P1-07). Realizada
-    // = `fechado = true` (decisão de produto 2026-08-30), em simetria com o
-    // painel analítico.
+    // são treino regular e não devem inflar o denominador (BUG-P1-07).
     escalaoCtx
       ? prisma.sessao.count({
           where: {
@@ -687,7 +685,6 @@ export async function obterEstatisticasAtleta(
             escalaoId: escalaoCtx,
             data: { gte: ingresso },
             tipoSessao: "NORMAL",
-            fechado: true,
           },
         })
       : Promise.resolve(0),
@@ -697,14 +694,8 @@ export async function obterEstatisticasAtleta(
         atletaId: id,
         estado: { in: ["PRESENTE", "ATRASADO"] },
         // Simetria com o denominador (sessoesTotais): só presenças desde o
-        // ingresso, em sessões NORMAL e fechadas (secção 22.3 / BUG-P1-07 /
-        // decisão de produto 2026-08-30).
-        sessao: {
-          epocaId: epoca.id,
-          data: { gte: ingresso },
-          tipoSessao: "NORMAL",
-          fechado: true,
-        },
+        // ingresso e só em sessões NORMAL (secção 22.3 / BUG-P1-07).
+        sessao: { epocaId: epoca.id, data: { gte: ingresso }, tipoSessao: "NORMAL" },
         ...(escalaoCtx ? { escalaoId: escalaoCtx } : {}),
       },
     }),

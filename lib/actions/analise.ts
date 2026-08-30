@@ -436,22 +436,16 @@ export async function obterAnaliticoAtleta(
           // não são treino regular e não devem inflar o denominador (BUG-P1-07).
           tipoSessao: "NORMAL",
         },
-        select: { id: true, data: true, fechado: true },
+        select: { id: true, data: true },
         orderBy: { data: "asc" },
       }),
       prisma.presenca.findMany({
         where: {
           atletaId,
           estado: { in: [...ESTADOS_PRESENTE] },
-          // Simetria com o denominador (sessoesExecutadas): só presenças desde o
-          // ingresso, em sessões NORMAL e fechadas (secção 22.3 / BUG-P1-07 /
-          // decisão de produto 2026-08-30).
-          sessao: {
-            epocaId: epoca.id,
-            data: { gte: ingresso },
-            tipoSessao: "NORMAL",
-            fechado: true,
-          },
+          // Simetria com o denominador (sessoes): só presenças desde o ingresso
+          // e só em sessões NORMAL (secção 22.3 / BUG-P1-07).
+          sessao: { epocaId: epoca.id, data: { gte: ingresso }, tipoSessao: "NORMAL" },
           escalaoId: { in: escaloesCtx },
         },
         select: { sessaoId: true },
@@ -484,12 +478,12 @@ export async function obterAnaliticoAtleta(
   }));
 
   const presencasSet = new Set(presencas.map((p) => p.sessaoId));
-  // Denominador da assiduidade = sessões EXECUTADAS desde o ingresso, i.e.
-  // fechadas (`fechado = true`, decisão de produto 2026-08-30), nunca as
-  // programadas/por fechar. As presenças (numerador) já só existem em sessões
-  // fechadas, pelo que fica simétrico. A `sessoes` completa mantém-se para a
-  // grelha mensal (montarPresencasMensais).
-  const sessoesExecutadas = sessoes.filter((s) => s.fechado).length;
+  // Denominador da assiduidade = sessões EXECUTADAS desde o ingresso (data <
+  // agora), nunca as programadas futuras (BUG-P1-08). As presenças (numerador)
+  // só existem em sessões já realizadas, pelo que fica simétrico. A `sessoes`
+  // completa mantém-se para a grelha mensal (montarPresencasMensais).
+  const agora = Date.now();
+  const sessoesExecutadas = sessoes.filter((s) => s.data.getTime() < agora).length;
   const agregado = agregarEstatisticas({
     eGR,
     jogosConvocado,
@@ -552,11 +546,10 @@ async function calcularComparacaoEquipa(
       where: { escalaoId, epocaId, estado: "ATIVO", atleta: { ativo: true } },
     }),
     // Só sessões NORMAL contam para assiduidade (BUG-P1-07) e apenas as já
-    // EXECUTADAS (`fechado = true`, decisão de produto 2026-08-30) — nunca as
-    // programadas/por fechar: simetria com a vista do atleta e com o numerador
-    // de presenças abaixo.
+    // EXECUTADAS (data < agora) — nunca as programadas (BUG-P1-08): simetria
+    // com a vista do atleta e com o numerador de presenças abaixo.
     prisma.sessao.count({
-      where: { epocaId, escalaoId, tipoSessao: "NORMAL", fechado: true },
+      where: { epocaId, escalaoId, tipoSessao: "NORMAL", data: { lt: new Date() } },
     }),
     prisma.estatisticaAtleta.findMany({
       where: { jogo: filtroJogo },
@@ -567,9 +560,8 @@ async function calcularComparacaoEquipa(
       where: {
         escalaoId,
         estado: { in: [...ESTADOS_PRESENTE] },
-        // Simetria numerador/denominador: só presenças em sessões NORMAL e
-        // fechadas (decisão de produto 2026-08-30).
-        sessao: { epocaId, tipoSessao: "NORMAL", fechado: true },
+        // Simetria numerador/denominador: só presenças em sessões NORMAL.
+        sessao: { epocaId, tipoSessao: "NORMAL" },
       },
     }),
   ]);
@@ -776,7 +768,7 @@ export async function obterAnaliticoEscalao(
     }),
     prisma.sessao.findMany({
       where: { epocaId: epoca.id, escalaoId },
-      select: { id: true, data: true, tipoSessao: true, fechado: true },
+      select: { id: true, data: true, tipoSessao: true },
     }),
     prisma.atletaEscalao.count({
       where: { epocaId: epoca.id, escalaoId, estado: "ATIVO", atleta: { ativo: true } },
@@ -805,9 +797,7 @@ export async function obterAnaliticoEscalao(
       where: {
         escalaoId,
         estado: { in: [...ESTADOS_PRESENTE] },
-        // Simetria com o denominador (sessoesExecutadas): só presenças em sessões
-        // fechadas contam para a assiduidade (decisão de produto 2026-08-30).
-        sessao: { epocaId: epoca.id, fechado: true },
+        sessao: { epocaId: epoca.id },
       },
       // atletaId + nome alimentam o ranking de assiduidade (mesma query, sem
       // round-trip adicional); sessaoId mantém a assiduidade mensal da equipa.
@@ -824,12 +814,11 @@ export async function obterAnaliticoEscalao(
     }),
   ]);
 
-  // Sessões executadas (§10.2): realizada = `fechado = true` (decisão de produto
-  // 2026-08-30). Reutiliza a lista já lida (que traz `fechado`) — sem query
-  // adicional. As sessões não fechadas (futuras ou passadas por fechar) ficam
-  // programadas mas por executar. `agora` mantém-se para a grelha mensal abaixo.
+  // Sessões executadas (§10.2): já realizadas = `data < agora`. Reutiliza a lista
+  // já lida (que traz `data`) — sem query adicional. As futuras ficam programadas
+  // mas por executar. Simetria com a imutabilidade do passado (§8.9.1).
   const agora = Date.now();
-  const sessoesExecutadas = sessoes.filter((s) => s.fechado).length;
+  const sessoesExecutadas = sessoes.filter((s) => s.data.getTime() < agora).length;
 
   // Resultados V/E/D + golos.
   let vitorias = 0;
@@ -1211,11 +1200,10 @@ export async function obterAnaliticoClubeEpoca(
       where: filtroEpocaEscaloes,
       _count: { _all: true },
     }),
-    // Sessões executadas por escalão (§10.2): realizada = `fechado = true`
-    // (decisão de produto 2026-08-30).
+    // Sessões executadas por escalão (§10.2): já realizadas = `data < agora`.
     prisma.sessao.groupBy({
       by: ["escalaoId"],
-      where: { ...filtroEpocaEscaloes, fechado: true },
+      where: { ...filtroEpocaEscaloes, data: { lt: new Date() } },
       _count: { _all: true },
     }),
     prisma.atletaEscalao.groupBy({
@@ -1233,9 +1221,7 @@ export async function obterAnaliticoClubeEpoca(
       where: {
         escalaoId: { in: escalaoIds },
         estado: { in: [...ESTADOS_PRESENTE] },
-        // Simetria com sessoesExecutadas: só presenças em sessões fechadas
-        // contam para a assiduidade (decisão de produto 2026-08-30).
-        sessao: { epocaId: epoca.id, fechado: true },
+        sessao: { epocaId: epoca.id },
       },
       _count: { _all: true },
     }),

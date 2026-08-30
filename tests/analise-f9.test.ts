@@ -307,8 +307,8 @@ describe("obterAnaliticoEscalao", () => {
       { id: "j3", data: new Date("2025-09-24"), adversario: "C", golosMarcados: 0, golosSofridos: 2 },
     ]);
     p.sessao.findMany.mockResolvedValue([
-      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL", fechado: true },
-      { id: "s2", data: new Date("2025-09-08"), tipoSessao: "ABERTO", fechado: true },
+      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
+      { id: "s2", data: new Date("2025-09-08"), tipoSessao: "ABERTO" },
     ]);
     p.atletaEscalao.count.mockResolvedValue(10);
     p.estatisticaAtleta.findMany.mockResolvedValue([
@@ -340,20 +340,20 @@ describe("obterAnaliticoEscalao", () => {
     expect(r.dados.distribuicaoTipoTreino.CAPTACAO).toBe(0);
     // taxa média = 3 presenças / (10 atletas × 2 sessões) = 0.15
     expect(r.dados.taxaPresencaMedia).toBeCloseTo(0.15);
-    // Ambas as sessões estão fechadas → todas executadas.
+    // Ambas as sessões (2025-09) já passaram → todas executadas.
     expect(r.dados.sessoes).toBe(2);
     expect(r.dados.sessoesExecutadas).toBe(2);
   });
 
-  it("distingue sessões programadas de executadas (por fecho)", async () => {
+  it("distingue sessões programadas de executadas (data < agora)", async () => {
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
     p.jogo.findMany.mockResolvedValue([]);
-    // 2 sessões fechadas + 1 por fechar → 3 programadas, 2 executadas.
+    // 2 sessões passadas + 1 futura (data > agora) → 3 programadas, 2 executadas.
     const futura = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     p.sessao.findMany.mockResolvedValue([
-      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL", fechado: true },
-      { id: "s2", data: new Date("2025-09-08"), tipoSessao: "NORMAL", fechado: true },
-      { id: "s3", data: futura, tipoSessao: "NORMAL", fechado: false },
+      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
+      { id: "s2", data: new Date("2025-09-08"), tipoSessao: "NORMAL" },
+      { id: "s3", data: futura, tipoSessao: "NORMAL" },
     ]);
     p.atletaEscalao.count.mockResolvedValue(5);
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
@@ -367,18 +367,22 @@ describe("obterAnaliticoEscalao", () => {
     expect(r.dados.sessoesExecutadas).toBe(2);
   });
 
-  it("assiduidade usa sessões executadas (fechadas), não as programadas (BUG-P1-08)", async () => {
-    // Cenário reportado: 1 sessão fechada, TODOS presentes → deve dar ~100%,
-    // não 1/(nº de sessões programadas). Aqui: 5 atletas, 1 sessão fechada +
-    // 4 sessões por fechar, e as 5 presenças na sessão fechada.
+  it("assiduidade usa sessões executadas, não as programadas (BUG-P1-08)", async () => {
+    // Cenário reportado: 1 sessão realizada, TODOS presentes → deve dar ~100%,
+    // não 1/(nº de sessões programadas). Aqui: 5 atletas, 1 sessão passada +
+    // 4 sessões futuras programadas, e as 5 presenças na sessão realizada.
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
     p.jogo.findMany.mockResolvedValue([]);
+    const futura = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const futura2 = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const futura3 = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
+    const futura4 = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000);
     p.sessao.findMany.mockResolvedValue([
-      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL", fechado: true },
-      { id: "s2", data: new Date("2025-09-08"), tipoSessao: "NORMAL", fechado: false },
-      { id: "s3", data: new Date("2025-09-15"), tipoSessao: "NORMAL", fechado: false },
-      { id: "s4", data: new Date("2025-09-22"), tipoSessao: "NORMAL", fechado: false },
-      { id: "s5", data: new Date("2025-09-29"), tipoSessao: "NORMAL", fechado: false },
+      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
+      { id: "s2", data: futura, tipoSessao: "NORMAL" },
+      { id: "s3", data: futura2, tipoSessao: "NORMAL" },
+      { id: "s4", data: futura3, tipoSessao: "NORMAL" },
+      { id: "s5", data: futura4, tipoSessao: "NORMAL" },
     ]);
     p.atletaEscalao.count.mockResolvedValue(5);
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
@@ -397,7 +401,7 @@ describe("obterAnaliticoEscalao", () => {
     if (!r.sucesso) return;
     expect(r.dados.sessoes).toBe(5);
     expect(r.dados.sessoesExecutadas).toBe(1);
-    // 5 presenças / (5 atletas × 1 sessão fechada) = 1.0 (100%), não 0.04.
+    // 5 presenças / (5 atletas × 1 sessão executada) = 1.0 (100%), não 0.04.
     expect(r.dados.taxaPresencaMedia).toBeCloseTo(1);
     // Ranking por atleta também usa sessões executadas como denominador.
     expect(r.dados.rankingAssiduidade[0].taxa).toBeCloseTo(1);
@@ -409,7 +413,7 @@ describe("obterAnaliticoEscalao", () => {
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
     p.jogo.findMany.mockResolvedValue([]);
     p.sessao.findMany.mockResolvedValue([
-      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL", fechado: true },
+      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
     ]);
     p.atletaEscalao.count.mockResolvedValue(8);
     p.estatisticaAtleta.findMany.mockResolvedValue([]);

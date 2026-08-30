@@ -99,8 +99,8 @@ function prepararEscalao() {
     { id: "j1", data: new Date("2025-09-10"), adversario: "A", golosMarcados: 3, golosSofridos: 1 },
   ]);
   p.sessao.findMany.mockResolvedValue([
-    { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL", fechado: true },
-    { id: "s2", data: new Date("2025-09-08"), tipoSessao: "ABERTO", fechado: true },
+    { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
+    { id: "s2", data: new Date("2025-09-08"), tipoSessao: "ABERTO" },
   ]);
   p.atletaEscalao.count.mockResolvedValue(10);
   p.estatisticaAtleta.findMany.mockResolvedValue([
@@ -197,8 +197,8 @@ function prepararAtleta() {
     },
   ]);
   p.sessao.findMany.mockResolvedValue([
-    { id: "s1", data: new Date("2025-09-01"), fechado: true },
-    { id: "s2", data: new Date("2025-09-08"), fechado: true },
+    { id: "s1", data: new Date("2025-09-01") },
+    { id: "s2", data: new Date("2025-09-08") },
   ]);
   p.presenca.findMany.mockResolvedValue([{ sessaoId: "s1" }]);
   p.habilidade.count.mockResolvedValue(0);
