@@ -9,7 +9,12 @@ import type { Escalao, Modalidade, Prisma, Seccao } from "@prisma/client";
 // 🔁 v7 (§10.8): reexporta os utilitários de tempo-por-formato a partir da sua
 // fonte única (`lib/estatisticas.ts`), para os consumidores de jogos os
 // importarem junto dos restantes helpers de modalidade (Fase 28).
-export { blocoParaMinutos, MINUTOS_POR_PARTE } from "./estatisticas";
+export {
+  blocoParaMinutos,
+  MINUTOS_POR_PARTE,
+  JOGADORES_EM_CAMPO,
+  maxTitulares,
+} from "./estatisticas";
 
 /** Mapa `escalaoId → modalidade` da secção do escalão. `null` se o escalão não
  * tem secção associada (backfill pendente — Apêndice C). */

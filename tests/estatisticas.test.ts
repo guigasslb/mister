@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { agregarEstatisticas, type LinhaEstatistica } from "@/lib/estatisticas";
+import {
+  agregarEstatisticas,
+  maxTitulares,
+  JOGADORES_EM_CAMPO,
+  type LinhaEstatistica,
+} from "@/lib/estatisticas";
 
 function linha(over: Partial<LinhaEstatistica> = {}): LinhaEstatistica {
   return {
@@ -131,5 +136,26 @@ describe("agregarEstatisticas — taxaPresenca (secção 15.2 / 22.3)", () => {
       estatisticas: [],
     });
     expect(r.taxaPresenca).toBe(1);
+  });
+});
+
+describe("maxTitulares — limite de titulares do plano de jogo", () => {
+  it("futsal (FUTSAL_5) → 5 titulares", () => {
+    expect(maxTitulares("FUTSAL_5", "FUTSAL")).toBe(5);
+    expect(JOGADORES_EM_CAMPO.FUTSAL_5).toBe(5);
+  });
+
+  it("usa o nº de campo real de cada formato de futebol", () => {
+    expect(maxTitulares("FUTEBOL_3_3", "FUTEBOL")).toBe(3);
+    expect(maxTitulares("FUTEBOL_5_5", "FUTEBOL")).toBe(5);
+    expect(maxTitulares("FUTEBOL_7", "FUTEBOL")).toBe(7);
+    expect(maxTitulares("FUTEBOL_9", "FUTEBOL")).toBe(9);
+    expect(maxTitulares("FUTEBOL_11", "FUTEBOL")).toBe(11);
+  });
+
+  it("sem formato, cai na modalidade (futsal → 5, futebol → 11)", () => {
+    expect(maxTitulares(null, "FUTSAL")).toBe(5);
+    expect(maxTitulares(null, "FUTEBOL")).toBe(11);
+    expect(maxTitulares(undefined)).toBe(5);
   });
 });

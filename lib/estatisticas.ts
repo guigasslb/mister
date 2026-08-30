@@ -37,6 +37,32 @@ export const MINUTOS_POR_PARTE: Record<FormatoJogo, number> = {
   FUTEBOL_11: 45, // 2 × 45 min
 };
 
+/**
+ * Nº de jogadores em campo por formato (inclui o guarda-redes). Alimenta o
+ * limite de titulares do plano de dia de jogo (futsal = 5). Zero-regressão no
+ * futsal; os formatos de futebol usam o seu número de campo real.
+ */
+export const JOGADORES_EM_CAMPO: Record<FormatoJogo, number> = {
+  FUTSAL_5: 5,
+  FUTEBOL_3_3: 3,
+  FUTEBOL_5_5: 5,
+  FUTEBOL_7: 7,
+  FUTEBOL_9: 9,
+  FUTEBOL_11: 11,
+};
+
+/**
+ * Máximo de titulares previstos para um jogo. Deriva do formato quando definido;
+ * sem formato, cai na modalidade (FUTEBOL → 11; caso contrário futsal → 5).
+ */
+export function maxTitulares(
+  formato?: FormatoJogo | null,
+  modalidade?: "FUTSAL" | "FUTEBOL",
+): number {
+  if (formato) return JOGADORES_EM_CAMPO[formato];
+  return modalidade === "FUTEBOL" ? 11 : 5;
+}
+
 /** Tabela `bloco → minutos` para um formato concreto (derivada de `MINUTOS_POR_PARTE`). */
 export function minutosPorBlocoDoFormato(formato: FormatoJogo): Record<BlocoTempo, number> {
   const parte = MINUTOS_POR_PARTE[formato];

@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { definirPlanoTatico } from "@/lib/actions/jogos";
+import { maxTitulares } from "@/lib/modalidade-escalao";
 import { LABEL_POSICAO, posicoesPorModalidade } from "@/lib/schemas/atleta";
 import { QuadroTaticoJogo } from "@/components/jogos/QuadroTaticoJogo";
 import type { DiagramaCampo, Jogador } from "@/lib/schemas/exercicio";
@@ -86,6 +87,8 @@ export function PlanoTatico({
 }) {
   const POSICOES = posicoesPorModalidade(modalidade);
   const LINHAS = modalidade === "FUTEBOL" ? LINHAS_FUTEBOL : LINHAS_FUTSAL;
+  // Nº de jogadores em campo (futsal = 5) → limite de titulares previstos.
+  const MAX_TITULARES = maxTitulares(formato, modalidade);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [plano, setPlano] = useState<Record<string, LinhaPlano>>(() => {
@@ -102,12 +105,27 @@ export function PlanoTatico({
   const linhaDe = (id: string): LinhaPlano =>
     plano[id] ?? { posicaoPrevista: null, titularPrevisto: false };
 
+  const titulares = convocados.filter((c) => linhaDe(c.id).titularPrevisto);
+  // Limite de titulares atingido → bloqueia marcar mais (feature futsal = 5).
+  const noLimiteTitulares = titulares.length >= MAX_TITULARES;
+
   function definirPosicao(id: string, posicao: Posicao | null) {
     setPlano((prev) => ({ ...prev, [id]: { ...linhaDe(id), posicaoPrevista: posicao } }));
   }
 
   function definirTitular(id: string, titular: boolean) {
-    setPlano((prev) => ({ ...prev, [id]: { ...linhaDe(id), titularPrevisto: titular } }));
+    // Futsal: no máximo 5 titulares em campo (deriva do formato do jogo). Impede
+    // marcar mais titulares do que os lugares disponíveis.
+    if (titular && !linhaDe(id).titularPrevisto) {
+      if (titulares.length >= MAX_TITULARES) {
+        toast.error(`Já tens ${MAX_TITULARES} titulares selecionados`);
+        return;
+      }
+    }
+    setPlano((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? { posicaoPrevista: null, titularPrevisto: false }), titularPrevisto: titular },
+    }));
   }
 
   function guardar() {
@@ -138,7 +156,6 @@ export function PlanoTatico({
     );
   }
 
-  const titulares = convocados.filter((c) => linhaDe(c.id).titularPrevisto);
   const titularesSemPosicao = titulares.filter(
     (c) => linhaDe(c.id).posicaoPrevista == null,
   );
@@ -177,7 +194,7 @@ export function PlanoTatico({
           jogadas (setas). Persistido em QuadroTatico.diagrama — §8.10/§11.3. */}
       <div className="rounded-lg border border-cinza-200 bg-cinza-50 p-4">
         <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-500">
-          Quadro tático ({titulares.length} titular
+          Quadro tático ({titulares.length}/{MAX_TITULARES} titular
           {titulares.length === 1 ? "" : "es"})
         </p>
         <div className="space-y-3">
@@ -249,7 +266,13 @@ export function PlanoTatico({
                     type="button"
                     onClick={() => definirTitular(c.id, true)}
                     aria-pressed={l.titularPrevisto}
-                    className={`h-11 min-w-[68px] px-3 text-corpo-sec transition-colors ${
+                    disabled={!l.titularPrevisto && noLimiteTitulares}
+                    title={
+                      !l.titularPrevisto && noLimiteTitulares
+                        ? `Já tens ${MAX_TITULARES} titulares selecionados`
+                        : undefined
+                    }
+                    className={`h-11 min-w-[68px] px-3 text-corpo-sec transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                       l.titularPrevisto
                         ? "bg-primary text-primary-foreground"
                         : "bg-white text-cinza-600 hover:bg-cinza-50"

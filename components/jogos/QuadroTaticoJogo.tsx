@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Check, Pencil, Plus, RotateCcw } from "lucide-react";
@@ -43,12 +43,35 @@ export function QuadroTaticoJogo({
   const [editar, setEditar] = useState(false);
   const [quadroId, setQuadroId] = useState<string | null>(quadroInicial?.id ?? null);
 
-  // Base = quadro gravado (se existir) ou a formação derivada dos titulares.
-  const base = quadroInicial?.diagrama ?? diagramaFormacao;
-  const [gravado, setGravado] = useState<DiagramaCampo>(base);
-  const [diagrama, setDiagrama] = useState<DiagramaCampo>(base);
+  // Diagrama GRAVADO do quadro (independente da formação). `null` enquanto não
+  // houver quadro gravado — nesse caso o campo segue a formação VIVA dos
+  // titulares (§8.10). Depois de gravado, mostra o quadro guardado.
+  const [gravado, setGravado] = useState<DiagramaCampo | null>(
+    quadroInicial?.diagrama ?? null,
+  );
 
-  const temElementos = gravado.elementos.length > 0;
+  // Base visível = quadro gravado (se existir) OU a formação viva. `diagramaFormacao`
+  // é um prop recomputado a cada render, por isso ao marcar/posicionar titulares o
+  // campo atualiza-se de imediato (correção da regressão em que os titulares não
+  // apareciam por defeito no quadro).
+  const baseVisivel = gravado ?? diagramaFormacao;
+
+  // Buffer de edição do EditorCampo — (re)inicializado ao abrir o editor.
+  const [diagrama, setDiagrama] = useState<DiagramaCampo>(baseVisivel);
+
+  // Snapshot do estado visível capturado no momento em que o editor abre, para
+  // que "Cancelar" reponha exatamente esse estado (e não a formação viva atual).
+  const snapshotAoAbrirRef = useRef<DiagramaCampo | null>(null);
+
+  const temElementos = baseVisivel.elementos.length > 0;
+
+  // Abre o editor partindo sempre do estado visível ATUAL (quadro gravado ou
+  // formação viva), para não editar a partir de um snapshot obsoleto.
+  function abrirEditor() {
+    snapshotAoAbrirRef.current = baseVisivel;
+    setDiagrama(baseVisivel);
+    setEditar(true);
+  }
 
   function guardar() {
     startTransition(async () => {
@@ -82,7 +105,7 @@ export function QuadroTaticoJogo({
   }
 
   function cancelar() {
-    setDiagrama(gravado);
+    setDiagrama(snapshotAoAbrirRef.current ?? baseVisivel);
     setEditar(false);
   }
 
@@ -90,7 +113,7 @@ export function QuadroTaticoJogo({
   if (!podeGerir) {
     return temElementos ? (
       <div className="mx-auto max-w-xl">
-        <CampoDesenho diagrama={gravado} formato={formato ?? undefined} />
+        <CampoDesenho diagrama={baseVisivel} formato={formato ?? undefined} />
       </div>
     ) : (
       <p className="text-corpo-sec text-cinza-500">
@@ -129,7 +152,7 @@ export function QuadroTaticoJogo({
     <div className="space-y-3">
       {temElementos ? (
         <div className="mx-auto max-w-xl">
-          <CampoDesenho diagrama={gravado} formato={formato ?? undefined} />
+          <CampoDesenho diagrama={baseVisivel} formato={formato ?? undefined} />
         </div>
       ) : (
         <p className="text-corpo-sec text-cinza-500">
@@ -138,7 +161,7 @@ export function QuadroTaticoJogo({
         </p>
       )}
       <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={() => setEditar(true)}>
+        <Button variant="outline" size="sm" onClick={abrirEditor}>
           {temElementos ? (
             <>
               <Pencil className="h-4 w-4" />
