@@ -11,9 +11,23 @@ import type { EstadoPresenca, MotivoFalta } from "@prisma/client";
 
 type Atleta = { id: string; nome: string; numero: number | null };
 
-/** Estado de presença + motivo/justificação da falta (F1 — secção 8.5). */
+/**
+ * Estado de presença + motivo/justificação da falta (F1 — secção 8.5).
+ * Usado para os registos que vêm da base de dados — têm sempre um estado real.
+ */
 export type PresencaInicial = {
   estado: EstadoPresenca;
+  motivo: MotivoFalta | null;
+  justificacao: string | null;
+};
+
+/**
+ * Registo em edição no cliente. As presenças são por sessão e começam vazias:
+ * um atleta sem registo gravado fica com `estado: null` (por marcar) até o
+ * treinador escolher explicitamente um estado. Não confundir com "presente".
+ */
+type RegistoPresenca = {
+  estado: EstadoPresenca | null;
   motivo: MotivoFalta | null;
   justificacao: string | null;
 };
@@ -45,9 +59,10 @@ export function MarcadorPresencas({
 }) {
   const [pending, startTransition] = useTransition();
 
-  // Estado original (o que veio da base de dados; ausência → PRESENTE por defeito).
-  const construirInicial = useCallback((): Record<string, PresencaInicial> => {
-    const inicial: Record<string, PresencaInicial> = {};
+  // Estado original (o que veio da base de dados). Atletas sem registo gravado
+  // ficam por marcar (estado null) — uma sessão sem presenças começa vazia.
+  const construirInicial = useCallback((): Record<string, RegistoPresenca> => {
+    const inicial: Record<string, RegistoPresenca> = {};
     for (const a of atletas) {
       const existente = presencasIniciais[a.id];
       if (existente) {
@@ -57,17 +72,19 @@ export function MarcadorPresencas({
           existente.motivo ?? (existente.justificacao?.trim() ? "OUTRO" : null);
         inicial[a.id] = { ...existente, motivo };
       } else {
-        inicial[a.id] = { estado: "PRESENTE", motivo: null, justificacao: null };
+        inicial[a.id] = { estado: null, motivo: null, justificacao: null };
       }
     }
     return inicial;
   }, [atletas, presencasIniciais]);
 
-  const [registos, setRegistos] = useState<Record<string, PresencaInicial>>(construirInicial);
+  const [registos, setRegistos] = useState<Record<string, RegistoPresenca>>(construirInicial);
 
+  // Só contam atletas efetivamente marcados: os que estão por marcar (null) não
+  // entram em "presentes" nem em "faltas".
   const valores = Object.values(registos);
-  const presentes = valores.filter((r) => PRESENTES.has(r.estado)).length;
-  const faltas = atletas.length - presentes;
+  const presentes = valores.filter((r) => r.estado != null && PRESENTES.has(r.estado)).length;
+  const faltas = valores.filter((r) => r.estado != null && !PRESENTES.has(r.estado)).length;
 
   function mudarEstado(atletaId: string, estado: EstadoPresenca) {
     setRegistos((prev) => ({
@@ -110,7 +127,7 @@ export function MarcadorPresencas({
   /** Marca todos os atletas como PRESENTE (limpa motivos/justificações). */
   function marcarTodosPresentes() {
     setRegistos((prev) => {
-      const proximo: Record<string, PresencaInicial> = {};
+      const proximo: Record<string, RegistoPresenca> = {};
       for (const id of Object.keys(prev))
         proximo[id] = { estado: "PRESENTE", motivo: null, justificacao: null };
       return proximo;
@@ -123,12 +140,19 @@ export function MarcadorPresencas({
   }
 
   function guardar() {
-    const payload = atletas.map((a) => ({
-      atletaId: a.id,
-      estado: registos[a.id].estado,
-      motivo: registos[a.id].motivo,
-      justificacao: registos[a.id].justificacao?.trim() ? registos[a.id].justificacao : undefined,
-    }));
+    // Atletas por marcar (estado null) são ignorados: se o treinador não marcou,
+    // não se grava nada para esse atleta.
+    const payload = atletas
+      .filter((a) => registos[a.id].estado != null)
+      .map((a) => {
+        const r = registos[a.id];
+        return {
+          atletaId: a.id,
+          estado: r.estado as EstadoPresenca,
+          motivo: r.motivo,
+          justificacao: r.justificacao?.trim() ? r.justificacao : undefined,
+        };
+      });
     startTransition(async () => {
       const res = await marcarPresencas(sessaoId, payload);
       if (res.sucesso) toast.success("Presenças guardadas");
@@ -166,7 +190,7 @@ export function MarcadorPresencas({
       <ul className="space-y-2">
         {atletas.map((a) => {
           const registo = registos[a.id];
-          const comJustificacao = COM_JUSTIFICACAO.has(registo.estado);
+          const comJustificacao = registo.estado != null && COM_JUSTIFICACAO.has(registo.estado);
           return (
             <li
               key={a.id}
