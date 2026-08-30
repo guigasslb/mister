@@ -14,9 +14,10 @@ import {
 } from "@/components/ui/select";
 import { definirPlanoTatico } from "@/lib/actions/jogos";
 import { maxTitulares } from "@/lib/modalidade-escalao";
+import { construirDiagramaFormacao } from "@/lib/formacao";
 import { LABEL_POSICAO, posicoesPorModalidade } from "@/lib/schemas/atleta";
 import { QuadroTaticoJogo } from "@/components/jogos/QuadroTaticoJogo";
-import type { DiagramaCampo, Jogador } from "@/lib/schemas/exercicio";
+import type { DiagramaCampo } from "@/lib/schemas/exercicio";
 import type { FormatoJogo, Modalidade, Posicao } from "@prisma/client";
 
 type Convocado = {
@@ -27,43 +28,6 @@ type Convocado = {
 };
 
 type LinhaPlano = { posicaoPrevista: Posicao | null; titularPrevisto: boolean };
-
-/** Linha de formação: sector + coordenada x no espaço 400×200 do campo (§11.5). */
-type LinhaFormacao = { titulo: string; x: number; posicoes: Posicao[] };
-
-// 🔁 v7 (§11.5): linhas de formação por modalidade. A equipa própria defende à
-// esquerda e ataca à direita (x cresce para a frente).
-const LINHAS_FUTSAL: LinhaFormacao[] = [
-  { titulo: "Guarda-redes", x: 35, posicoes: ["GUARDA_REDES"] },
-  { titulo: "Defesa", x: 130, posicoes: ["FIXO"] },
-  { titulo: "Meio", x: 225, posicoes: ["ALA", "UNIVERSAL"] },
-  { titulo: "Avançado", x: 320, posicoes: ["PIVO"] },
-];
-
-const LINHAS_FUTEBOL: LinhaFormacao[] = [
-  { titulo: "Guarda-redes", x: 35, posicoes: ["GUARDA_REDES"] },
-  {
-    titulo: "Defesa",
-    x: 115,
-    posicoes: ["DEFESA_CENTRAL", "LATERAL_DIREITO", "LATERAL_ESQUERDO"],
-  },
-  {
-    titulo: "Meio",
-    x: 205,
-    posicoes: ["MEDIO_DEFENSIVO", "MEDIO_CENTRO", "MEDIO_OFENSIVO", "UNIVERSAL"],
-  },
-  {
-    titulo: "Ataque",
-    x: 315,
-    posicoes: ["EXTREMO_DIREITO", "EXTREMO_ESQUERDO", "AVANCADO"],
-  },
-];
-
-/** Distribui n jogadores verticalmente (y) numa linha, no espaço útil 45..155. */
-function distribuirY(indice: number, total: number): number {
-  if (total <= 1) return 100;
-  return 45 + ((155 - 45) * indice) / (total - 1);
-}
 
 export function PlanoTatico({
   jogoId,
@@ -86,7 +50,6 @@ export function PlanoTatico({
   podeGerirQuadro: boolean;
 }) {
   const POSICOES = posicoesPorModalidade(modalidade);
-  const LINHAS = modalidade === "FUTEBOL" ? LINHAS_FUTEBOL : LINHAS_FUTSAL;
   // Nº de jogadores em campo (futsal = 5) → limite de titulares previstos.
   const MAX_TITULARES = maxTitulares(formato, modalidade);
   const router = useRouter();
@@ -156,37 +119,18 @@ export function PlanoTatico({
     );
   }
 
-  const titularesSemPosicao = titulares.filter(
-    (c) => linhaDe(c.id).posicaoPrevista == null,
+  // 🔁 v7 (§11.5): constrói o diagrama de campo com TODOS os titulares. Os que não
+  // têm posição prevista são colocados em posições padrão distribuídas no campo
+  // (nunca ficam de fora), para render no CampoDesenho (fundo = formato do jogo).
+  const diagrama: DiagramaCampo = construirDiagramaFormacao(
+    titulares.map((c) => ({
+      id: c.id,
+      numero: c.numero,
+      posicao: linhaDe(c.id).posicaoPrevista,
+    })),
+    modalidade,
+    formato,
   );
-
-  // 🔁 v7 (§11.5): constrói o diagrama de campo com os titulares posicionados por
-  // linha, para render no CampoDesenho (fundo conforme o formato do jogo).
-  const diagrama: DiagramaCampo = (() => {
-    const elementos: Jogador[] = [];
-    for (const linha of LINHAS) {
-      const daLinha = titulares.filter((c) => {
-        const pos = linhaDe(c.id).posicaoPrevista;
-        return pos != null && linha.posicoes.includes(pos);
-      });
-      daLinha.forEach((c, i) => {
-        elementos.push({
-          id: c.id,
-          tipo: "jogador",
-          x: linha.x,
-          y: distribuirY(i, daLinha.length),
-          cor: "azul",
-          equipa: "propria",
-          ...(c.numero != null ? { numero: c.numero } : {}),
-        });
-      });
-    }
-    return {
-      versao: 2,
-      elementos,
-      campo: formato ?? undefined,
-    };
-  })();
 
   return (
     <div className="space-y-5">
@@ -205,23 +149,6 @@ export function PlanoTatico({
             diagramaFormacao={diagrama}
             podeGerir={podeGerirQuadro}
           />
-          {/* Titulares sem posição atribuída (não entram na formação semeada) */}
-          {titularesSemPosicao.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-24 flex-shrink-0 text-legenda text-cinza-500">
-                Sem posição
-              </span>
-              {titularesSemPosicao.map((c) => (
-                <span
-                  key={c.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-cinza-200 px-3 py-1 text-legenda font-medium text-cinza-700"
-                >
-                  {c.numero != null && <span className="opacity-80">#{c.numero}</span>}
-                  {c.nome}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
