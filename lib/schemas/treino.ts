@@ -37,6 +37,21 @@ export const LABEL_MOMENTO_SEMANA: Record<MomentoSemana, string> = {
 };
 
 /**
+ * Descrição curta de cada momento da semana, mostrada apenas dentro do dropdown
+ * do Select (SessaoForm) para ajudar a escolher. As listas e badges continuam a
+ * usar só o label curto (LABEL_MOMENTO_SEMANA).
+ */
+export const DESCRICAO_MOMENTO_SEMANA: Record<MomentoSemana, string> = {
+  MD_MENOS_3: "Treino principal da semana · maior carga",
+  MD_MENOS_2: "Velocidade e clareza tática",
+  MD_MENOS_1: "Ativação leve · véspera do jogo",
+  MD_MAIS_1: "Recuperação ativa · dia a seguir ao jogo",
+  ATIVACAO: "Treino de ativação no próprio dia do jogo",
+  TAPER: "Semana de redução de carga pré-competição",
+  LIVRE: "Sem posição específica na semana",
+};
+
+/**
  * Só sessões do tipo NORMAL podem ligar a periodização (secção 16, Grupo B):
  * um jogo/evento/captação/treino aberto com `planeamentoId` corromperia os
  * dados de periodização. Regra imposta via superRefine (schema) e reforçada

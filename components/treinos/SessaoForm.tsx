@@ -26,6 +26,7 @@ import {
   LABEL_TIPO_SESSAO,
   MOMENTOS_SEMANA,
   LABEL_MOMENTO_SEMANA,
+  DESCRICAO_MOMENTO_SEMANA,
   type MomentoSemana,
 } from "@/lib/schemas/treino";
 import { instantToWallClockLisbon, wallClockLisbonToInstant } from "@/lib/utils-datas";
@@ -304,7 +305,10 @@ export function SessaoForm({
             <SelectItem value={SENTINEL_NONE}>— Sem momento —</SelectItem>
             {MOMENTOS_SEMANA.map((m) => (
               <SelectItem key={m} value={m}>
-                {LABEL_MOMENTO_SEMANA[m]}
+                <span className="font-medium">{LABEL_MOMENTO_SEMANA[m]}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {DESCRICAO_MOMENTO_SEMANA[m]}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
