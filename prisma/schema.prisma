@@ -506,6 +506,8 @@ model Atleta {
   // formalmente inscrito de quem falta inscrever. Independente de `ativo` (um
   // atleta ativo pode ainda estar por inscrever). Default false: nasce por inscrever.
   inscrito       Boolean   @default(false)
+  // Atleta que pratica também futebol (dupla modalidade futsal + futebol).
+  praticaDuplaModalidade Boolean @default(false)
   dataIngresso   DateTime? // para a taxa de presença (secção 10); fallback = criadoEm
 
   // Dados do encarregado de educação (RGPD — minimização).
@@ -1048,6 +1050,7 @@ enum MotivoFalta {
   DOENCA
   OUTRO
   SEM_JUSTIFICACAO
+  JOGO_FUTEBOL
 }
 
 enum TipoSessao {
