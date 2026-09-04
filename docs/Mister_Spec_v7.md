@@ -1848,6 +1848,115 @@ Conforme v6 §8.21 (cenários A/B/C/D), com uma extensão multi-desporto:
 
 ---
 
+### 8.23 Analíticos de Treino (`RELATORIOS_VER`)
+
+> **Estatuto:** nova funcionalidade (Fase 34). Zero alterações de schema (usa campos existentes: `categoriaPrincipal`, `parteTreino`, `subcategoria`). Não toca em auth.
+>
+> **Princípio:** vista *clean* e focada de toda a estatística de treino ao longo da época — do escalão, do jogador e do exercício —, complementar dos analíticos de jogo (§10.2) e da carga RPE/ACWR (§8.20). Filtrado por clube + época ativa. Exige `RELATORIOS_VER`.
+
+**Convenções transversais (DEVE):**
+- Volumes e médias usam **sessões executadas** (`dataHora < agora`).
+- **Assiduidade** conta apenas `TipoSessao.NORMAL` (simetria com §10.1).
+- **Volume de exercícios** conta todas as sessões com exercícios, com breakdown por tipo.
+- `Sessao.duracaoMin` quando preenchido; fallback = somatório de `SessaoExercicio.duracaoMin`.
+- Nome/categoria do exercício: respeita snapshot (`SessaoExercicio.snapNome`) quando existe.
+
+---
+
+#### 8.23.1 Vista de Época — Treinos (nível de escalão)
+
+Nova aba **«Treino»** em `/escaloes/[id]/analiticos` (segmented control: Jogos · **Treino** · Carga). Componente `PainelTreinoEscalao` (`components/analiticos/`).
+
+| # | Indicador | Visualização | Prioridade |
+|---|-----------|--------------|------------|
+| A | Volume total: nº sessões, horas, média duração, executadas/programadas | 3–4 KPI cards | **Essencial** |
+| B | Distribuição por tipo de sessão (NORMAL/ABERTO/CAPTACAO/EVENTO) | `GraficoBarrasH` | **Essencial** |
+| C | Top exercícios mais usados (ranking, nº utilizações) | `GraficoBarrasH` (`{label,valor}`, max 10) | **Essencial** ⭐ |
+| D | Distribuição de exercícios por `categoriaPrincipal` | `GraficoBarrasH` | **Recomendado** |
+| E | Distribuição por `parteTreino` (aquecimento/principal/etc.) | `GraficoBarrasH` | **Recomendado** |
+| F | Evolução mensal do volume (nº sessões + horas) | `GraficoBarrasV` ou `GraficoLinhas` | **Recomendado** |
+| G | Assiduidade média do plantel (sessões NORMAL) | KPI + `GraficoBarrasV` mensal | **Essencial** (unificar com existente) |
+
+**Server Action:** `obterAnaliticoTreinoEscalao(escalaoId, epocaId?)` → `Resultado<AnaliticoTreinoEscalao>`.
+
+---
+
+#### 8.23.2 Vista de Jogador — Treino
+
+Nova secção **«Treino»** na aba Analytics do perfil do atleta (`PainelAtleta`).
+
+| # | Indicador | Visualização | Prioridade |
+|---|-----------|--------------|------------|
+| A | Taxa de presença (sessões NORMAL) | KPI + `GraficoBarrasV` mensal | **Essencial** (unificar) |
+| B | RPE médio (só se `RpeAtleta` preenchido) | KPI + `GraficoLinhas` (≥3 registos) | **Recomendado** |
+| C | Exercícios por `categoriaPrincipal` (onde participou) | `GraficoBarrasH` | **Recomendado** |
+| D | Evolução mensal de presenças | `GraficoBarrasV` | **Essencial** (reutilizar existente) |
+
+**Server Action:** `obterAnaliticoTreinoAtleta(atletaId, escalaoId?, epocaId?)` → `Resultado<AnaliticoTreinoAtleta>`.
+
+---
+
+#### 8.23.3 Vista de Exercício — Análise de uso ⭐ (prioridade máxima)
+
+> *"Saber quantas vezes usei o mesmo exercício é fundamental."* — requisito do utilizador.
+
+**Cartão «Uso na época»** em `/exercicios/[id]`:
+
+| # | Indicador | Visualização | Prioridade |
+|---|-----------|--------------|------------|
+| A | Nº de vezes usado na época | **KPI grande** em destaque | **Essencial** ⭐ |
+| B | Última vez usado + link à sessão | KPI («Última utilização: DD/MM/AAAA») | **Essencial** ⭐ |
+| C | Lista de sessões onde foi usado (data, escalão, tipo, link) | Tabela/lista ordenada desc | **Essencial** |
+| D | Duração média quando usado | KPI («X min médios») | **Recomendado** |
+| E | Escalões que o usam | Chips com contagem | **Recomendado** |
+| F | Evolução mensal de utilização | `GraficoBarrasV` | Futuro |
+
+**Ranking da biblioteca** em `/exercicios/analiticos` (nova rota, gated por `RELATORIOS_VER`):
+
+| Indicador | Visualização | Prioridade |
+|-----------|--------------|------------|
+| Exercícios mais/menos usados (inclui nunca usados, `count=0`) | `GraficoBarrasH` + tabela ordenável | **Essencial** ⭐ |
+
+**Server Actions:**
+- `obterUsoExercicio(exercicioId, epocaId?)` → `Resultado<UsoExercicio>`
+- `obterRankingUsoExercicios({ escalaoId?, epocaId? })` → `Resultado<RankingUsoExercicio[]>`
+
+Ambas: auth + `RELATORIOS_VER`; multi-tenant por clube; conta só sessões de escalões legíveis.
+
+---
+
+#### 8.23.4 Server Actions (§10.11 — Analíticos de treino)
+
+Todas em `lib/actions/analise.ts` (ou novo `lib/actions/analiseTreino.ts`). Padrão: Zod → `exigirRelatorios()` → `resolverEpoca()` → gate por escalão → `Resultado<T>`. Lógica pura em `lib/estatisticas-treino.ts`.
+
+| Action | Reutiliza |
+|--------|-----------|
+| `obterAnaliticoTreinoEscalao` | `distribuicaoTipoTreino`, `presencaMensal`, `sessoesExecutadas` |
+| `obterAnaliticoTreinoAtleta` | `obterPresencasMensal`, `RpeAtleta` |
+| `obterUsoExercicio` ⭐ | — (novo) |
+| `obterRankingUsoExercicios` ⭐ | `escaloesLegiveis` |
+
+---
+
+#### 8.23.5 Nota de conformidade com o schema
+
+`TipoExercicio` (TECNICO/TATICO/FISICO/INTEGRADO) **não existe no schema**. As dimensões reais são `categoriaPrincipal` (`CategoriaExercicioPrincipal`) e `parteTreino` (`ParteTreino`). Se uma dimensão pedagógica autónoma for necessária no futuro, adicionar `Exercicio.tipoExercicio TipoExercicio?` (nullable, migração aditiva) — fora do âmbito desta fase.
+
+---
+
+#### 8.23.6 Mapa de rotas
+
+| Rota | Conteúdo |
+|------|----------|
+| `/escaloes/[id]/analiticos` | Segmento «Treino» (`PainelTreinoEscalao`) |
+| `/exercicios/[id]` | Cartão «Uso na época» |
+| `/exercicios/analiticos` | Ranking da biblioteca (nova rota) |
+| Perfil atleta → Analytics | Secção «Treino» (`PainelAtleta` estendido) |
+
+Gráficos SVG com `--cor-primaria`, carregados via `next/dynamic` (`ssr:false`). Estados vazios com `EstadoVazio` ("Sem treinos registados nesta época.", "Exercício ainda não usado nesta época.").
+
+---
+
 ## 9. Regras de negócio transversais e casos-limite
 
 **Herdados do MVP/v6 (mantêm-se):**
@@ -2276,6 +2385,18 @@ Resumo: **1** Esqueleto · **2** Reconversão de módulos · **3** Periodizaçã
 - **Critério de pronto:** competição 1×1 (liga e torneio) totalmente utilizável intra-clube e inter-clubes; resultado `PRIMEIRO_A_DOIS` rejeita qualquer marcador que não seja 2–0/2–1; vencedor derivado automaticamente; round-robin de N participantes gera N×(N−1)/2 duelos (bye rotativo com N ímpar); bracket com byes corretos e avanço do vencedor via `proximoMatchId`; classificação calculada com a ordem de desempate da secção 22.5; regenerar bloqueado se já houver resultados; atleta que sai → futuros `ANULADO`, histórico preservado; todo o duelo pertence a uma competição; testes das funções puras (fixtures/desempates) e das actions; **`typecheck`/`lint`/`test` limpos + bíblia atualizada (§6.2, §6.6, §22, Apêndice C)**; **não toca em auth**.
 - **Métrica de sucesso:** nº de duelos registados por época; **% de duelos registados em treino vs. registo manual**; adoção de ligas anuais 1×1 por escalão (prova que a gamificação leve do 1×1 gera uso recorrente).
 
+#### Fase 34 — Analíticos de Treino
+
+**Dependências:** Treinos (Fases 7–8), Presenças (Fase 8), Exercícios (Fases 5–6), Carga RPE (§8.20).
+**Schema:** zero alterações (usa campos existentes).
+**Entregas:**
+1. `obterUsoExercicio` + `obterRankingUsoExercicios` em `lib/actions/analise.ts`
+2. `obterAnaliticoTreinoEscalao` + `obterAnaliticoTreinoAtleta` em `lib/actions/analise.ts`
+3. `PainelTreinoEscalao` + tab «Treino» em `/escaloes/[id]/analiticos`
+4. `UsoExercicioCard` + `/exercicios/analiticos` (ranking)
+5. Secção «Treino» no `PainelAtleta`
+**Pronto quando:** build verde, todos os analíticos renderizam com dados reais, estados vazios corretos, testes unitários das funções puras.
+
 ---
 
 ## 17. Modelo de negócio e licenciamento
@@ -2348,6 +2469,9 @@ Decidida pelo treinador na criação (toggle pessoal vs clube). O pagamento não
 
 Do mais recente para o mais antigo.
 
+- **2026-09-04** — **§8.23.3** — **Analíticos de Treino — UI da análise de uso de exercícios (cartão «Uso na época» + ranking da biblioteca) (Fase 34, passo 4).** Implementação da **camada de UI** sobre as Server Actions `obterUsoExercicio` e `obterRankingUsoExercicios` (já existentes — changelog 2026-09-04 «§8.23»). **Só apresentação + leitura server-side aditiva — sem alteração de schema, migração, Server Actions, dados de negócio ou auth.** **(1) `components/analiticos/UsoExercicioCard.tsx`:** server component que recebe `exercicioId`, chama `obterUsoExercicio(exercicioId)` e renderiza a secção **«Uso na época»** — KPIs em destaque (**nº de vezes usado** ⭐ número grande na cor do clube; **última utilização** DD/MM/AAAA com link à sessão `/treinos/[ultimaSessaoId]` quando existe; **duração média** «X min» ou «—»), **chips de escalões** que o usam com contagem, e **lista das últimas 10 sessões** (escalão, data DD/MM/AAAA, duração, `Badge` do tipo de sessão em PT-PT, link `/treinos/[id]`, alvos ≥44px). Estado vazio via `EstadoVazio` («Exercício ainda não usado nesta época.»); devolve `null` em falha de permissão/dados (não polui o detalhe). Integrado em `app/(app)/exercicios/[id]/page.tsx` após o detalhe do exercício. **(2) `app/(app)/exercicios/analiticos/page.tsx` (nova rota):** server component que chama `obterRankingUsoExercicios({})` + `obterEpocaAtiva()`; título «Ranking de exercícios — {nomeEpocaAtiva}», `GraficoBarrasH` com os **top 20** mais usados (unidade «utilizações») e **tabela** de todos os exercícios (nome com link ao detalhe, categoria PT-PT via `LABEL_CATEGORIA`, nº utilizações — «Nunca usado» a cinza quando `totalUsos=0` —, última vez DD/MM/AAAA). Estados vazios: «Sem exercícios registados nesta época.» e mensagem dedicada de falta de permissão. **(3) `components/analiticos/RankingUsoExerciciosGrafico.tsx`:** fronteira de cliente («use client») que carrega `GraficoBarrasH` via `next/dynamic({ ssr: false })` (`--cor-primaria`). **(4) `app/(app)/exercicios/page.tsx`:** botão **«Ver ranking de uso»** (ícone `BarChart3`) no cabeçalho, gated por `RELATORIOS_VER` (via `obterMembroAtual`), a apontar para `/exercicios/analiticos`. UI 100% pt-PT (tipos de sessão NORMAL/ABERTO/CAPTACAO/EVENTO e categorias traduzidos), alvos de toque ≥44px, sem dark mode, zero `any`. §8.23.3/§8.23.6 alinhadas (passo 4 da Fase 34 concluído). `npm run typecheck` limpo · `npm run lint` limpo. **Não toca em auth.**
+- **2026-09-04** — **Correção (continuação) — perfil do atleta escolhe a vista analítica certa quando o atleta muda de escalão a meio da época (§10.1).** A correção anterior (mesma data, «analíticos do atleta perdiam o histórico quando o atleta saía do escalão») removeu o filtro `estado: "ATIVO"` das participações em `obterAnaliticoAtleta`, mas o problema **persistia** no ecrã do perfil (aba **Analytics** mostrava «Sem jogos ou sessões registados nesta época»). **Causa raiz real:** a página `app/(app)/plantel/[id]/page.tsx` chamava sempre `obterAnaliticoAtleta(id, a.participacaoContexto?.escalaoId)` com o **escalão ATIVO atual** (ex.: Infantis A). Como `participacaoContexto` vem de `obterAtleta`, que só lê participações `estado: "ATIVO"`, o contexto era o escalão de **destino**; ao passar um `escalaoId` concreto, a action limita `escaloesCtx = [esseEscalao]` e filtra sessões/presenças/jogos **só** a esse escalão — logo os treinos do escalão de **origem** (Benjamins, agora `TRANSICAO_PERMANENTE`) ficavam fora do âmbito e `sessoesTotais`/`jogosConvocado` davam 0 → painel vazio. A correção anterior só beneficiava a **vista conjunta** (`escalaoId` indefinido), que a página nunca usava para atletas com participação ativa. **Correção (só apresentação/decisão server-side — sem alteração de schema, migração, dados de negócio ou auth):** novo helper **puro** `lib/analitico-atleta-escalao.ts` — `escolherEscalaoContextoAnalitico(...)` — que decide o escalão de contexto do perfil: se o atleta tem **histórico** de participação (qualquer estado) num escalão **diferente** dos seus escalões **ativos**, na **mesma modalidade e época** (sinal de que mudou de escalão a meio da época), devolve `undefined` para forçar a **vista CONJUNTA** da modalidade (agrega todos os escalões e recupera o histórico de origem); caso contrário mantém o **contexto do escalão ativo** (preserva a comparação com a média da equipa). A página passa a derivar `escalaoAnalitico` deste helper (usando `listarParticipacoes` já carregado + `mapaModalidadePorEscalao`) e chama `obterAnaliticoAtleta(id, escalaoAnalitico, undefined, escalaoAnalitico ? undefined : modalidadeCtx)` — na vista conjunta segmenta pela modalidade do contexto para não misturar futsal com futebol. **Zero regressão:** para quem **nunca** mudou de escalão (caso comum) e para participações **simultâneas ativas** (SIMULTANEA), o helper devolve exatamente o escalão ativo — a chamada é idêntica à anterior. Novo `tests/analitico-atleta-escalao.test.ts` (6) cobre: mono-escalão (mantém contexto), mudança de escalão (força conjunta), histórico de outra modalidade/época (ignorado), simultâneas ativas (mantém contexto) e atleta sem participação ativa. §10.1 alinhada. `npm run typecheck` limpo · **1444 testes verdes**. **Não toca em auth.**
+- **2026-09-04** — **§8.23** — **Analíticos de Treino — frequência de uso de exercícios, ranking da biblioteca, vista de treino por escalão e atleta (Fase 34).** Nova subsecção §8.23 que define a camada analítica de treino (complementar dos analíticos de jogo §10.2 e da carga RPE/ACWR §8.20), com **zero alterações de schema** (usa `categoriaPrincipal`, `parteTreino`, `subcategoria` existentes) e sem tocar em auth. Cobre: **(8.23.1)** vista de época ao nível do escalão (nova aba «Treino» em `/escaloes/[id]/analiticos`, `PainelTreinoEscalao`) com volume total, distribuição por tipo de sessão, top exercícios, distribuição por categoria/parte de treino, evolução mensal e assiduidade média — `obterAnaliticoTreinoEscalao`; **(8.23.2)** vista de jogador (secção «Treino» no `PainelAtleta`) com taxa de presença, RPE médio, exercícios por categoria e evolução mensal — `obterAnaliticoTreinoAtleta`; **(8.23.3)** vista de exercício ⭐ (cartão «Uso na época» em `/exercicios/[id]` com nº de utilizações, última utilização, lista de sessões, duração média e escalões; ranking da biblioteca em nova rota `/exercicios/analiticos` gated por `RELATORIOS_VER`, incluindo nunca usados) — `obterUsoExercicio` + `obterRankingUsoExercicios`; **(8.23.4)** contrato das Server Actions (`lib/actions/analise.ts`, lógica pura em `lib/estatisticas-treino.ts`); **(8.23.5)** nota de conformidade (`TipoExercicio` não existe no schema); **(8.23.6)** mapa de rotas e estados vazios. Roadmap: **Fase 34** adicionada à secção 16. **Não toca em auth.**
 - **2026-09-04** — **Correção — fuso horário: horas de eventos exibidas em Lisboa e fronteiras de dia do plano semanal calculadas em wall-clock de Lisboa (§8.8, §8.9, §8.11, §8.16, §8.13.1).** Duas correções de fuso horário que se manifestavam em produção (servidor em UTC), onde as datas/horas eram calculadas e exibidas em UTC em vez de `Europe/Lisbon`. **Só apresentação/derivação de datas — sem alteração de schema, migração, dados de negócio ou auth.** **(1) Exibição de horas em Lisboa (treinos, jogos, dashboard, agenda):** as horas dos eventos (próximo treino/jogo no dashboard, detalhe e listagens de treinos e jogos, agenda) eram formatadas a partir do `Date` sem fixar o fuso, pelo que num servidor UTC apareciam **desfasadas** face à hora local (ex.: um treino às 18:00 de Lisboa surgia como 17:00 no horário de verão). Novos helpers puros em `lib/utils-datas.ts` — **`formatarDataHoraLisboa`** (formatação de data/hora com `timeZone: "Europe/Lisbon"`, `pt-PT`) e **`partesDataLisboa`** (decomposição em partes de calendário — ano/mês/dia/hora/minuto — no fuso de Lisboa, para quando é preciso reconstruir componentes em vez de uma string formatada) — aplicados em **todos** os Server Components que exibem horas de eventos, garantindo consistência independente do fuso do servidor. **(2) Fronteiras de dia do plano semanal em wall-clock de Lisboa (§8.9):** `lib/plano-semanal.ts` calculava o início/fim de cada dia e o dia da semana com métodos **TZ-naive** do `Date` (`getDay`/`getDate`/`setHours`), que num servidor UTC produziam **dias errados** para Lisboa — um evento perto da meia-noite (ou o próprio início da semana) podia cair no dia/semana anterior ou seguinte, deslocando o plano semanal inteiro. Reescrito para operar em **wall-clock de Lisboa** (fronteiras de dia e dia-da-semana derivados das partes de calendário no fuso de Lisboa, via `partesDataLisboa`), eliminando a dependência do fuso do processo. Testes de `lib/plano-semanal.ts` corrigidos para serem **deterministas** (deixam de depender do fuso do ambiente de execução / da data corrente do runner), fixando as datas em referências de Lisboa. UI 100% pt-PT, sem dark mode. `npm run typecheck` limpo. **Não toca em auth.**
 - **2026-09-04** — **Presenças — botão "Guardar" só com alterações, sessão fechada em só-leitura, e aviso de sessões por fechar no dashboard (§8.8.2, §8.16).** Três melhorias na grelha de presenças e no incentivo a concluir sessões. **Só apresentação/agregação server-side + uma guarda de escrita — sem alteração de schema, migração, dados de negócio ou auth.** **(1) Guardar só com alterações pendentes (§8.8.2):** novo helper puro `lib/presencas.ts` — `presencasAlteradas(inicial, atual)` (compara estado/motivo/justificação por atleta, normalizando a justificação: `null`/`""`/espaços equivalem) e tipo partilhado `RegistoPresenca`. `components/treinos/MarcadorPresencas.tsx` memoiza o estado **inicial** vindo do servidor e desativa **"Guardar presenças"** (rótulo "Sem alterações") e **"Repor"** quando não há nada por guardar; `guardar` também aborta sem alterações. **(2) Sessão fechada em só-leitura (§8.8.2):** o componente ganha a prop `fechado?: boolean` (passada por `app/(app)/treinos/[id]/page.tsx` a partir de `s.fechado`); quando `true`, os segmentos de estado, botões de motivo e texto livre ficam **desativados**, os atalhos e a barra de guardar ficam **ocultos**, e surge o badge **"Sessão concluída · só leitura"** (`Lock`). **Reforço no servidor:** `marcarPresencas` (`lib/actions/treinos.ts`) passa a **rejeitar** a escrita quando `sessao.fechado` (erro `Resultado`) — defesa em profundidade. **(3) Aviso de sessões por fechar (§8.16):** `app/(app)/dashboard/page.tsx` conta as **sessões passadas por fechar** (`data < hoje` e `fechado = false`, respeitando época ativa + escalões legíveis §6.4/§6.5) e mostra um **banner âmbar** (`BannerSessoesPorFechar`, ícone `CircleAlert`) que liga a `/treinos?vista=lista&estado=aberto`, incentivando o treinador a concluí-las antes de acumular. Novo `tests/presencas.test.ts` (8) cobre `presencasAlteradas` (idênticos, mudança de estado/motivo/justificação, normalização de espaços, atleta só num mapa, marcar todos presentes). UI 100% pt-PT, alvos de toque ≥44px, sem dark mode. **Não toca em auth.**
 - **2026-09-04** — **Correção — analíticos do atleta perdiam o histórico quando o atleta saía do escalão (§10.1).** Quando um atleta era **removido de um escalão** (`terminarParticipacao` → participação `INATIVO`), **promovido/transferido** (`transferirEscalao` → origem `TRANSICAO_PERMANENTE`) ou **arquivado** (`Atleta.ativo=false`), as suas **estatísticas e presenças históricas desapareciam** do painel de Analytics do perfil (aba **Analytics**), que passava a devolver «Sem permissão»/vista vazia. **Causa raiz:** três Server Actions de leitura em `lib/actions/analise.ts` — `obterAnaliticoAtleta`, `obterEvolucaoAtleta` e `obterPresencasMensal` — derivavam o(s) escalão(ões) de contexto **apenas das participações `estado: "ATIVO"`** da época. Como as participações **não são apagadas** (só mudam de estado) e as `EstatisticaAtleta`/`Presenca` estão ligadas ao **atleta/jogo/sessão** (não ao estado da participação), o filtro por `ATIVO` esvaziava o conjunto de escalões, falhava o gate `podeLerAlgumEscalao([])` e escondia dados que continuavam a existir. **Correção (só leitura — sem alteração de schema, migração, dados de negócio ou auth):** as três queries passam a carregar **todas** as participações da época (`where: { epocaId }`, **sem** `estado`), restaurando o histórico de quem já saiu do escalão; variáveis `escaloesAtivos`→`escaloesParticipados` para refletir a semântica. **Fora de âmbito (inalterado):** `nAtletas` nas vistas de equipa/clube mantém o **plantel atual** (`estado: "ATIVO"` + `atleta.ativo`) como denominador das médias; os rankings ofensivos/assiduidade/disciplina do escalão já incluíam quem saiu (derivam de `EstatisticaAtleta`/`Presenca` por jogo/escalão). Novo teste de regressão em `tests/analise-f9.test.ts` (participação da época carregada sem filtro de estado → histórico preservado). §10.1 alinhada (nova regra **DEVE** de histórico persistente). `npm run typecheck` limpo · **`tests/analise-f9.test.ts` 34/34 verdes** (as 2 falhas em `tests/plano-semanal.test.ts` são **pré-existentes** e dependentes da data corrente, alheias a esta correção). **Não toca em auth.**

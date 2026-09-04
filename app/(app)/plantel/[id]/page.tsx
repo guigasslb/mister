@@ -20,6 +20,7 @@ import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { mapaModalidadePorEscalao } from "@/lib/modalidade-escalao";
+import { escolherEscalaoContextoAnalitico } from "@/lib/analitico-atleta-escalao";
 import type { Modalidade } from "@prisma/client";
 import { AvatarAtleta } from "@/components/plantel/AvatarAtleta";
 import { EstatisticasAtleta } from "@/components/plantel/EstatisticasAtleta";
@@ -79,7 +80,6 @@ export default async function PerfilAtletaPage({
     resEscaloes,
     resSeccoes,
     membro,
-    resAnalitico,
     colegasEscalao,
     resEvolucaoEpocas,
   ] = await Promise.all([
@@ -91,7 +91,6 @@ export default async function PerfilAtletaPage({
     listarEscaloes(),
     obterSeccoes(),
     obterMembroAtual(),
-    obterAnaliticoAtleta(id, a.participacaoContexto?.escalaoId),
     // M4 — colegas do mesmo escalão/época (para o seletor de comparação).
     escalaoContextoId
       ? prisma.atletaEscalao.findMany({
@@ -125,6 +124,30 @@ export default async function PerfilAtletaPage({
     resEscaloes.sucesso ? resEscaloes.dados : [],
     resSeccoes.sucesso ? resSeccoes.dados : [],
   );
+
+  // Escalão de contexto do analítico (§10.1 — histórico persistente). Quando o
+  // atleta mudou de escalão a meio da época, a participação de origem passa a
+  // INATIVO/TRANSICAO mas não é apagada; limitar o analítico ao escalão ativo
+  // atual esconderia os treinos/jogos do escalão de onde saiu. Nesse caso pede-se
+  // a vista CONJUNTA da modalidade (escalaoId = undefined). Para quem nunca mudou
+  // de escalão mantém-se o contexto do escalão ativo (comparação com a equipa).
+  const escalaoAnalitico = escolherEscalaoContextoAnalitico({
+    escalaoContextoAtivoId: a.participacaoContexto?.escalaoId,
+    escaloesAtivos: a.participacoes.map((p) => p.escalaoId),
+    participacoes: resParticipacoes.sucesso ? resParticipacoes.dados : [],
+    epocaId: a.epocaId,
+    modalidadeCtx: a.participacaoContexto?.modalidade ?? null,
+    modalidadePorEscalao,
+  });
+  const resAnalitico = await obterAnaliticoAtleta(
+    id,
+    escalaoAnalitico,
+    undefined,
+    // Na vista conjunta segmenta-se pela modalidade do contexto, para não
+    // misturar escalões de modalidades diferentes (futsal vs futebol).
+    escalaoAnalitico ? undefined : a.participacaoContexto?.modalidade ?? undefined,
+  );
+
   const modalidadesAtleta = [
     ...new Set(
       a.participacoes
@@ -202,6 +225,11 @@ export default async function PerfilAtletaPage({
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="leading-tight">{a.nome}</h1>
             <BadgeInscricao inscrito={a.inscrito} />
+            {a.praticaDuplaModalidade && (
+              <span className="inline-flex items-center rounded-full border border-azul-300/50 bg-azul-50 px-2.5 py-0.5 text-legenda font-medium text-azul-700">
+                Futebol + Futsal
+              </span>
+            )}
           </div>
           <p className="mt-1 text-corpo-sec text-cinza-600">{metaPartes.join(" · ")}</p>
         </div>
