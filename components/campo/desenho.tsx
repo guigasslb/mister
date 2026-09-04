@@ -59,6 +59,36 @@ function coneCor(cor?: string): { hex: string; stroke: string } {
 export const ESCADINHA_COR = "#F5C518"; // amarelo (visível sobre relvado/pitch)
 export const BARRAS_COR = "#2563EB"; // azul
 
+// ─── Cores de arco (secção 13.3) ─────────────────────────────────────────────
+//
+// Arco = aro/círculo deitado no chão (visto de cima → elipse achatada). Paleta
+// partilhada pelo editor (toolbar) e pelo render. Cada cor tem um contorno mais
+// escuro para contraste (essencial para o branco sobre relvado). Ausente →
+// amarelo (default/retrocompatível com diagramas gravados antes dos arcos).
+
+export const ARCO_COR_DEFAULT = "amarelo";
+
+export const ARCO_CORES: {
+  valor: string;
+  hex: string;
+  stroke: string;
+  nome: string;
+}[] = [
+  { valor: "amarelo", hex: "#EAB308", stroke: "#854D0E", nome: "Amarelo" },
+  { valor: "vermelho", hex: "#EF4444", stroke: "#7F1D1D", nome: "Vermelho" },
+  { valor: "azul", hex: "#3B82F6", stroke: "#1E3A8A", nome: "Azul" },
+  { valor: "verde", hex: "#22C55E", stroke: "#14532D", nome: "Verde" },
+  { valor: "laranja", hex: "#F97316", stroke: "#7C2D12", nome: "Laranja" },
+  { valor: "branco", hex: "#FFFFFF", stroke: "#6B7280", nome: "Branco" },
+];
+
+const ARCO_COR_MAP: Record<string, { hex: string; stroke: string }> =
+  Object.fromEntries(ARCO_CORES.map((c) => [c.valor, { hex: c.hex, stroke: c.stroke }]));
+
+function arcoCor(cor?: string): { hex: string; stroke: string } {
+  return ARCO_COR_MAP[cor ?? ARCO_COR_DEFAULT] ?? ARCO_COR_MAP[ARCO_COR_DEFAULT];
+}
+
 // ─── Adversário (secção 11.3) ────────────────────────────────────────────────
 //
 // Token genérico da equipa adversária no quadro tático (§8.10). Independente da
@@ -757,6 +787,36 @@ export function ElementoSVG({
               strokeLinecap="round"
             />
           </g>
+        </g>
+      );
+    }
+
+    case "arco": {
+      // Aro deitado no chão visto de cima → elipse achatada (perspetiva). Um
+      // contorno escuro por baixo garante contraste sobre o relvado (sobretudo
+      // para o arco branco).
+      const { hex, stroke } = arcoCor(elemento.cor);
+      return (
+        <g>
+          {decoracoes}
+          <ellipse
+            cx={elemento.x}
+            cy={elemento.y}
+            rx={9.5}
+            ry={5.5}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={0.8}
+          />
+          <ellipse
+            cx={elemento.x}
+            cy={elemento.y}
+            rx={9}
+            ry={5}
+            fill="none"
+            stroke={hex}
+            strokeWidth={1.5}
+          />
         </g>
       );
     }

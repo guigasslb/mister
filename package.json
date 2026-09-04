@@ -19,7 +19,8 @@
     "db:migrate:cap-admin": "tsx --env-file=.env prisma/data-migrations/reconciliar_capacidades_administrador.ts",
     "db:seed:sle": "tsx --env-file=.env prisma/data-migrations/seed_sport_lisboa_evora.ts",
     "db:seed:sle-extra": "tsx --env-file=.env prisma/data-migrations/seed_sport_lisboa_evora_extra.ts",
-    "db:seed:sle-fix": "tsx --env-file=.env prisma/data-migrations/seed_sport_lisboa_evora_fix.ts"
+    "db:seed:sle-fix": "tsx --env-file=.env prisma/data-migrations/seed_sport_lisboa_evora_fix.ts",
+    "db:seed-exercicios-goncalo": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed-exercicios-goncalo.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

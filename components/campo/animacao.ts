@@ -155,5 +155,7 @@ export function rotuloElemento(el: ElementoCampo): string {
       return `Escadinha de agilidade (${el.tamanho})`;
     case "barras":
       return "Barras para saltos";
+    case "arco":
+      return el.cor ? `Arco (${el.cor})` : "Arco";
   }
 }

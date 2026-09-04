@@ -336,6 +336,42 @@ describe("diagramaSchema", () => {
     };
     expect(diagramaSchema.safeParse(mau).success).toBe(false);
   });
+
+  it("aceita arco sem cor (retrocompatível → amarelo)", () => {
+    const d = {
+      versao: 2,
+      elementos: [{ id: "a", tipo: "arco", x: 120, y: 90 }],
+    };
+    const r = diagramaSchema.safeParse(d);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.elementos[0].tipo).toBe("arco");
+  });
+
+  it("aceita arco com cores válidas", () => {
+    for (const cor of ["amarelo", "vermelho", "azul", "verde", "laranja", "branco"]) {
+      const d = {
+        versao: 2,
+        elementos: [{ id: "a", tipo: "arco", x: 120, y: 90, cor }],
+      };
+      expect(diagramaSchema.safeParse(d).success, cor).toBe(true);
+    }
+  });
+
+  it("rejeita cor de arco inválida", () => {
+    const mau = {
+      versao: 2,
+      elementos: [{ id: "a", tipo: "arco", x: 120, y: 90, cor: "rosa" }],
+    };
+    expect(diagramaSchema.safeParse(mau).success).toBe(false);
+  });
+
+  it("rejeita arco com coordenadas fora do campo (0-400 / 0-200)", () => {
+    const mau = {
+      versao: 2,
+      elementos: [{ id: "a", tipo: "arco", x: 100, y: 300 }],
+    };
+    expect(diagramaSchema.safeParse(mau).success).toBe(false);
+  });
 });
 
 describe("jogoSchema", () => {
@@ -497,6 +533,84 @@ describe("presencaSchema", () => {
   it("rejeita motivo de falta inválido", () => {
     expect(
       presencaSchema.safeParse({ atletaId: CUID, estado: "FALTA", motivo: "FERIAS" }).success,
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Novos campos do plano de treino imprimível (Stage 5 — §4.2.1)
+// ---------------------------------------------------------------------------
+
+import { sessaoExercicioOverrideSchema } from "@/lib/schemas/treino";
+
+describe("exercicioSchema — campos do plano imprimível", () => {
+  it("aceita numeroJogadores e espaco opcionais ausentes", () => {
+    expect(exercicioSchema.safeParse({ nome: "Rondo 5x2" }).success).toBe(true);
+  });
+
+  it("aceita numeroJogadores e espaco válidos", () => {
+    expect(
+      exercicioSchema.safeParse({ nome: "Rondo 5x2", numeroJogadores: "7", espaco: "20x20m" }).success,
+    ).toBe(true);
+  });
+
+  it("rejeita numeroJogadores com mais de 40 caracteres", () => {
+    expect(
+      exercicioSchema.safeParse({ nome: "X", numeroJogadores: "a".repeat(41) }).success,
+    ).toBe(false);
+  });
+
+  it("aceita numeroJogadores com exactamente 40 caracteres (limite)", () => {
+    expect(
+      exercicioSchema.safeParse({ nome: "X", numeroJogadores: "a".repeat(40) }).success,
+    ).toBe(true);
+  });
+
+  it("rejeita espaco com mais de 60 caracteres", () => {
+    expect(
+      exercicioSchema.safeParse({ nome: "X", espaco: "b".repeat(61) }).success,
+    ).toBe(false);
+  });
+
+  it("aceita espaco com exactamente 60 caracteres (limite)", () => {
+    expect(
+      exercicioSchema.safeParse({ nome: "X", espaco: "b".repeat(60) }).success,
+    ).toBe(true);
+  });
+});
+
+describe("sessaoExercicioOverrideSchema — overrides do plano imprimível", () => {
+  it("aceita override sem campos de jogadores/espaço (nullish)", () => {
+    expect(sessaoExercicioOverrideSchema.safeParse({}).success).toBe(true);
+  });
+
+  it("aceita numeroJogadoresOverride e espacoOverride válidos", () => {
+    expect(
+      sessaoExercicioOverrideSchema.safeParse({
+        numeroJogadoresOverride: "6+GR",
+        espacoOverride: "30x20m",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("aceita null em numeroJogadoresOverride e espacoOverride", () => {
+    expect(
+      sessaoExercicioOverrideSchema.safeParse({
+        numeroJogadoresOverride: null,
+        espacoOverride: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejeita numeroJogadoresOverride com mais de 40 caracteres", () => {
+    expect(
+      sessaoExercicioOverrideSchema.safeParse({ numeroJogadoresOverride: "x".repeat(41) }).success,
+    ).toBe(false);
+  });
+
+  it("rejeita espacoOverride com mais de 60 caracteres", () => {
+    expect(
+      sessaoExercicioOverrideSchema.safeParse({ espacoOverride: "y".repeat(61) }).success,
     ).toBe(false);
   });
 });

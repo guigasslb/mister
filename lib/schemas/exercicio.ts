@@ -102,6 +102,28 @@ const barrasSchema = z.object({
   angulo: z.number().min(0).max(360).default(0),
 });
 
+// Cores de arco (secção 13.3). Ausente → amarelo (default/retrocompatível com
+// diagramas gravados antes do suporte a arcos).
+const corArcoSchema = z.enum([
+  "amarelo",
+  "vermelho",
+  "azul",
+  "verde",
+  "laranja",
+  "branco",
+]);
+
+// Arco (aro/círculo deitado no chão, visto de cima). Elemento-ponto simples com
+// cor opcional. Ausente → amarelo (default/retrocompatível).
+const arcoSchema = z.object({
+  id: z.string(),
+  tipo: z.literal("arco"),
+  x: z.number().min(0).max(400),
+  y: z.number().min(0).max(200),
+  // Ausente → amarelo (default/retrocompatível).
+  cor: corArcoSchema.optional(),
+});
+
 export const elementoCampoSchema = z.discriminatedUnion("tipo", [
   jogadorSchema,
   bolaSchema,
@@ -112,6 +134,7 @@ export const elementoCampoSchema = z.discriminatedUnion("tipo", [
   textoSchema,
   escadinhaSchema,
   barrasSchema,
+  arcoSchema,
 ]);
 
 // Passo de animação (secção 11.2 da bíblia): posições dos elementos neste passo.
@@ -171,6 +194,8 @@ export type Texto = z.infer<typeof textoSchema>;
 export type TamanhoEscadinha = z.infer<typeof tamanhoEscadinhaSchema>;
 export type Escadinha = z.infer<typeof escadinhaSchema>;
 export type Barras = z.infer<typeof barrasSchema>;
+export type CorArco = z.infer<typeof corArcoSchema>;
+export type Arco = z.infer<typeof arcoSchema>;
 export type ElementoCampo = z.infer<typeof elementoCampoSchema>;
 export type DiagramaCampo = z.infer<typeof diagramaSchema>;
 
@@ -237,6 +262,10 @@ export const exercicioSchema = z.object({
   // F3: organização da biblioteca (secção 3.3).
   parteTreino: z.enum(PARTES_TREINO).optional(),
   escalaoAlvo: z.string().max(40, "Máximo 40 caracteres").optional(),
+  // Plano de treino imprimível (§4.2.1): nº de jogadores e espaço do exercício
+  // (ex.: "4+GR", "3x3+GR", "campo inteiro", "20x20m"). Overrides por sessão.
+  numeroJogadores: z.string().max(40).optional(),
+  espaco: z.string().max(60).optional(),
   // F3: toggle pessoal (default) vs clube na criação (secção 4.2).
   proprietario: z.enum(PROPRIEDADES_CONTEUDO).default("TREINADOR"),
   diagrama: diagramaSchema.optional(),

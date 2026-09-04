@@ -41,6 +41,8 @@ import {
   rotuloCampo,
   CONE_CORES,
   CONE_COR_DEFAULT,
+  ARCO_CORES,
+  ARCO_COR_DEFAULT,
 } from "./desenho";
 import { useEscalaCampo } from "./useEscalaCampo";
 import { usePointerDrag } from "./usePointerDrag";
@@ -57,6 +59,7 @@ import type {
   ElementoCampo,
   CorJogador,
   CorCone,
+  CorArco,
   PassoAnimacao,
   TamanhoEscadinha,
 } from "@/lib/schemas/exercicio";
@@ -73,6 +76,7 @@ type Ferramenta =
   | "texto"
   | "escadinha"
   | "barras"
+  | "arco"
   | "apagar";
 
 type EstiloSeta = "movimento" | "passe" | "conducao";
@@ -131,6 +135,21 @@ function IconeBarras({ className }: { className?: string }) {
   );
 }
 
+function IconeArco({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <ellipse cx="12" cy="12" rx="9" ry="5" />
+    </svg>
+  );
+}
+
 const FERRAMENTAS: {
   id: Ferramenta;
   label: string;
@@ -146,6 +165,7 @@ const FERRAMENTAS: {
   { id: "texto", label: "Texto", Icon: Type },
   { id: "escadinha", label: "Escadinha", Icon: IconeEscadinha },
   { id: "barras", label: "Barras", Icon: IconeBarras },
+  { id: "arco", label: "Arco", Icon: IconeArco },
   { id: "apagar", label: "Apagar", Icon: Eraser },
 ];
 
@@ -195,6 +215,7 @@ export function EditorCampo({
   const [ferramenta, setFerramenta] = useState<Ferramenta>("selecionar");
   const [corJogador, setCorJogador] = useState<CorJogador>("azul");
   const [corCone, setCorCone] = useState<CorCone>(CONE_COR_DEFAULT as CorCone);
+  const [corArco, setCorArco] = useState<CorArco>(ARCO_COR_DEFAULT as CorArco);
   const [estiloSeta, setEstiloSeta] = useState<EstiloSeta>("movimento");
   const [orientacaoBaliza, setOrientacaoBaliza] = useState<
     "horizontal" | "vertical"
@@ -457,6 +478,14 @@ export function EditorCampo({
         ]);
         break;
       }
+      case "arco": {
+        registarHistorico();
+        aplicarElementos([
+          ...elementos,
+          { id: novoId(), tipo: "arco", x, y, cor: corArco },
+        ]);
+        break;
+      }
       case "seta":
       case "linha": {
         setCaminhoAtual((c) => [...c, { x, y }]);
@@ -638,6 +667,19 @@ export function EditorCampo({
     anunciar(`Cor do cone alterada para ${cor}`);
   }
 
+  // Muda a cor de um arco já colocado (via selecção). Atualiza também a cor
+  // ativa da ferramenta para o próximo arco a colocar.
+  function mudarCorArco(id: string, cor: CorArco) {
+    registarHistorico();
+    aplicarElementos(
+      elementos.map((el) =>
+        el.id === id && el.tipo === "arco" ? { ...el, cor } : el,
+      ),
+    );
+    setCorArco(cor);
+    anunciar(`Cor do arco alterada para ${cor}`);
+  }
+
   // Roda uma escadinha/barras já colocada (via selecção). Atualiza também o
   // ângulo ativo da ferramenta para o próximo elemento a colocar.
   function mudarAnguloElemento(id: string, angulo: number) {
@@ -728,6 +770,8 @@ export function EditorCampo({
     elementoSelecionado?.tipo === "escadinha" ? elementoSelecionado : null;
   const barrasSelecionada =
     elementoSelecionado?.tipo === "barras" ? elementoSelecionado : null;
+  const arcoSelecionado =
+    elementoSelecionado?.tipo === "arco" ? elementoSelecionado : null;
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
@@ -969,6 +1013,28 @@ export function EditorCampo({
               </div>
             )}
 
+            {ferramenta === "arco" && (
+              <div className="flex items-center gap-2">
+                <span className="text-cinza-600">Cor do arco:</span>
+                {ARCO_CORES.map((c) => (
+                  <button
+                    key={c.valor}
+                    type="button"
+                    aria-label={c.nome}
+                    aria-pressed={corArco === c.valor}
+                    title={c.nome}
+                    onClick={() => setCorArco(c.valor as CorArco)}
+                    className={`h-11 w-11 rounded-full border-2 ${
+                      corArco === c.valor
+                        ? "border-cinza-900"
+                        : "border-cinza-300"
+                    }`}
+                    style={{ backgroundColor: c.hex }}
+                  />
+                ))}
+              </div>
+            )}
+
             {ferramenta === "seta" && (
               <div className="flex items-center gap-2">
                 <span className="text-cinza-600">Estilo:</span>
@@ -1129,6 +1195,32 @@ export function EditorCampo({
                       title={c.nome}
                       onClick={() =>
                         mudarCorCone(coneSelecionado.id, c.valor as CorCone)
+                      }
+                      className={`h-11 w-11 rounded-full border-2 ${
+                        ativa ? "border-cinza-900" : "border-cinza-300"
+                      }`}
+                      style={{ backgroundColor: c.hex }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {ferramenta === "selecionar" && arcoSelecionado && (
+              <div className="flex items-center gap-2">
+                <span className="text-cinza-600">Cor do arco:</span>
+                {ARCO_CORES.map((c) => {
+                  const ativa =
+                    (arcoSelecionado.cor ?? ARCO_COR_DEFAULT) === c.valor;
+                  return (
+                    <button
+                      key={c.valor}
+                      type="button"
+                      aria-label={c.nome}
+                      aria-pressed={ativa}
+                      title={c.nome}
+                      onClick={() =>
+                        mudarCorArco(arcoSelecionado.id, c.valor as CorArco)
                       }
                       className={`h-11 w-11 rounded-full border-2 ${
                         ativa ? "border-cinza-900" : "border-cinza-300"
