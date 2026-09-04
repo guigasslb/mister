@@ -229,62 +229,60 @@ export default async function PerfilAtletaPage({
       <Tabs defaultValue="estatisticas">
         <TabsList>
           <TabsTrigger value="estatisticas">Estatísticas</TabsTrigger>
-          <TabsTrigger value="analiticos">Analytics</TabsTrigger>
           <TabsTrigger value="caderneta">Caderneta</TabsTrigger>
           <TabsTrigger value="participacoes">Participações</TabsTrigger>
           <TabsTrigger value="carreira">Carreira</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="estatisticas" className="space-y-3">
-          <p className="text-corpo-sec text-cinza-500">
-            Estatísticas de {contextoStats.join(" · ")}
-          </p>
-          {resStats.sucesso ? (
-            <EstatisticasAtleta
-              stats={resStats.dados}
-              eGR={eGR}
-              evolucao={resEvolucao.sucesso ? resEvolucao.dados : undefined}
-              presencas={resPresencas.sucesso ? resPresencas.dados : undefined}
-            />
-          ) : (
-            <p className="text-corpo-sec text-vermelho-600">{resStats.erro}</p>
-          )}
-        </TabsContent>
-
-        <TabsContent value="analiticos" className="space-y-4">
-          {resAnalitico.sucesso ? (
-            <>
-              {podeVerRelatorios && (
-                <div className="flex justify-end gap-2 print:hidden">
-                  {escalaoCtxId && (
-                    <ExportarCsvBotao
-                      acao={exportarAnaliticoAtletaCsv.bind(null, {
-                        atletaId: a.id,
-                        escalaoId: escalaoCtxId,
-                      })}
-                      rotulo="Exportar histórico"
-                    />
-                  )}
-                  <GerarRelatorioBotao
-                    tipo="EPOCA_ATLETA"
-                    atletaId={a.id}
-                    escalaoId={a.participacaoContexto?.escalaoId}
-                  />
-                </div>
-              )}
-              <PainelAtleta
-                dados={resAnalitico.dados}
-                atletasEscalao={atletasEscalao}
-                evolucaoEpocas={evolucaoEpocas}
+        <TabsContent value="estatisticas" className="space-y-6">
+          {/* Base — tiles + gráficos essenciais (visível para todos). */}
+          <div className="space-y-3">
+            <p className="text-corpo-sec text-cinza-500">
+              Estatísticas de {contextoStats.join(" · ")}
+            </p>
+            {resStats.sucesso ? (
+              <EstatisticasAtleta
+                stats={resStats.dados}
+                eGR={eGR}
+                evolucao={resEvolucao.sucesso ? resEvolucao.dados : undefined}
+                presencas={resPresencas.sucesso ? resPresencas.dados : undefined}
               />
-            </>
-          ) : resAnalitico.erro === "Sem permissão" ? (
-            <EstadoVazio
-              titulo="Sem acesso aos analytics"
-              descricao="Os analytics e relatórios exigem a permissão «Ver relatórios». Pede ao administrador do clube para a atribuir."
-            />
-          ) : (
-            <EstadoVazio titulo="Analytics indisponíveis" descricao={resAnalitico.erro} />
+            ) : (
+              <p className="text-corpo-sec text-vermelho-600">{resStats.erro}</p>
+            )}
+          </div>
+
+          {/* Analytics avançados — só com permissão «Ver relatórios» (RELATORIOS_VER). */}
+          {podeVerRelatorios && (
+            <div className="space-y-4 border-t border-cinza-200 pt-6">
+              {resAnalitico.sucesso ? (
+                <>
+                  <div className="flex justify-end gap-2 print:hidden">
+                    {escalaoCtxId && (
+                      <ExportarCsvBotao
+                        acao={exportarAnaliticoAtletaCsv.bind(null, {
+                          atletaId: a.id,
+                          escalaoId: escalaoCtxId,
+                        })}
+                        rotulo="Exportar histórico"
+                      />
+                    )}
+                    <GerarRelatorioBotao
+                      tipo="EPOCA_ATLETA"
+                      atletaId={a.id}
+                      escalaoId={a.participacaoContexto?.escalaoId}
+                    />
+                  </div>
+                  <PainelAtleta
+                    dados={resAnalitico.dados}
+                    atletasEscalao={atletasEscalao}
+                    evolucaoEpocas={evolucaoEpocas}
+                  />
+                </>
+              ) : (
+                <EstadoVazio titulo="Analytics indisponíveis" descricao={resAnalitico.erro} />
+              )}
+            </div>
           )}
         </TabsContent>
 
