@@ -247,9 +247,10 @@ export default async function PerfilAtletaPage({
                 evolucao={resEvolucao.sucesso ? resEvolucao.dados : undefined}
                 presencas={resPresencas.sucesso ? resPresencas.dados : undefined}
                 // Com permissão de relatórios, o painel avançado (PainelAtleta)
-                // apresenta o gráfico de presença mensal; esconder o da base
-                // evita a duplicação na mesma aba.
+                // apresenta os gráficos de presença mensal e de golos/assistências
+                // por jogo; esconder os da base evita a duplicação na mesma aba.
                 mostrarPresencaMensal={!podeVerRelatorios}
+                mostrarGolosAssistencias={!podeVerRelatorios}
               />
             ) : (
               <p className="text-corpo-sec text-vermelho-600">{resStats.erro}</p>

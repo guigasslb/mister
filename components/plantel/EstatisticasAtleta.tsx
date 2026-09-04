@@ -28,6 +28,7 @@ export function EstatisticasAtleta({
   evolucao,
   presencas,
   mostrarPresencaMensal = true,
+  mostrarGolosAssistencias = true,
 }: {
   stats: EstatisticasAgregadas;
   eGR: boolean;
@@ -41,6 +42,15 @@ export function EstatisticasAtleta({
    * que a base mantém o gráfico (default true).
    */
   mostrarPresencaMensal?: boolean;
+  /**
+   * Controla a renderização do gráfico «Golos e assistências por jogo» (ou
+   * «Defesas por jogo» para guarda-redes). Tal como a presença mensal, o painel
+   * avançado (PainelAtleta) já apresenta este gráfico — a base deve escondê-lo
+   * quando o painel está visível para não duplicar. Sem permissão de relatórios
+   * o painel avançado não aparece, pelo que a base mantém o gráfico (default
+   * true).
+   */
+  mostrarGolosAssistencias?: boolean;
 }) {
   const semDados = stats.jogosConvocado === 0 && stats.sessoesTotais === 0;
 
@@ -69,7 +79,7 @@ export function EstatisticasAtleta({
     valor: p.taxa,
   }));
 
-  const temEvolucaoJogos = pontosJogos.length >= 2;
+  const temEvolucaoJogos = mostrarGolosAssistencias && pontosJogos.length >= 2;
   const temPresencaMensal = mostrarPresencaMensal && pontosPresenca.length >= 2;
 
   return (
