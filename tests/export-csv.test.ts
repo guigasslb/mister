@@ -25,8 +25,8 @@ vi.mock("@/lib/db", () => ({
     epoca: { findFirst: vi.fn() },
     atleta: { findFirst: vi.fn() },
     escalao: { findFirst: vi.fn(), findMany: vi.fn() },
-    atletaEscalao: { count: vi.fn(), groupBy: vi.fn() },
-    convocatoria: { count: vi.fn() },
+    atletaEscalao: { count: vi.fn(), groupBy: vi.fn(), findMany: vi.fn() },
+    convocatoria: { count: vi.fn(), groupBy: vi.fn() },
     estatisticaAtleta: { findMany: vi.fn() },
     sessao: { findMany: vi.fn(), count: vi.fn() },
     presenca: { findMany: vi.fn(), count: vi.fn() },
@@ -102,7 +102,16 @@ function prepararEscalao() {
     { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
     { id: "s2", data: new Date("2025-09-08"), tipoSessao: "ABERTO" },
   ]);
-  p.atletaEscalao.count.mockResolvedValue(10);
+  p.atletaEscalao.findMany.mockResolvedValue([
+    { atletaId: ATLETA, estado: "ATIVO", atleta: { nome: "João", posicoes: ["ALA"], ativo: true } },
+    { atletaId: ATLETA2, estado: "ATIVO", atleta: { nome: "Rui", posicoes: ["FIXO"], ativo: true } },
+    ...Array.from({ length: 8 }, (_, i) => ({
+      atletaId: `extra-${i + 1}`,
+      estado: "ATIVO",
+      atleta: { nome: `Extra ${i + 1}`, posicoes: [], ativo: true },
+    })),
+  ]);
+  p.convocatoria.groupBy.mockResolvedValue([]);
   p.estatisticaAtleta.findMany.mockResolvedValue([
     { atletaId: ATLETA, golos: 3, assistencias: 1, blocoTempo: "JOGO_COMPLETO", utilizacao: "TITULAR", atleta: { nome: "João" } },
     { atletaId: ATLETA2, golos: 1, assistencias: 2, blocoTempo: "MEIA_PARTE", utilizacao: "UTILIZADO", atleta: { nome: "Rui" } },

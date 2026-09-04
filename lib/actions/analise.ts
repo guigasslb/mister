@@ -6,6 +6,7 @@ import {
   Prisma,
   type CasaFora,
   type CategoriaExercicioPrincipal,
+  type EstadoParticipacao,
   type Modalidade,
   type ParteTreino,
   type Posicao,
@@ -936,6 +937,27 @@ export interface EventosPorParte {
   parte2: Partial<Record<TipoEventoJogo, number>>;
 }
 
+/**
+ * Linha da tabela de atletas do escalão (§10.2). Inclui TODOS os participantes da
+ * época (qualquer estado), com o resumo de contribuição do atleta. `taxaPresenca`
+ * usa o mesmo denominador (sessões executadas) do resto do painel, em simetria com
+ * `taxaPresencaMedia` e o `rankingAssiduidade`.
+ */
+export interface LinhaAtletaEscalao {
+  atletaId: string;
+  nome: string;
+  posicoes: Posicao[];
+  estadoParticipacao: EstadoParticipacao;
+  atletaAtivo: boolean;
+  golos: number;
+  assistencias: number;
+  jogosUtilizados: number;
+  jogosConvocado: number;
+  presencas: number;
+  taxaPresenca: number; // 0–1
+  tempoJogo: number; // minutos acumulados
+}
+
 export interface AnaliticoEscalao {
   escalao: { id: string; nome: string };
   epoca: { id: string; nome: string };
@@ -958,7 +980,14 @@ export interface AnaliticoEscalao {
    * ficam programadas mas ainda não executadas (§10.2). Subconjunto de `sessoes`.
    */
   sessoesExecutadas: number;
+  /** Atletas ativos do escalão na época (denominador das médias). */
   nAtletas: number;
+  /** Participantes com estado ATIVO e atleta ativo (= `nAtletas`). */
+  nAtletasAtivos: number;
+  /** Participantes com estado ≠ ATIVO ou atleta inativo (histórico — §10.1). */
+  nAtletasInativos: number;
+  /** Tabela de TODOS os participantes da época com o resumo por atleta (§10.2). */
+  tabelaAtletas: LinhaAtletaEscalao[];
   taxaPresencaMedia: number;
   marcadores: RankingAtleta[];
   assistentes: RankingAtleta[];
@@ -1081,8 +1110,16 @@ export async function obterAnaliticoEscalao(
     data: { lte: new Date() },
   };
 
-  const [jogos, sessoes, nAtletas, estatisticas, eventos, presencas, valoresMetricas] =
-    await Promise.all([
+  const [
+    jogos,
+    sessoes,
+    participacoes,
+    convocatoriasAtleta,
+    estatisticas,
+    eventos,
+    presencas,
+    valoresMetricas,
+  ] = await Promise.all([
     prisma.jogo.findMany({
       where: filtroJogo,
       select: {
@@ -1100,8 +1137,21 @@ export async function obterAnaliticoEscalao(
       where: { epocaId: epoca.id, escalaoId },
       select: { id: true, data: true, tipoSessao: true },
     }),
-    prisma.atletaEscalao.count({
-      where: { epocaId: epoca.id, escalaoId, estado: "ATIVO", atleta: { ativo: true } },
+    // Buscar TODOS os participantes (todos os estados) — a tabela de atletas
+    // inclui histórico (§10.1); o denominador das médias usa só os ATIVOS.
+    prisma.atletaEscalao.findMany({
+      where: { epocaId: epoca.id, escalaoId },
+      select: {
+        atletaId: true,
+        estado: true,
+        atleta: { select: { nome: true, posicoes: true, ativo: true } },
+      },
+    }),
+    // Convocatórias por atleta (jogos realizados — já filtrados por data lte: new Date()).
+    prisma.convocatoria.groupBy({
+      by: ["atletaId"],
+      where: { convocado: true, jogo: filtroJogo },
+      _count: { _all: true },
     }),
     prisma.estatisticaAtleta.findMany({
       where: { jogo: filtroJogo },
@@ -1144,6 +1194,15 @@ export async function obterAnaliticoEscalao(
       },
     }),
   ]);
+
+  // Atletas ativos = denominador das médias (comportamento original). Os restantes
+  // participantes (INATIVO/TRANSICAO ou atleta desativado) contam como histórico
+  // (§10.1) e aparecem na tabela, mas não inflam médias.
+  const nAtletasAtivos = participacoes.filter(
+    (p) => p.estado === "ATIVO" && p.atleta.ativo,
+  ).length;
+  const nAtletasInativos = participacoes.length - nAtletasAtivos;
+  const nAtletas = nAtletasAtivos; // manter semântica original
 
   // Sessões executadas (§10.2): já realizadas = `data < agora`. Reutiliza a lista
   // já lida (que traz `data`) — sem query adicional. As futuras ficam programadas
@@ -1343,6 +1402,37 @@ export async function obterAnaliticoEscalao(
         a.nome.localeCompare(b.nome, "pt"),
     );
 
+  // Tabela de TODOS os participantes da época (§10.2). Reutiliza os mapas de
+  // agregação já construídos (golos, assistências, utilização, assiduidade) e as
+  // convocatórias por atleta — sem queries adicionais. A `taxaPresenca` usa o
+  // mesmo denominador (sessões executadas) do resto do painel.
+  const convocatoriasPorAtleta = new Map<string, number>(
+    convocatoriasAtleta.map((c) => [c.atletaId, c._count._all]),
+  );
+  const tabelaAtletas: LinhaAtletaEscalao[] = participacoes
+    .map((p) => {
+      const g = golosMap.get(p.atletaId);
+      const a = assistMap.get(p.atletaId);
+      const u = utilMap.get(p.atletaId);
+      const ass = assiduidadeMap.get(p.atletaId);
+      return {
+        atletaId: p.atletaId,
+        nome: p.atleta.nome,
+        posicoes: p.atleta.posicoes,
+        estadoParticipacao: p.estado,
+        atletaAtivo: p.atleta.ativo,
+        golos: g?.valor ?? 0,
+        assistencias: a?.valor ?? 0,
+        jogosUtilizados: u?.jogos ?? 0,
+        jogosConvocado: convocatoriasPorAtleta.get(p.atletaId) ?? 0,
+        presencas: ass?.presencas ?? 0,
+        taxaPresenca:
+          totalSessoes > 0 ? Math.min((ass?.presencas ?? 0) / totalSessoes, 1) : 0,
+        tempoJogo: u?.tempo ?? 0,
+      };
+    })
+    .sort((x, y) => x.nome.localeCompare(y.nome, "pt"));
+
   return ok({
     escalao,
     epoca,
@@ -1358,7 +1448,10 @@ export async function obterAnaliticoEscalao(
     recordFora,
     sessoes: sessoes.length,
     sessoesExecutadas,
-    nAtletas,
+    nAtletas, // mantém-se (= nAtletasAtivos)
+    nAtletasAtivos,
+    nAtletasInativos,
+    tabelaAtletas,
     // Denominador = nAtletas × sessoesExecutadas (BUG-P1-08). Cap a 1 (100%):
     // atletas que saíram a meio da época podem gerar presenças sem contribuir
     // para o denominador de slots atual, o que inflaria a taxa acima de 100%

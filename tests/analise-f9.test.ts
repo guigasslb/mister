@@ -21,8 +21,8 @@ vi.mock("@/lib/db", () => ({
     epoca: { findFirst: vi.fn() },
     atleta: { findFirst: vi.fn() },
     escalao: { findFirst: vi.fn(), findMany: vi.fn() },
-    atletaEscalao: { count: vi.fn(), groupBy: vi.fn() },
-    convocatoria: { count: vi.fn() },
+    atletaEscalao: { count: vi.fn(), groupBy: vi.fn(), findMany: vi.fn() },
+    convocatoria: { count: vi.fn(), groupBy: vi.fn() },
     estatisticaAtleta: { findMany: vi.fn() },
     sessao: { findMany: vi.fn(), count: vi.fn(), groupBy: vi.fn() },
     presenca: { findMany: vi.fn(), count: vi.fn(), groupBy: vi.fn() },
@@ -72,6 +72,15 @@ const COMPETICAO = "ckv9v0z1w0005abcd1234efgh";
 
 const p = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>;
 
+/** Gera N participações ATIVAS (atleta ativo) para os mocks de `atletaEscalao.findMany`. */
+function participacoesAtivas(n: number) {
+  return Array.from({ length: n }, (_, i) => ({
+    atletaId: `p-${i + 1}`,
+    estado: "ATIVO",
+    atleta: { nome: `Atleta ${i + 1}`, posicoes: [], ativo: true },
+  }));
+}
+
 function membroComRelatorios(overrides: Record<string, unknown> = {}) {
   return {
     utilizadorId: "user1",
@@ -102,6 +111,9 @@ beforeEach(() => {
   p.epoca.findFirst.mockResolvedValue({ id: EPOCA, nome: "2025/26" });
   // Métricas configuráveis: sem valores por omissão (cada teste pode sobrepor).
   p.valorMetrica.findMany.mockResolvedValue([]);
+  // Participantes e convocatórias do escalão: vazios por omissão (cada teste sobrepõe).
+  p.atletaEscalao.findMany.mockResolvedValue([]);
+  p.convocatoria.groupBy.mockResolvedValue([]);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -359,7 +371,7 @@ describe("obterAnaliticoEscalao", () => {
       { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
       { id: "s2", data: new Date("2025-09-08"), tipoSessao: "ABERTO" },
     ]);
-    p.atletaEscalao.count.mockResolvedValue(10);
+    p.atletaEscalao.findMany.mockResolvedValue(participacoesAtivas(10));
     p.estatisticaAtleta.findMany.mockResolvedValue([
       { atletaId: ATLETA, golos: 3, assistencias: 1, blocoTempo: "JOGO_COMPLETO", utilizacao: "TITULAR", atleta: { nome: "João" } },
       { atletaId: ATLETA2, golos: 1, assistencias: 2, blocoTempo: "MEIA_PARTE", utilizacao: "UTILIZADO", atleta: { nome: "Rui" } },
@@ -405,7 +417,7 @@ describe("obterAnaliticoEscalao", () => {
       { id: "j4", data: new Date("2025-10-01"), adversario: "D", golosMarcados: null, golosSofridos: null, casaFora: "FORA" },
     ]);
     p.sessao.findMany.mockResolvedValue([]);
-    p.atletaEscalao.count.mockResolvedValue(10);
+    p.atletaEscalao.findMany.mockResolvedValue(participacoesAtivas(10));
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
     p.eventoJogo.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
@@ -442,7 +454,7 @@ describe("obterAnaliticoEscalao", () => {
       { id: "s2", data: new Date("2025-09-08"), tipoSessao: "NORMAL" },
       { id: "s3", data: futura, tipoSessao: "NORMAL" },
     ]);
-    p.atletaEscalao.count.mockResolvedValue(5);
+    p.atletaEscalao.findMany.mockResolvedValue(participacoesAtivas(5));
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
     p.eventoJogo.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
@@ -471,7 +483,7 @@ describe("obterAnaliticoEscalao", () => {
       { id: "s4", data: futura3, tipoSessao: "NORMAL" },
       { id: "s5", data: futura4, tipoSessao: "NORMAL" },
     ]);
-    p.atletaEscalao.count.mockResolvedValue(5);
+    p.atletaEscalao.findMany.mockResolvedValue(participacoesAtivas(5));
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
     p.eventoJogo.findMany.mockResolvedValue([]);
     // 5 presenças, todas na única sessão executada.
@@ -502,7 +514,7 @@ describe("obterAnaliticoEscalao", () => {
     p.sessao.findMany.mockResolvedValue([
       { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
     ]);
-    p.atletaEscalao.count.mockResolvedValue(8);
+    p.atletaEscalao.findMany.mockResolvedValue(participacoesAtivas(8));
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
     p.eventoJogo.findMany.mockResolvedValue([]);
     // 8 atletas distintos, todos presentes na única sessão executada.
@@ -527,7 +539,7 @@ describe("obterAnaliticoEscalao", () => {
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
     p.jogo.findMany.mockResolvedValue([]);
     p.sessao.findMany.mockResolvedValue([]);
-    p.atletaEscalao.count.mockResolvedValue(2);
+    p.atletaEscalao.findMany.mockResolvedValue(participacoesAtivas(2));
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
     p.eventoJogo.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
@@ -556,7 +568,7 @@ describe("obterAnaliticoEscalao", () => {
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
     p.jogo.findMany.mockResolvedValue([]);
     p.sessao.findMany.mockResolvedValue([]);
-    p.atletaEscalao.count.mockResolvedValue(0);
+    p.atletaEscalao.findMany.mockResolvedValue(participacoesAtivas(0));
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
     p.eventoJogo.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
@@ -614,7 +626,7 @@ describe("obterAnaliticoEscalao", () => {
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
     p.jogo.findMany.mockResolvedValue([]);
     p.sessao.findMany.mockResolvedValue([]);
-    p.atletaEscalao.count.mockResolvedValue(0);
+    p.atletaEscalao.findMany.mockResolvedValue(participacoesAtivas(0));
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
     p.eventoJogo.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
@@ -626,6 +638,81 @@ describe("obterAnaliticoEscalao", () => {
         where: { epocaId: EPOCA, escalaoId: ESCALAO, data: { lte: expect.any(Date) } },
       }),
     );
+  });
+
+  it("tabela de atletas inclui todos os participantes e separa ativos de inativos (§10.2)", async () => {
+    p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
+    p.jogo.findMany.mockResolvedValue([]);
+    p.sessao.findMany.mockResolvedValue([
+      { id: "s1", data: new Date("2025-09-01"), tipoSessao: "NORMAL" },
+    ]);
+    // 3 participantes: Ana (ATIVO/ativa), Bruno (INATIVO/ativo), Carlos (ATIVO/inativo).
+    p.atletaEscalao.findMany.mockResolvedValue([
+      { atletaId: ATLETA, estado: "ATIVO", atleta: { nome: "Ana", posicoes: ["ALA"], ativo: true } },
+      { atletaId: ATLETA2, estado: "INATIVO", atleta: { nome: "Bruno", posicoes: ["FIXO"], ativo: true } },
+      { atletaId: "a3", estado: "ATIVO", atleta: { nome: "Carlos", posicoes: [], ativo: false } },
+    ]);
+    p.convocatoria.groupBy.mockResolvedValue([{ atletaId: ATLETA, _count: { _all: 3 } }]);
+    p.estatisticaAtleta.findMany.mockResolvedValue([
+      {
+        atletaId: ATLETA,
+        golos: 2,
+        assistencias: 1,
+        blocoTempo: "JOGO_COMPLETO",
+        utilizacao: "TITULAR",
+        atleta: { nome: "Ana" },
+      },
+    ]);
+    p.eventoJogo.findMany.mockResolvedValue([]);
+    p.presenca.findMany.mockResolvedValue([
+      { sessaoId: "s1", atletaId: ATLETA, atleta: { nome: "Ana" } },
+    ]);
+
+    const r = await obterAnaliticoEscalao(ESCALAO);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+
+    // Contagens: 1 ativo (Ana), 2 inativos (Bruno INATIVO, Carlos atleta.ativo=false).
+    expect(r.dados.nAtletas).toBe(1);
+    expect(r.dados.nAtletasAtivos).toBe(1);
+    expect(r.dados.nAtletasInativos).toBe(2);
+
+    // Tabela ordenada por nome, com TODOS os participantes.
+    expect(r.dados.tabelaAtletas).toHaveLength(3);
+    expect(r.dados.tabelaAtletas.map((x) => x.nome)).toEqual(["Ana", "Bruno", "Carlos"]);
+
+    const ana = r.dados.tabelaAtletas[0];
+    expect(ana).toEqual({
+      atletaId: ATLETA,
+      nome: "Ana",
+      posicoes: ["ALA"],
+      estadoParticipacao: "ATIVO",
+      atletaAtivo: true,
+      golos: 2,
+      assistencias: 1,
+      jogosUtilizados: 1,
+      jogosConvocado: 3,
+      presencas: 1,
+      taxaPresenca: 1, // 1 presença / 1 sessão executada
+      tempoJogo: 40,
+    });
+
+    const bruno = r.dados.tabelaAtletas[1];
+    expect(bruno.estadoParticipacao).toBe("INATIVO");
+    expect(bruno.atletaAtivo).toBe(true);
+    expect(bruno).toMatchObject({
+      golos: 0,
+      assistencias: 0,
+      jogosUtilizados: 0,
+      jogosConvocado: 0,
+      presencas: 0,
+      taxaPresenca: 0,
+      tempoJogo: 0,
+    });
+
+    const carlos = r.dados.tabelaAtletas[2];
+    expect(carlos.estadoParticipacao).toBe("ATIVO");
+    expect(carlos.atletaAtivo).toBe(false);
   });
 
   it("nega escalão inexistente", async () => {
