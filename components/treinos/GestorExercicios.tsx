@@ -371,14 +371,15 @@ export function GestorExercicios({
                               }`}
                             />
                           </button>
-                          <button
-                            type="button"
+                          <Button
+                            size="sm"
+                            variant="outline"
                             disabled={pending}
                             onClick={() => adicionar(ex.id)}
-                            className="flex-shrink-0 whitespace-nowrap rounded-md border border-cinza-300 bg-transparent px-3 py-1.5 text-sm font-medium text-cinza-700 hover:border-cinza-400 hover:bg-cinza-50 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                            className="flex-shrink-0 whitespace-nowrap"
                           >
                             {jaAdicionados.has(ex.id) ? "+1" : "Adicionar"}
-                          </button>
+                          </Button>
                         </div>
 
                         {aberto && (
