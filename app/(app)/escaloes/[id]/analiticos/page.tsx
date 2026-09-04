@@ -7,6 +7,7 @@ import {
 } from "@/lib/actions/analise";
 import { obterCargaSemanal, obterCargaAtletas } from "@/lib/actions/cargaTreino";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PainelEscalao } from "@/components/analiticos/PainelEscalao";
 import { PainelTreinoEscalao } from "@/components/analiticos/PainelTreinoEscalao";
 import { ExportarCsvBotao } from "@/components/analiticos/ExportarCsvBotao";
@@ -91,37 +92,55 @@ export default async function AnaliticosEscalaoPage({
               Analytics da equipa · {res.dados.epoca.nome}
             </p>
           </div>
-          <PainelEscalao
-            dados={res.dados}
-            competicoes={competicoes}
-            competicaoId={competicao || undefined}
-          />
-          {/* P4.8 (§8.20): carga de treino (RPE/ACWR) — só quando há RPE registado. */}
-          {carga && (
-            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-              <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
-                Carga de treino
-              </p>
-              <CurvaCargaSemanal dados={carga.semanas} />
-            </div>
-          )}
-          {/* F2.2 (§8.20): ACWR individual por atleta, ordenado por risco. */}
-          {temRpeIndividual && (
-            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-              <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
-                Carga individual (ACWR)
-              </p>
-              <TabelaAcwrAtletas atletas={cargaAtletas} />
-            </div>
-          )}
-          {/* Analíticos de treino do escalão (§8.15 / §10.2): volume, composição
-              da biblioteca, evolução mensal e assiduidade. */}
-          {resTreino.sucesso && (
-            <div className="border-t border-cinza-200 pt-8">
-              <h2 className="mb-6 text-subtitulo text-cinza-900">Treino</h2>
-              <PainelTreinoEscalao dados={resTreino.dados} />
-            </div>
-          )}
+          {/* Analíticos separados por tab para evitar scroll excessivo: "Jogos"
+              (dossier + carga RPE/ACWR) e "Treino" (§8.15 / §10.2). As chamadas
+              às Server Actions correm todas em paralelo no Promise.all acima; só a
+              renderização é dividida por tab. "Jogos" é o default. */}
+          <Tabs defaultValue="jogos">
+            <TabsList>
+              <TabsTrigger value="jogos">Jogos</TabsTrigger>
+              <TabsTrigger value="treino">Treino</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="jogos" className="space-y-6">
+              <PainelEscalao
+                dados={res.dados}
+                competicoes={competicoes}
+                competicaoId={competicao || undefined}
+              />
+              {/* P4.8 (§8.20): carga de treino (RPE/ACWR) — só quando há RPE registado. */}
+              {carga && (
+                <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+                  <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
+                    Carga de treino
+                  </p>
+                  <CurvaCargaSemanal dados={carga.semanas} />
+                </div>
+              )}
+              {/* F2.2 (§8.20): ACWR individual por atleta, ordenado por risco. */}
+              {temRpeIndividual && (
+                <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+                  <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
+                    Carga individual (ACWR)
+                  </p>
+                  <TabelaAcwrAtletas atletas={cargaAtletas} />
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Analíticos de treino do escalão (§8.15 / §10.2): volume, composição
+                da biblioteca, evolução mensal e assiduidade. */}
+            <TabsContent value="treino">
+              {resTreino.sucesso ? (
+                <PainelTreinoEscalao dados={resTreino.dados} />
+              ) : (
+                <EstadoVazio
+                  titulo="Analíticos de treino indisponíveis"
+                  descricao={resTreino.erro}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
         </>
       ) : res.erro === "Sem permissão" ? (
         <EstadoVazio

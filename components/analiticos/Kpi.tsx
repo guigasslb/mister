@@ -49,8 +49,8 @@ export function Kpi({
 }: {
   valor: string | number;
   label: string;
-  /** Linha secundária discreta (ex.: percentagem, "M/jogo"). */
-  nota?: string;
+  /** Linha secundária discreta (ex.: percentagem, "M/jogo", um link). */
+  nota?: ReactNode;
   acento?: AcentoKpi;
 }) {
   return (
@@ -88,7 +88,7 @@ export function GrelhaMeses({
           </span>
           <span
             className={`mt-1 block text-lg font-bold tabular-nums ${
-              m.destaque ? "text-primary" : "text-cinza-900"
+              m.destaque ? "text-ambar-600" : "text-cinza-900"
             }`}
           >
             {m.valor}

@@ -6,7 +6,7 @@ import type { TipoSessao } from "@prisma/client";
 import { obterUsoExercicio } from "@/lib/actions/analise";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { Badge } from "@/components/ui/badge";
-import { SecaoAnalitico } from "./Kpi";
+import { SecaoAnalitico, Kpi } from "./Kpi";
 
 const LABEL_TIPO_SESSAO: Record<TipoSessao, string> = {
   NORMAL: "Normal",
@@ -36,7 +36,7 @@ export async function UsoExercicioCard({ exercicioId }: { exercicioId: string })
   if (uso.totalUsos === 0) {
     return (
       <SecaoAnalitico titulo="Uso na época">
-        <div className="rounded-lg border border-cinza-200 bg-white shadow-card">
+        <div className="rounded-lg border border-cinza-200 bg-white">
           <EstadoVazio titulo="Exercício ainda não usado nesta época." />
         </div>
       </SecaoAnalitico>
@@ -50,47 +50,34 @@ export async function UsoExercicioCard({ exercicioId }: { exercicioId: string })
       {/* KPIs em destaque */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {/* Nº de vezes usado */}
-        <div className="flex flex-col items-center justify-center rounded-lg border border-cinza-200 bg-white px-3 py-5 text-center">
-          <span className="text-3xl font-bold leading-none tabular-nums text-primary">
-            {uso.totalUsos}
-          </span>
-          <span className="mt-2 text-legenda font-medium uppercase tracking-wide text-cinza-500">
-            {uso.totalUsos === 1 ? "vez usado" : "vezes usado"}
-          </span>
-        </div>
+        <Kpi
+          valor={uso.totalUsos}
+          label={uso.totalUsos === 1 ? "vez usado" : "vezes usado"}
+          acento="primary"
+        />
 
         {/* Última utilização */}
-        <div className="flex flex-col items-center justify-center rounded-lg border border-cinza-200 bg-white px-3 py-5 text-center">
-          {uso.ultimaVez ? (
-            uso.ultimaSessaoId ? (
+        <Kpi
+          valor={uso.ultimaVez ? formatarData(uso.ultimaVez) : "—"}
+          label="última utilização"
+          nota={
+            uso.ultimaVez && uso.ultimaSessaoId ? (
               <Link
                 href={`/treinos/${uso.ultimaSessaoId}`}
-                className="rounded text-2xl font-bold leading-none tabular-nums text-cinza-900 underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                aria-label={`Ver sessão de treino de ${formatarData(uso.ultimaVez)}`}
+                className="rounded underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                {formatarData(uso.ultimaVez)}
+                Ver sessão →
               </Link>
-            ) : (
-              <span className="text-2xl font-bold leading-none tabular-nums text-cinza-900">
-                {formatarData(uso.ultimaVez)}
-              </span>
-            )
-          ) : (
-            <span className="text-2xl font-bold leading-none text-cinza-400">—</span>
-          )}
-          <span className="mt-2 text-legenda font-medium uppercase tracking-wide text-cinza-500">
-            última utilização
-          </span>
-        </div>
+            ) : undefined
+          }
+        />
 
         {/* Duração média */}
-        <div className="flex flex-col items-center justify-center rounded-lg border border-cinza-200 bg-white px-3 py-5 text-center">
-          <span className="text-3xl font-bold leading-none tabular-nums text-cinza-900">
-            {uso.duracaoMedia != null ? `${uso.duracaoMedia} min` : "—"}
-          </span>
-          <span className="mt-2 text-legenda font-medium uppercase tracking-wide text-cinza-500">
-            duração média
-          </span>
-        </div>
+        <Kpi
+          valor={uso.duracaoMedia != null ? `${uso.duracaoMedia} min` : "—"}
+          label="duração média"
+        />
       </div>
 
       {/* Escalões que usam */}
@@ -109,7 +96,7 @@ export async function UsoExercicioCard({ exercicioId }: { exercicioId: string })
       )}
 
       {/* Lista de sessões (últimas 10) */}
-      <div className="overflow-hidden rounded-lg border border-cinza-200 bg-white shadow-card">
+      <div className="overflow-hidden rounded-lg border border-cinza-200 bg-white">
         <ul className="divide-y divide-cinza-100">
           {sessoes.map((s) => (
             <li key={s.id}>
@@ -136,6 +123,12 @@ export async function UsoExercicioCard({ exercicioId }: { exercicioId: string })
           ))}
         </ul>
       </div>
+
+      {uso.totalUsos > 10 && (
+        <p className="text-legenda text-cinza-400">
+          A mostrar as últimas 10 de {uso.totalUsos}
+        </p>
+      )}
     </SecaoAnalitico>
   );
 }

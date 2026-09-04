@@ -14,7 +14,7 @@ import dynamic from "next/dynamic";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
 import type { AnaliticoTreinoAtleta } from "@/lib/actions/analise";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
-import { Kpi, type AcentoKpi } from "./Kpi";
+import { Kpi, SecaoAnalitico, type AcentoKpi } from "./Kpi";
 import { pct } from "./Cartao";
 
 const GraficoLinhas = dynamic(
@@ -51,9 +51,7 @@ function dataAbrev(d: Date): string {
 
 export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) {
   const semDados =
-    dados.totalSessoesNormal === 0 &&
-    dados.exerciciosPorCategoria.length === 0 &&
-    dados.presencasMensais.length === 0;
+    dados.totalSessoesNormal === 0 && dados.exerciciosPorCategoria.length === 0;
 
   if (semDados) {
     return <EstadoVazio titulo="Sem dados de treino para este atleta." />;
@@ -74,20 +72,26 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
   return (
     <div className="space-y-6">
       {/* KPIs — assiduidade e carga percebida */}
-      <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-        <Kpi
-          valor={pct(dados.taxaPresenca)}
-          label="presença"
-          nota={`${dados.totalPresencas}/${dados.totalSessoesNormal} sessões`}
-          acento={acentoTaxa(dados.taxaPresenca)}
-        />
-        <Kpi
-          valor={dados.rpeMedia !== null ? dados.rpeMedia.toFixed(1) : "—"}
-          label="RPE médio"
-          nota={`de ${dados.totalSessoesComRpe} sessões`}
-          acento="primary"
-        />
-      </div>
+      <SecaoAnalitico titulo="Resumo de treino">
+        <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+          <Kpi
+            valor={pct(dados.taxaPresenca)}
+            label="presença"
+            nota={`${dados.totalPresencas}/${dados.totalSessoesNormal} sessões`}
+            acento={acentoTaxa(dados.taxaPresenca)}
+          />
+          <Kpi
+            valor={dados.rpeMedia !== null ? dados.rpeMedia.toFixed(1) : "—"}
+            label="RPE médio"
+            nota={
+              dados.rpeMedia !== null
+                ? `de ${dados.totalSessoesComRpe} sessão${dados.totalSessoesComRpe !== 1 ? "ões" : ""}`
+                : undefined
+            }
+            acento="primary"
+          />
+        </div>
+      </SecaoAnalitico>
 
       {/* Gráficos de treino em duas colunas no desktop: RPE por sessão e
           exposição a exercícios por categoria. Manter o gráfico de categorias
@@ -99,18 +103,19 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* RPE por sessão — só com ≥3 registos para uma tendência legível */}
           {temRpe && (
-            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+            <div className="rounded-lg border border-cinza-200 bg-white p-5">
               <GraficoLinhas
                 pontos={pontosRpe}
                 serie1="RPE (1–10)"
                 titulo="RPE por sessão"
+                mediaReferencia={dados.rpeMedia ?? undefined}
               />
             </div>
           )}
 
           {/* Exercícios por categoria — exposição a cada área de treino */}
           {temCategorias && (
-            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+            <div className="rounded-lg border border-cinza-200 bg-white p-5">
               <GraficoBarrasH
                 dados={pontosCategoria}
                 titulo="Exercícios por categoria"
@@ -119,6 +124,14 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
             </div>
           )}
         </div>
+      )}
+
+      {dados.rpeEvolucao.length > 0 && dados.rpeEvolucao.length < 3 && (
+        <p className="text-legenda text-cinza-400">
+          RPE registado em {dados.rpeEvolucao.length} sessão
+          {dados.rpeEvolucao.length > 1 ? "ões" : ""} — são precisas pelo menos 3
+          para visualizar a evolução.
+        </p>
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import {
   obterEvolucaoAtleta,
   obterPresencasMensal,
   obterAnaliticoAtleta,
+  obterAnaliticoTreinoAtleta,
   obterEvolucaoMultiEpoca,
   exportarAnaliticoAtletaCsv,
 } from "@/lib/actions/analise";
@@ -28,6 +29,7 @@ import { CadernetaAtleta } from "@/components/plantel/CadernetaAtleta";
 import { ParticipacoesAtleta } from "@/components/plantel/ParticipacoesAtleta";
 import { CarreiraAtleta } from "@/components/plantel/CarreiraAtleta";
 import { PainelAtleta } from "@/components/analiticos/PainelAtleta";
+import { PainelTreinoAtleta } from "@/components/analiticos/PainelTreinoAtleta";
 import { ExportarCsvBotao } from "@/components/analiticos/ExportarCsvBotao";
 import { GerarRelatorioBotao } from "@/components/relatorios/GerarRelatorioBotao";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
@@ -152,6 +154,17 @@ export default async function PerfilAtletaPage({
   const podeGerirPlantel = capacidades.has("PLANTEL_GERIR");
   const podeTerminarParticipacao = capacidades.has("PROMOVER_ATLETAS");
   const podeVerRelatorios = capacidades.has("RELATORIOS_VER");
+  // Analítico de treino do atleta (§8.15 / §10.1) — apresentado numa tab própria
+  // «Treino». Tal como o painel avançado, só está disponível com «Ver relatórios»
+  // e usa o mesmo escalão de contexto/época do analítico principal.
+  const resTreino =
+    resAnalitico.sucesso && podeVerRelatorios
+      ? await obterAnaliticoTreinoAtleta(
+          id,
+          resAnalitico.dados.escalaoContexto?.id,
+          resAnalitico.dados.epoca.id,
+        )
+      : null;
   const todosEscaloes = resEscaloes.sucesso
     ? resEscaloes.dados.map((e) => ({ id: e.id, nome: e.nome }))
     : [];
@@ -229,6 +242,7 @@ export default async function PerfilAtletaPage({
       <Tabs defaultValue="estatisticas">
         <TabsList>
           <TabsTrigger value="estatisticas">Estatísticas</TabsTrigger>
+          {podeVerRelatorios && <TabsTrigger value="treino">Treino</TabsTrigger>}
           <TabsTrigger value="caderneta">Caderneta</TabsTrigger>
           <TabsTrigger value="participacoes">Participações</TabsTrigger>
           <TabsTrigger value="carreira">Carreira</TabsTrigger>
@@ -290,6 +304,18 @@ export default async function PerfilAtletaPage({
             </div>
           )}
         </TabsContent>
+
+        {/* Treino (§8.15 / §10.1) — assiduidade, RPE e exposição a exercícios,
+            isolados na sua própria tab (gating igual ao painel avançado). */}
+        {podeVerRelatorios && (
+          <TabsContent value="treino">
+            {resTreino?.sucesso ? (
+              <PainelTreinoAtleta dados={resTreino.dados} />
+            ) : (
+              <EstadoVazio titulo="Sem dados de treino para este atleta." />
+            )}
+          </TabsContent>
+        )}
 
         <TabsContent value="caderneta">
           {resCaderneta.sucesso ? (

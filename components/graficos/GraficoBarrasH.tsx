@@ -90,6 +90,9 @@ export function GraficoBarrasH({
               onMouseLeave={() => setHoveredIdx(null)}
               style={{ cursor: "default" }}
             >
+              {/* Native tooltip — nome completo (útil quando o rótulo trunca) */}
+              <title>{d.label}</title>
+
               {/* Full-row hit target */}
               <rect
                 x={0}

@@ -35,9 +35,9 @@ export default async function RankingExerciciosPage() {
       <div>
         <Link
           href="/exercicios"
-          className="flex items-center gap-1 text-corpo-sec text-cinza-600 hover:text-cinza-900 transition-colors"
+          className="flex items-center gap-1 py-3 -my-3 text-corpo-sec text-cinza-600 hover:text-cinza-900 transition-colors"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           Exercícios
         </Link>
       </div>
@@ -58,18 +58,27 @@ export default async function RankingExerciciosPage() {
       ) : (
         <>
           {/* Top 20 mais usados — gráfico de barras */}
-          {res.dados.some((e) => e.totalUsos > 0) && (
-            <SecaoAnalitico titulo="Mais usados">
-              <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-                <RankingUsoExerciciosGrafico
-                  dados={res.dados
-                    .filter((e) => e.totalUsos > 0)
-                    .slice(0, 20)
-                    .map((e) => ({ label: e.nome, valor: e.totalUsos }))}
-                />
-              </div>
-            </SecaoAnalitico>
-          )}
+          {res.dados.some((e) => e.totalUsos > 0) && (() => {
+            const usados = res.dados.filter((e) => e.totalUsos > 0);
+            return (
+              <SecaoAnalitico
+                titulo="Mais usados"
+                acao={
+                  <span className="text-legenda tabular-nums text-cinza-400">
+                    Top {Math.min(20, usados.length)} de {usados.length} exercícios
+                  </span>
+                }
+              >
+                <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+                  <RankingUsoExerciciosGrafico
+                    dados={usados
+                      .slice(0, 20)
+                      .map((e) => ({ label: e.nome, valor: e.totalUsos }))}
+                  />
+                </div>
+              </SecaoAnalitico>
+            );
+          })()}
 
           {/* Tabela completa — inclui os nunca usados */}
           <SecaoAnalitico titulo="Todos os exercícios">
@@ -77,10 +86,10 @@ export default async function RankingExerciciosPage() {
               <table className="w-full text-corpo-sec">
                 <thead>
                   <tr className="border-b border-cinza-200 text-left text-legenda uppercase tracking-wide text-cinza-500">
-                    <th className="px-5 py-3 font-medium">Exercício</th>
-                    <th className="px-3 py-3 font-medium">Categoria</th>
-                    <th className="px-3 py-3 text-right font-medium">Utilizações</th>
-                    <th className="px-5 py-3 text-right font-medium">Última vez</th>
+                    <th scope="col" className="px-5 py-3 font-medium">Exercício</th>
+                    <th scope="col" className="px-3 py-3 font-medium">Categoria</th>
+                    <th scope="col" className="px-3 py-3 text-right font-medium">Utilizações</th>
+                    <th scope="col" className="px-5 py-3 text-right font-medium">Última vez</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cinza-100">

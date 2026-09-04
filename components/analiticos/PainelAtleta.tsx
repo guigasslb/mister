@@ -17,12 +17,10 @@ import {
   TrendingDown,
   Minus,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   obterResumoAtletaParaComparacao,
-  obterAnaliticoTreinoAtleta,
   type AnaliticoAtleta,
-  type AnaliticoTreinoAtleta,
   type EpocaResumoAtleta,
 } from "@/lib/actions/analise";
 import type { EstatisticasAgregadas } from "@/lib/estatisticas";
@@ -35,8 +33,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SecaoAnalitico } from "./Kpi";
-import { PainelTreinoAtleta } from "./PainelTreinoAtleta";
-import { EstadoVazio } from "@/components/layout/EstadosUI";
 import dynamic from "next/dynamic";
 
 const GraficoLinhas = dynamic(
@@ -89,30 +85,6 @@ export function PainelAtleta({
     agregado: EstatisticasAgregadas;
   } | null>(null);
   const [loadingComparacao, setLoadingComparacao] = useState(false);
-
-  // Secção «Treino» (§8.15 / §10.1). O painel do atleta é um Client Component;
-  // o analítico de treino é obtido via Server Action no cliente (mesmo padrão da
-  // comparação directa acima). Filtra pelo escalão de contexto e época atual.
-  const atletaId = atleta.id;
-  const escalaoTreinoId = escalaoContexto?.id;
-  const epocaTreinoId = dados.epoca.id;
-  const [treino, setTreino] = useState<AnaliticoTreinoAtleta | null>(null);
-  const [treinoLoading, setTreinoLoading] = useState(true);
-
-  useEffect(() => {
-    let ativo = true;
-    setTreinoLoading(true);
-    obterAnaliticoTreinoAtleta(atletaId, escalaoTreinoId, epocaTreinoId).then(
-      (res) => {
-        if (!ativo) return;
-        setTreino(res.sucesso ? res.dados : null);
-        setTreinoLoading(false);
-      },
-    );
-    return () => {
-      ativo = false;
-    };
-  }, [atletaId, escalaoTreinoId, epocaTreinoId]);
 
   async function selecionarComparacao(outroId: string) {
     setAtletaComparacaoId(outroId);
@@ -457,20 +429,6 @@ export function PainelAtleta({
         </SecaoAnalitico>
       )}
 
-      {/* Treino (§8.15 / §10.1) — assiduidade, RPE e exposição a exercícios. */}
-      <div className="border-t border-cinza-200 pt-6">
-        <SecaoAnalitico titulo="Treino">
-          {treinoLoading ? (
-            <p className="text-corpo-sec text-cinza-500">
-              A carregar dados de treino…
-            </p>
-          ) : treino ? (
-            <PainelTreinoAtleta dados={treino} />
-          ) : (
-            <EstadoVazio titulo="Sem dados de treino para este atleta." />
-          )}
-        </SecaoAnalitico>
-      </div>
     </div>
   );
 }

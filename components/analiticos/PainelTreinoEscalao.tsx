@@ -9,6 +9,7 @@
 import type { TipoSessao } from "@prisma/client";
 import type { AnaliticoTreinoEscalao } from "@/lib/actions/analise";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { LABEL_CATEGORIA_PRINCIPAL } from "@/lib/schemas/subcategoria";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { SecaoAnalitico, Kpi, GrelhaMeses, type AcentoKpi } from "./Kpi";
@@ -152,6 +153,14 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
               maxRows={10}
             />
           </CartaoGrafico>
+          <p className="mt-2 text-right text-legenda">
+            <Link
+              href="/exercicios/analiticos"
+              className="text-cinza-400 hover:text-primary underline-offset-2 hover:underline"
+            >
+              Ver ranking completo →
+            </Link>
+          </p>
         </SecaoAnalitico>
       )}
 
@@ -163,7 +172,7 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
       )}
 
       {/* Assiduidade mensal — grelha de percentagens (destaque abaixo do alvo). */}
-      {presencaPorMes.length > 0 && (
+      {presencaPorMes.length >= 2 && (
         <SecaoAnalitico titulo="Assiduidade mensal">
           <GrelhaMeses meses={presencaPorMes} />
         </SecaoAnalitico>

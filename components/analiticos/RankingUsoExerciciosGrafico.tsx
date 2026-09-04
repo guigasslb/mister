@@ -15,6 +15,8 @@ export function RankingUsoExerciciosGrafico({
 }: {
   dados: { label: string; valor: number }[];
 }) {
+  if (dados.length === 0) return null;
+
   return (
     <GraficoBarrasH
       dados={dados}
