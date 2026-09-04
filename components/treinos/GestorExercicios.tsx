@@ -36,6 +36,7 @@ import {
 } from "@/lib/actions/treinos";
 import {
   LABEL_CATEGORIA,
+  CATEGORIAS,
   diagramaSchema,
   PARTES_TREINO,
   LABEL_PARTE_TREINO,
@@ -71,6 +72,7 @@ type ExercicioBiblioteca = {
   id: string;
   nome: string;
   categoriaPrincipal: CategoriaExercicioPrincipal | null;
+  subcategoriaId: string | null;
   duracaoMin: number | null;
   // Melhoria 1: diagrama para pré-visualização no seletor.
   diagrama: unknown;
@@ -81,9 +83,22 @@ type ExercicioBiblioteca = {
   objetivo: string | null;
 };
 
+// Subcategoria customizável do clube, para o filtro do seletor da biblioteca.
+type Subcategoria = {
+  id: string;
+  nome: string;
+  categoria: CategoriaExercicioPrincipal;
+};
+
 // Sentinela do filtro "todas as fases" no seletor da biblioteca.
 const TODAS_FASES = "__todas__" as const;
 type FiltroFaseValor = ParteTreinoValor | typeof TODAS_FASES;
+
+// Sentinelas dos filtros de categoria/subcategoria no seletor da biblioteca.
+const TODAS_CATEGORIAS = "__todas_categorias__" as const;
+type FiltroCategoriaValor = CategoriaExercicioPrincipal | typeof TODAS_CATEGORIAS;
+const TODAS_SUBCATEGORIAS = "__todas_subcategorias__" as const;
+type FiltroSubcategoriaValor = string | typeof TODAS_SUBCATEGORIAS;
 
 // §3.5: ordem canónica das fases + bucket para exercícios sem fase (rows legadas).
 const SEM_FASE = "SEM_FASE" as const;
@@ -140,10 +155,12 @@ export function GestorExercicios({
   sessaoId,
   exercicios,
   biblioteca,
+  subcategorias,
 }: {
   sessaoId: string;
   exercicios: ExercicioSessao[];
   biblioteca: ExercicioBiblioteca[];
+  subcategorias: Subcategoria[];
 }) {
   const [pending, startTransition] = useTransition();
   const [dialogAberto, setDialogAberto] = useState(false);
@@ -153,6 +170,11 @@ export function GestorExercicios({
   const [bibExpandido, setBibExpandido] = useState<string | null>(null);
   // Bug 2: filtro por fase de treino aplicado à lista da biblioteca no seletor.
   const [filtroFase, setFiltroFase] = useState<FiltroFaseValor>(TODAS_FASES);
+  // Filtros por categoria principal e subcategoria (customizável do clube).
+  const [filtroCategoria, setFiltroCategoria] =
+    useState<FiltroCategoriaValor>(TODAS_CATEGORIAS);
+  const [filtroSubcategoria, setFiltroSubcategoria] =
+    useState<FiltroSubcategoriaValor>(TODAS_SUBCATEGORIAS);
   // §3.5: fase escolhida no formulário de adição (aplica-se ao exercício adicionado).
   const [faseAdicionar, setFaseAdicionar] = useState<ParteTreinoValor>("PRINCIPAL");
   const [exercicioModal, setExercicioModal] = useState<
@@ -163,12 +185,41 @@ export function GestorExercicios({
   const total = exercicios.reduce((acc, e) => acc + (e.duracaoMin ?? 0), 0);
   const jaAdicionados = new Set(exercicios.map((e) => e.exercicio.id));
 
-  // Bug 2: aplicar o filtro por fase à biblioteca mostrada no seletor. Filtra pela
-  // fase sugerida do exercício (`parteTreino`); "todas as fases" mostra tudo.
-  const bibliotecaFiltrada =
-    filtroFase === TODAS_FASES
-      ? biblioteca
-      : biblioteca.filter((ex) => ex.parteTreino === filtroFase);
+  const nomeSubcategoria = new Map(subcategorias.map((s) => [s.id, s.nome]));
+
+  // Exercícios após fase + categoria — base para derivar as subcategorias
+  // disponíveis (o filtro de subcategoria não se aplica a si próprio).
+  const bibliotecaPreSubcategoria = biblioteca.filter(
+    (ex) =>
+      (filtroFase === TODAS_FASES || ex.parteTreino === filtroFase) &&
+      (filtroCategoria === TODAS_CATEGORIAS ||
+        ex.categoriaPrincipal === filtroCategoria),
+  );
+
+  // Subcategorias presentes nos exercícios filtrados por fase + categoria.
+  const subcategoriasDisponiveis = Array.from(
+    new Map(
+      bibliotecaPreSubcategoria
+        .filter((ex) => ex.subcategoriaId && nomeSubcategoria.has(ex.subcategoriaId))
+        .map((ex) => [ex.subcategoriaId as string, nomeSubcategoria.get(ex.subcategoriaId as string)!] as const),
+    ),
+  )
+    .map(([id, nome]) => ({ id, nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt"));
+
+  const subcategoriaFiltroValido =
+    filtroSubcategoria === TODAS_SUBCATEGORIAS ||
+    subcategoriasDisponiveis.some((s) => s.id === filtroSubcategoria);
+
+  // Bug 2: aplicar os filtros à biblioteca mostrada no seletor. Fase filtra pela
+  // fase sugerida (`parteTreino`); categoria/subcategoria pela taxonomia do
+  // exercício. Sentinelas "todas" não restringem.
+  const bibliotecaFiltrada = bibliotecaPreSubcategoria.filter(
+    (ex) =>
+      filtroSubcategoria === TODAS_SUBCATEGORIAS ||
+      !subcategoriaFiltroValido ||
+      ex.subcategoriaId === filtroSubcategoria,
+  );
 
   // §3.5: agrupamento por fase, preservando a ordem (exercícios já vêm ordenados
   // por `ordem`). Só se renderizam grupos com exercícios.
@@ -273,9 +324,9 @@ export function GestorExercicios({
               </DialogHeader>
 
               {/* Filtros fixos — não scrollam com a lista. */}
-              <div className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-end">
+              <div className="grid grid-cols-1 gap-3 px-6 py-4 sm:grid-cols-2">
                 {/* §3.5: escolher a fase do treino a que o exercício será adicionado. */}
-                <div className="flex-1 space-y-1.5">
+                <div className="space-y-1.5">
                   <Label htmlFor="fase-adicionar">Adicionar à fase</Label>
                   <Select
                     value={faseAdicionar}
@@ -295,7 +346,7 @@ export function GestorExercicios({
                 </div>
 
                 {/* Bug 2: filtro por fase — restringe a biblioteca à fase sugerida. */}
-                <div className="flex-1 space-y-1.5">
+                <div className="space-y-1.5">
                   <Label htmlFor="filtro-fase">Filtrar por fase</Label>
                   <Select
                     value={filtroFase}
@@ -317,6 +368,62 @@ export function GestorExercicios({
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Filtro por categoria principal do exercício. */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="filtro-categoria">Filtrar por categoria</Label>
+                  <Select
+                    value={filtroCategoria}
+                    onValueChange={(v) => {
+                      setFiltroCategoria(v as FiltroCategoriaValor);
+                      // Ao mudar a categoria, a subcategoria selecionada pode deixar
+                      // de existir — repõe-se em "todas".
+                      setFiltroSubcategoria(TODAS_SUBCATEGORIAS);
+                      setBibExpandido(null);
+                    }}
+                  >
+                    <SelectTrigger id="filtro-categoria">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={TODAS_CATEGORIAS}>Todas as categorias</SelectItem>
+                      {CATEGORIAS.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {LABEL_CATEGORIA[c]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filtro por subcategoria — dinâmico às subcategorias presentes nos
+                    exercícios já filtrados por fase + categoria. Desativado quando não
+                    há subcategorias disponíveis. */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="filtro-subcategoria">Filtrar por subcategoria</Label>
+                  <Select
+                    value={subcategoriaFiltroValido ? filtroSubcategoria : TODAS_SUBCATEGORIAS}
+                    onValueChange={(v) => {
+                      setFiltroSubcategoria(v as FiltroSubcategoriaValor);
+                      setBibExpandido(null);
+                    }}
+                    disabled={subcategoriasDisponiveis.length === 0}
+                  >
+                    <SelectTrigger id="filtro-subcategoria">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={TODAS_SUBCATEGORIAS}>
+                        Todas as subcategorias
+                      </SelectItem>
+                      {subcategoriasDisponiveis.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {/* Lista scrollable — só a lista scrolla, os filtros ficam fixos. */}
@@ -327,7 +434,7 @@ export function GestorExercicios({
                   </p>
                 ) : bibliotecaFiltrada.length === 0 ? (
                   <p className="text-corpo-sec text-cinza-600">
-                    Nenhum exercício na fase &ldquo;{LABEL_PARTE_TREINO[filtroFase as ParteTreinoValor]}&rdquo;.
+                    Nenhum exercício corresponde aos filtros selecionados.
                   </p>
                 ) : (
                   <ul className="space-y-2">

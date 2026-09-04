@@ -8,6 +8,7 @@ import { FecharSessaoButton } from "@/components/treinos/FecharSessaoButton";
 import { treinoConcluido } from "@/lib/semana";
 import { obterSessao } from "@/lib/actions/treinos";
 import { listarExercicios } from "@/lib/actions/exercicios";
+import { listarSubcategorias } from "@/lib/actions/subcategorias";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { obterEpocaAtiva } from "@/lib/epoca-context";
 import { GestorExercicios } from "@/components/treinos/GestorExercicios";
@@ -52,14 +53,22 @@ export default async function DetalheSessaoPage({
 
   const s = res.dados;
 
-  const [resExercicios, resAtletas, epoca] = await Promise.all([
+  const [resExercicios, resAtletas, epoca, resSubcategorias] = await Promise.all([
     listarExercicios(),
     listarAtletas(s.escalaoId),
     obterEpocaAtiva(),
+    listarSubcategorias(),
   ]);
 
   const biblioteca = resExercicios.sucesso ? resExercicios.dados : [];
   const atletas = resAtletas.sucesso ? resAtletas.dados : [];
+  const subcategorias = resSubcategorias.sucesso
+    ? resSubcategorias.dados.map((sc) => ({
+        id: sc.id,
+        nome: sc.nome,
+        categoria: sc.categoria,
+      }))
+    : [];
 
   const presencasIniciais: Record<string, PresencaInicial> = {};
   for (const p of s.presencas)
@@ -260,10 +269,12 @@ export default async function DetalheSessaoPage({
             diagrama: e.diagrama,
           },
         }))}
+        subcategorias={subcategorias}
         biblioteca={biblioteca.map((b) => ({
           id: b.id,
           nome: b.nome,
           categoriaPrincipal: b.categoriaPrincipal,
+          subcategoriaId: b.subcategoriaId,
           duracaoMin: b.duracaoMin,
           // Melhoria 1: diagrama para pré-visualização no seletor.
           diagrama: b.diagrama,
