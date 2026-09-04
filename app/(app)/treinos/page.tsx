@@ -334,6 +334,8 @@ export default async function TreinosPage({
               id: s.id,
               data: s.data,
               escalaoNome: s.escalao.nome,
+              // Sessão já realizada sem exercícios registados — precisa de atenção.
+              precisaAtencao: treinoConcluido(s.data) && s._count.exercicios === 0,
             }))}
             reunioes={reunioesFuturas}
             ano={anoCal}
@@ -430,6 +432,13 @@ export default async function TreinosPage({
                                       Por fechar
                                     </span>
                                   ))}
+                                {/* Sessão realizada sem exercícios registados — precisa de atenção. */}
+                                {concluido && s._count.exercicios === 0 && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-ambar-500/30 bg-ambar-500/10 px-2 py-0.5 text-legenda font-medium text-ambar-600">
+                                    <CircleAlert className="h-3 w-3" />
+                                    Sem exercícios
+                                  </span>
+                                )}
                                 {momento && (
                                   <span
                                     className={`rounded px-1.5 py-0.5 text-legenda font-medium ${

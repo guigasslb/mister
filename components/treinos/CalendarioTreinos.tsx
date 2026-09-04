@@ -6,6 +6,8 @@ type SessaoCalendario = {
   id: string;
   data: Date;
   escalaoNome: string;
+  /** Sessão realizada sem exercícios registados — mostra indicador de aviso. */
+  precisaAtencao?: boolean;
 };
 
 type ReuniaoCalendario = {
@@ -138,14 +140,26 @@ export function CalendarioTreinos({
                   <Link
                     key={s.id}
                     href={`/treinos/${s.id}`}
-                    className="block truncate rounded bg-primary px-1 py-0.5 text-legenda text-white hover:bg-azul-900"
-                    title={s.escalaoNome}
+                    className="flex items-center gap-1 truncate rounded bg-primary px-1 py-0.5 text-legenda text-white hover:bg-azul-900"
+                    title={
+                      s.precisaAtencao
+                        ? `${s.escalaoNome} · sessão sem exercícios`
+                        : s.escalaoNome
+                    }
                   >
-                    {formatarDataHoraLisboa(s.data, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}{" "}
-                    {s.escalaoNome}
+                    {s.precisaAtencao && (
+                      <span
+                        className="h-2 w-2 flex-shrink-0 rounded-full bg-ambar-500 ring-1 ring-white"
+                        aria-label="Sessão sem exercícios"
+                      />
+                    )}
+                    <span className="truncate">
+                      {formatarDataHoraLisboa(s.data, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      {s.escalaoNome}
+                    </span>
                   </Link>
                 ))}
                 {reunioesDoDia.map((r) => (
