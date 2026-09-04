@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import {
   obterAnaliticoEscalao,
+  obterAnaliticoTreinoEscalao,
   obterCompeticoesEscalao,
   exportarAnaliticoEscalaoCsv,
 } from "@/lib/actions/analise";
 import { obterCargaSemanal, obterCargaAtletas } from "@/lib/actions/cargaTreino";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PainelEscalao } from "@/components/analiticos/PainelEscalao";
+import { PainelTreinoEscalao } from "@/components/analiticos/PainelTreinoEscalao";
 import { ExportarCsvBotao } from "@/components/analiticos/ExportarCsvBotao";
 import { DescarregarPdfBotao } from "@/components/analiticos/DescarregarPdfBotao";
 import { TabelaAcwrAtletas } from "@/components/analiticos/TabelaAcwrAtletas";
@@ -29,8 +31,9 @@ export default async function AnaliticosEscalaoPage({
   const { id } = await params;
   const { competicao } = await searchParams;
   // P2.5: filtro opcional por competição (campeonato / taça / particulares).
-  const [res, resCompeticoes, resCarga, resCargaAtletas] = await Promise.all([
+  const [res, resTreino, resCompeticoes, resCarga, resCargaAtletas] = await Promise.all([
     obterAnaliticoEscalao(id, undefined, competicao || undefined),
+    obterAnaliticoTreinoEscalao(id),
     obterCompeticoesEscalao(id),
     obterCargaSemanal(id),
     obterCargaAtletas({ escalaoId: id }),
@@ -109,6 +112,14 @@ export default async function AnaliticosEscalaoPage({
                 Carga individual (ACWR)
               </p>
               <TabelaAcwrAtletas atletas={cargaAtletas} />
+            </div>
+          )}
+          {/* Analíticos de treino do escalão (§8.15 / §10.2): volume, composição
+              da biblioteca, evolução mensal e assiduidade. */}
+          {resTreino.sucesso && (
+            <div className="border-t border-cinza-200 pt-8">
+              <h2 className="mb-6 text-subtitulo text-cinza-900">Treino</h2>
+              <PainelTreinoEscalao dados={resTreino.dados} />
             </div>
           )}
         </>

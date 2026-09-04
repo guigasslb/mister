@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import {
   Prisma,
   type CasaFora,
+  type CategoriaExercicioPrincipal,
   type Modalidade,
+  type ParteTreino,
   type Posicao,
   type TipoEventoJogo,
   type TipoJogo,
@@ -38,6 +40,10 @@ import {
   gerarRelatorioSchema,
   exportarEscalaoCsvSchema,
   exportarAtletaCsvSchema,
+  obterUsoExercicioSchema,
+  obterRankingUsoExerciciosSchema,
+  obterAnaliticoTreinoEscalaoSchema,
+  obterAnaliticoTreinoAtletaSchema,
 } from "@/lib/schemas/analise";
 import { paraCsv, juntarBlocosCsv, type ColunaCsv } from "@/lib/utils/csv";
 
@@ -2502,4 +2508,604 @@ export async function obterEvolucaoMultiepocaClube(): Promise<
   });
 
   return ok(resultado);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANALÍTICOS DE TREINO — uso de exercícios e carga de treino (secção 10.2)
+//
+// Estas quatro leituras respondem a "que exercícios uso, quanto treino faço e como
+// evoluo". Seguem EXATAMENTE os padrões dos analíticos existentes: `exigirRelatorios`
+// (auth + RELATORIOS_VER), `resolverEpoca` (época em contexto), `podeLerEscalao`/
+// `escaloesLegiveis` (multi-tenant + permissão de leitura) e `erroDeValidacao` (Zod).
+//
+// NOTA de schema: o campo temporal da sessão em BD é `Sessao.data` (DateTime); as
+// interfaces expõem-no como `dataHora` (contrato consumido pelos Server Components).
+// `Exercicio.categoriaPrincipal` é nullable em BD — colapsa para `OUTRO` na leitura.
+//
+// Volumes/médias/composição usam SÓ sessões EXECUTADAS (`data < agora`) — nunca as
+// programadas futuras — em simetria com o resto do ficheiro (BUG-P1-08).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Fallback de categoria para exercícios sem `categoriaPrincipal` definida (nullable em BD). */
+const CATEGORIA_FALLBACK: CategoriaExercicioPrincipal = "OUTRO";
+
+/**
+ * Assiduidade mensal AGREGADA de uma equipa (não individual): `presentes` = total de
+ * presenças do mês; `total` = nAtletas × sessões do mês. Só meses com sessões JÁ
+ * REALIZADAS (`data < agora`) — nunca futuras (BUG-P1-08). Espelha exatamente a lógica
+ * de `obterAnaliticoEscalao` (mesma forma agregada), para os números baterem.
+ */
+function montarPresencasMensaisEquipa(
+  sessoes: { id: string; data: Date }[],
+  presencasPorSessao: Map<string, number>,
+  nAtletas: number,
+): PresencaMensal[] {
+  const agora = Date.now();
+  const mesMap = new Map<string, { sessoes: number; presentes: number; mesIdx: number }>();
+  for (const s of sessoes) {
+    const d = new Date(s.data);
+    if (d.getTime() >= agora) continue;
+    const mesIdx = d.getMonth();
+    const key = `${d.getFullYear()}-${String(mesIdx + 1).padStart(2, "0")}`;
+    const atual = mesMap.get(key) ?? { sessoes: 0, presentes: 0, mesIdx };
+    atual.sessoes++;
+    atual.presentes += presencasPorSessao.get(s.id) ?? 0;
+    mesMap.set(key, atual);
+  }
+  return [...mesMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, v]) => {
+      const total = v.sessoes * nAtletas;
+      return {
+        mes: MESES[v.mesIdx],
+        total,
+        presentes: v.presentes,
+        taxa: total > 0 ? Math.min(v.presentes / total, 1) : 0,
+      };
+    });
+}
+
+// ── Tipos partilhados com a UI ────────────────────────────────────────────────
+
+/** Uso de um exercício específico ao longo da época. */
+export interface UsoExercicio {
+  totalUsos: number;
+  ultimaVez: Date | null;
+  ultimaSessaoId: string | null;
+  duracaoMedia: number | null;
+  sessoes: Array<{
+    id: string; // id da sessão onde o exercício foi usado
+    dataHora: Date; // Sessao.data
+    escalaoNome: string;
+    tipoSessao: TipoSessao;
+    duracaoMin: number | null; // duração deste exercício NA sessão (SessaoExercicio.duracaoMin)
+  }>;
+  escaloes: Array<{ id: string; nome: string; totalUsos: number }>;
+}
+
+/** Linha do ranking de uso da biblioteca de exercícios. */
+export interface RankingUsoExercicio {
+  exercicioId: string;
+  nome: string;
+  categoriaPrincipal: CategoriaExercicioPrincipal;
+  totalUsos: number; // 0 = nunca usado na época
+  ultimaVez: Date | null;
+}
+
+/** Analítico de treino de um escalão (volume, composição, evolução, presença). */
+export interface AnaliticoTreinoEscalao {
+  totalSessoes: number;
+  sessoesExecutadas: number;
+  totalHoras: number;
+  duracaoMedia: number | null;
+  distribuicaoTipoSessao: Record<TipoSessao, number>;
+  topExercicios: Array<{
+    exercicioId: string;
+    nome: string;
+    totalUsos: number;
+    categoriaPrincipal: CategoriaExercicioPrincipal;
+  }>;
+  distribuicaoCategoria: Array<{ categoria: CategoriaExercicioPrincipal; totalUsos: number }>;
+  distribuicaoParteTreino: Array<{ parte: ParteTreino; totalUsos: number }>;
+  evolucaoMensal: Array<{ mes: string; totalSessoes: number; totalHoras: number }>;
+  taxaPresencaMedia: number;
+  presencasMensais: PresencaMensal[];
+}
+
+/** Analítico de treino de um atleta (assiduidade, RPE, exposição por categoria). */
+export interface AnaliticoTreinoAtleta {
+  taxaPresenca: number;
+  totalSessoesNormal: number;
+  totalPresencas: number;
+  rpeMedia: number | null;
+  totalSessoesComRpe: number;
+  rpeEvolucao: Array<{ sessaoId: string; dataHora: Date; rpe: number }>;
+  exerciciosPorCategoria: Array<{
+    categoria: CategoriaExercicioPrincipal;
+    totalExercicios: number;
+  }>;
+  presencasMensais: PresencaMensal[];
+}
+
+// ── 1. Uso de um exercício específico ─────────────────────────────────────────
+
+/**
+ * Onde e quando um exercício foi usado na época (todas as sessões que o membro pode
+ * ler). Valida que o exercício pertence ao clube; filtra as sessões pelos escalões
+ * legíveis (§6.4/§6.5). `totalUsos` = nº de linhas `SessaoExercicio`; a lista de
+ * sessões (máx. 50, desc por data) e a duração média derivam das mesmas linhas, pelo
+ * que batem por construção (Regra Nº 6).
+ */
+export async function obterUsoExercicio(
+  exercicioId: string,
+  epocaId?: string,
+): Promise<Resultado<UsoExercicio>> {
+  const parsed = obterUsoExercicioSchema.safeParse({ exercicioId, epocaId });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const perm = await exigirRelatorios();
+  if (!perm.ok) return erro(perm.erro);
+  const clubeId = perm.ctx.clube.id;
+
+  const exercicio = await prisma.exercicio.findFirst({
+    where: { id: parsed.data.exercicioId, clubeId },
+    select: { id: true },
+  });
+  if (!exercicio) return erro("Exercício não encontrado");
+
+  const epoca = await resolverEpoca(clubeId, parsed.data.epocaId);
+  if (!epoca) return erro("Nenhuma época ativa");
+
+  // Só sessões de escalões legíveis (§6.5). "TODOS" → sem filtro de escalão (a época
+  // já é do clube, logo as sessões também). Lista concreta → `in`.
+  const legiveis = await escaloesLegiveis();
+  const filtroEscalao = legiveis === "TODOS" ? {} : { escalaoId: { in: legiveis } };
+
+  const usos = await prisma.sessaoExercicio.findMany({
+    where: {
+      exercicioId: parsed.data.exercicioId,
+      sessao: { epocaId: epoca.id, ...filtroEscalao },
+    },
+    select: {
+      duracaoMin: true,
+      sessao: {
+        select: {
+          id: true,
+          data: true,
+          tipoSessao: true,
+          escalaoId: true,
+          escalao: { select: { nome: true } },
+        },
+      },
+    },
+    orderBy: { sessao: { data: "desc" } },
+  });
+
+  // Duração média: só entradas com duração definida (SessaoExercicio.duracaoMin).
+  const duracoes = usos.map((u) => u.duracaoMin).filter((d): d is number => d != null);
+  const duracaoMedia =
+    duracoes.length > 0
+      ? arredondar2(duracoes.reduce((a, b) => a + b, 0) / duracoes.length)
+      : null;
+
+  // Escalões distintos que usaram o exercício (já limitados aos legíveis).
+  const escaloesMap = new Map<string, { nome: string; totalUsos: number }>();
+  for (const u of usos) {
+    const acc =
+      escaloesMap.get(u.sessao.escalaoId) ?? { nome: u.sessao.escalao.nome, totalUsos: 0 };
+    acc.totalUsos++;
+    escaloesMap.set(u.sessao.escalaoId, acc);
+  }
+  const escaloes = [...escaloesMap.entries()]
+    .map(([id, v]) => ({ id, nome: v.nome, totalUsos: v.totalUsos }))
+    .sort((a, b) => b.totalUsos - a.totalUsos || a.nome.localeCompare(b.nome, "pt"));
+
+  return ok({
+    totalUsos: usos.length,
+    // Ordenado desc por data: a primeira entrada é a mais recente.
+    ultimaVez: usos[0]?.sessao.data ?? null,
+    ultimaSessaoId: usos[0]?.sessao.id ?? null,
+    duracaoMedia,
+    sessoes: usos.slice(0, 50).map((u) => ({
+      id: u.sessao.id,
+      dataHora: u.sessao.data,
+      escalaoNome: u.sessao.escalao.nome,
+      tipoSessao: u.sessao.tipoSessao,
+      duracaoMin: u.duracaoMin,
+    })),
+    escaloes,
+  });
+}
+
+// ── 2. Ranking de uso da biblioteca de exercícios ─────────────────────────────
+
+/**
+ * Ranking de uso de TODOS os exercícios do clube na época — INCLUINDO os que nunca
+ * foram usados (`totalUsos = 0`), para identificar a biblioteca subaproveitada.
+ * Com `escalaoId` filtra por esse escalão (valida leitura); sem ele, agrega todos os
+ * escalões legíveis (§6.5). Ordenado desc por `totalUsos`.
+ */
+export async function obterRankingUsoExercicios(
+  input: { escalaoId?: string; epocaId?: string },
+): Promise<Resultado<RankingUsoExercicio[]>> {
+  const parsed = obterRankingUsoExerciciosSchema.safeParse(input);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const perm = await exigirRelatorios();
+  if (!perm.ok) return erro(perm.erro);
+  const clubeId = perm.ctx.clube.id;
+
+  const epoca = await resolverEpoca(clubeId, parsed.data.epocaId);
+  if (!epoca) return erro("Nenhuma época ativa");
+
+  // Escalão de contexto: o pedido (com leitura validada) ou todos os legíveis (§6.5).
+  let filtroEscalao: { escalaoId?: string | { in: string[] } };
+  if (parsed.data.escalaoId) {
+    const escalao = await prisma.escalao.findFirst({
+      where: { id: parsed.data.escalaoId, clubeId },
+      select: { id: true },
+    });
+    if (!escalao) return erro("Escalão não encontrado");
+    if (!(await podeLerEscalao(parsed.data.escalaoId)))
+      return erro("Sem permissão neste escalão");
+    filtroEscalao = { escalaoId: parsed.data.escalaoId };
+  } else {
+    const legiveis = await escaloesLegiveis();
+    filtroEscalao = legiveis === "TODOS" ? {} : { escalaoId: { in: legiveis } };
+  }
+
+  const [exercicios, usos] = await Promise.all([
+    // Biblioteca do clube (fonte da lista — inclui os nunca usados).
+    prisma.exercicio.findMany({
+      where: { clubeId },
+      select: { id: true, nome: true, categoriaPrincipal: true },
+    }),
+    // Linhas de uso na época/escalões, com a data da sessão para a "última vez".
+    prisma.sessaoExercicio.findMany({
+      where: { sessao: { epocaId: epoca.id, ...filtroEscalao } },
+      select: { exercicioId: true, sessao: { select: { data: true } } },
+    }),
+  ]);
+
+  const usoMap = new Map<string, { totalUsos: number; ultimaVez: Date }>();
+  for (const u of usos) {
+    const acc = usoMap.get(u.exercicioId);
+    if (!acc) {
+      usoMap.set(u.exercicioId, { totalUsos: 1, ultimaVez: u.sessao.data });
+    } else {
+      acc.totalUsos++;
+      if (u.sessao.data.getTime() > acc.ultimaVez.getTime()) acc.ultimaVez = u.sessao.data;
+    }
+  }
+
+  const ranking: RankingUsoExercicio[] = exercicios
+    .map((e) => {
+      const uso = usoMap.get(e.id);
+      return {
+        exercicioId: e.id,
+        nome: e.nome,
+        categoriaPrincipal: e.categoriaPrincipal ?? CATEGORIA_FALLBACK,
+        totalUsos: uso?.totalUsos ?? 0,
+        ultimaVez: uso?.ultimaVez ?? null,
+      };
+    })
+    .sort((a, b) => b.totalUsos - a.totalUsos || a.nome.localeCompare(b.nome, "pt"));
+
+  return ok(ranking);
+}
+
+// ── 3. Analítico de treino de um escalão ──────────────────────────────────────
+
+/**
+ * Volume, composição e evolução do treino de um escalão na época. Volumes/médias e
+ * composição de exercícios contam SÓ sessões executadas (`data < agora`); a
+ * distribuição por tipo de sessão cobre todas as programadas (vista de plano, em
+ * simetria com `obterAnaliticoEscalao.distribuicaoTipoTreino`). Assiduidade só de
+ * sessões NORMAL executadas (BUG-P1-07/08).
+ */
+export async function obterAnaliticoTreinoEscalao(
+  escalaoId: string,
+  epocaId?: string,
+): Promise<Resultado<AnaliticoTreinoEscalao>> {
+  const parsed = obterAnaliticoTreinoEscalaoSchema.safeParse({ escalaoId, epocaId });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const perm = await exigirRelatorios();
+  if (!perm.ok) return erro(perm.erro);
+  const clubeId = perm.ctx.clube.id;
+
+  const escalao = await prisma.escalao.findFirst({
+    where: { id: parsed.data.escalaoId, clubeId },
+    select: { id: true },
+  });
+  if (!escalao) return erro("Escalão não encontrado");
+  if (!(await podeLerEscalao(parsed.data.escalaoId)))
+    return erro("Sem permissão neste escalão");
+
+  const epoca = await resolverEpoca(clubeId, parsed.data.epocaId);
+  if (!epoca) return erro("Nenhuma época ativa");
+
+  const [sessoes, nAtletas, presencas] = await Promise.all([
+    prisma.sessao.findMany({
+      where: { epocaId: epoca.id, escalaoId: parsed.data.escalaoId },
+      select: {
+        id: true,
+        data: true,
+        duracaoMin: true,
+        tipoSessao: true,
+        exercicios: {
+          select: {
+            exercicioId: true,
+            parteTreino: true, // override por sessão (fallback = parte do exercício)
+            exercicio: {
+              select: { nome: true, categoriaPrincipal: true, parteTreino: true },
+            },
+          },
+        },
+      },
+      orderBy: { data: "asc" },
+    }),
+    prisma.atletaEscalao.count({
+      where: {
+        epocaId: epoca.id,
+        escalaoId: parsed.data.escalaoId,
+        estado: "ATIVO",
+        atleta: { ativo: true },
+      },
+    }),
+    prisma.presenca.findMany({
+      where: {
+        escalaoId: parsed.data.escalaoId,
+        estado: { in: [...ESTADOS_PRESENTE] },
+        sessao: { epocaId: epoca.id, tipoSessao: "NORMAL" },
+      },
+      select: { sessaoId: true },
+    }),
+  ]);
+
+  const agora = Date.now();
+  const executadas = sessoes.filter((s) => s.data.getTime() < agora);
+
+  // Volume (só sessões executadas com duração definida).
+  const duracoesExec = executadas
+    .map((s) => s.duracaoMin)
+    .filter((d): d is number => d != null);
+  const totalHoras = arredondar2(duracoesExec.reduce((a, b) => a + b, 0) / 60);
+  const duracaoMedia =
+    duracoesExec.length > 0
+      ? arredondar2(duracoesExec.reduce((a, b) => a + b, 0) / duracoesExec.length)
+      : null;
+
+  // Distribuição por tipo de sessão (todas as programadas — vista de plano).
+  const distribuicaoTipoSessao = Object.fromEntries(
+    (Object.values(SESSAO_TIPOS) as TipoSessao[]).map((t) => [t, 0]),
+  ) as Record<TipoSessao, number>;
+  for (const s of sessoes) distribuicaoTipoSessao[s.tipoSessao]++;
+
+  // Composição de exercícios (só sessões executadas = treino efetivamente dado).
+  const exercicioUsos = new Map<
+    string,
+    { nome: string; categoria: CategoriaExercicioPrincipal; total: number }
+  >();
+  const categoriaUsos = new Map<CategoriaExercicioPrincipal, number>();
+  const parteUsos = new Map<ParteTreino, number>();
+  for (const s of executadas) {
+    for (const se of s.exercicios) {
+      const categoria = se.exercicio.categoriaPrincipal ?? CATEGORIA_FALLBACK;
+      const ex =
+        exercicioUsos.get(se.exercicioId) ??
+        { nome: se.exercicio.nome, categoria, total: 0 };
+      ex.total++;
+      exercicioUsos.set(se.exercicioId, ex);
+      categoriaUsos.set(categoria, (categoriaUsos.get(categoria) ?? 0) + 1);
+      const parte = se.parteTreino ?? se.exercicio.parteTreino;
+      if (parte) parteUsos.set(parte, (parteUsos.get(parte) ?? 0) + 1);
+    }
+  }
+  const topExercicios = [...exercicioUsos.entries()]
+    .map(([exercicioId, v]) => ({
+      exercicioId,
+      nome: v.nome,
+      totalUsos: v.total,
+      categoriaPrincipal: v.categoria,
+    }))
+    .sort((a, b) => b.totalUsos - a.totalUsos || a.nome.localeCompare(b.nome, "pt"))
+    .slice(0, 10);
+  const distribuicaoCategoria = [...categoriaUsos.entries()]
+    .map(([categoria, totalUsos]) => ({ categoria, totalUsos }))
+    .sort((a, b) => b.totalUsos - a.totalUsos);
+  const distribuicaoParteTreino = [...parteUsos.entries()]
+    .map(([parte, totalUsos]) => ({ parte, totalUsos }))
+    .sort((a, b) => b.totalUsos - a.totalUsos);
+
+  // Evolução mensal (janela dos últimos 12 meses, só sessões executadas).
+  const evolMap = new Map<string, { totalSessoes: number; totalMin: number }>();
+  for (const s of executadas) {
+    const key = `${s.data.getFullYear()}-${String(s.data.getMonth() + 1).padStart(2, "0")}`;
+    const acc = evolMap.get(key) ?? { totalSessoes: 0, totalMin: 0 };
+    acc.totalSessoes++;
+    if (s.duracaoMin != null) acc.totalMin += s.duracaoMin;
+    evolMap.set(key, acc);
+  }
+  const hoje = new Date();
+  const evolucaoMensal: AnaliticoTreinoEscalao["evolucaoMensal"] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const acc = evolMap.get(key) ?? { totalSessoes: 0, totalMin: 0 };
+    evolucaoMensal.push({
+      mes: key,
+      totalSessoes: acc.totalSessoes,
+      totalHoras: arredondar2(acc.totalMin / 60),
+    });
+  }
+
+  // Assiduidade da equipa (sessões NORMAL): presenças / (nAtletas × NORMAL executadas).
+  const sessoesNormal = sessoes.filter((s) => s.tipoSessao === "NORMAL");
+  const sessoesNormalExecutadas = sessoesNormal.filter((s) => s.data.getTime() < agora);
+  const presencasPorSessao = new Map<string, number>();
+  for (const p of presencas)
+    presencasPorSessao.set(p.sessaoId, (presencasPorSessao.get(p.sessaoId) ?? 0) + 1);
+  const slots = nAtletas * sessoesNormalExecutadas.length;
+  const taxaPresencaMedia = slots > 0 ? Math.min(presencas.length / slots, 1) : 0;
+  const presencasMensais = montarPresencasMensaisEquipa(
+    sessoesNormal,
+    presencasPorSessao,
+    nAtletas,
+  );
+
+  return ok({
+    totalSessoes: sessoes.length,
+    sessoesExecutadas: executadas.length,
+    totalHoras,
+    duracaoMedia,
+    distribuicaoTipoSessao,
+    topExercicios,
+    distribuicaoCategoria,
+    distribuicaoParteTreino,
+    evolucaoMensal,
+    taxaPresencaMedia,
+    presencasMensais,
+  });
+}
+
+// ── 4. Analítico de treino de um atleta ───────────────────────────────────────
+
+/**
+ * Assiduidade, carga percebida (RPE) e exposição por categoria de um atleta. A
+ * assiduidade conta sessões NORMAL executadas desde o ingresso (BUG-P1-07/08); a
+ * exposição por categoria só considera exercícios de sessões onde o atleta esteve
+ * PRESENTE/ATRASADO. Vista conjunta (todas as participações) ou de um escalão de
+ * contexto (`escalaoId`, com leitura validada).
+ */
+export async function obterAnaliticoTreinoAtleta(
+  atletaId: string,
+  escalaoId?: string,
+  epocaId?: string,
+): Promise<Resultado<AnaliticoTreinoAtleta>> {
+  const parsed = obterAnaliticoTreinoAtletaSchema.safeParse({ atletaId, escalaoId, epocaId });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const perm = await exigirRelatorios();
+  if (!perm.ok) return erro(perm.erro);
+  const clubeId = perm.ctx.clube.id;
+
+  const epoca = await resolverEpoca(clubeId, parsed.data.epocaId);
+  if (!epoca) return erro("Nenhuma época ativa");
+
+  const atleta = await prisma.atleta.findFirst({
+    where: { id: parsed.data.atletaId, clubeId },
+    select: {
+      criadoEm: true,
+      dataIngresso: true,
+      // Histórico persistente (§10.1): todas as participações da época (qualquer estado).
+      participacoes: { where: { epocaId: epoca.id }, select: { escalaoId: true } },
+    },
+  });
+  if (!atleta) return erro("Atleta não encontrado");
+
+  const escaloesParticipados = atleta.participacoes.map((p) => p.escalaoId);
+  if (!(await podeLerAlgumEscalao(escaloesParticipados)))
+    return erro("Sem permissão neste escalão");
+
+  // Escalão de contexto: o pedido (tem de ser participação, com leitura validada) ou
+  // a vista conjunta (todas as participações da época).
+  let escaloesCtx: string[];
+  if (parsed.data.escalaoId) {
+    if (!escaloesParticipados.includes(parsed.data.escalaoId))
+      return erro("O atleta não participa neste escalão nesta época");
+    if (!(await podeLerEscalao(parsed.data.escalaoId)))
+      return erro("Sem permissão neste escalão");
+    escaloesCtx = [parsed.data.escalaoId];
+  } else {
+    escaloesCtx = escaloesParticipados;
+  }
+
+  const ingresso = atleta.dataIngresso ?? atleta.criadoEm;
+
+  const [sessoes, presencas, rpes, exerciciosPresente] = await Promise.all([
+    // Denominador da assiduidade: sessões NORMAL desde o ingresso (grelha mensal usa a
+    // lista completa; o total conta só as executadas).
+    prisma.sessao.findMany({
+      where: {
+        epocaId: epoca.id,
+        escalaoId: { in: escaloesCtx },
+        data: { gte: ingresso },
+        tipoSessao: "NORMAL",
+      },
+      select: { id: true, data: true },
+      orderBy: { data: "asc" },
+    }),
+    prisma.presenca.findMany({
+      where: {
+        atletaId: parsed.data.atletaId,
+        estado: { in: [...ESTADOS_PRESENTE] },
+        escalaoId: { in: escaloesCtx },
+        sessao: { epocaId: epoca.id, data: { gte: ingresso }, tipoSessao: "NORMAL" },
+      },
+      select: { sessaoId: true },
+    }),
+    prisma.rpeAtleta.findMany({
+      where: {
+        atletaId: parsed.data.atletaId,
+        sessao: { epocaId: epoca.id, escalaoId: { in: escaloesCtx } },
+      },
+      select: { rpe: true, sessaoId: true, sessao: { select: { data: true } } },
+      orderBy: { sessao: { data: "asc" } },
+    }),
+    // Exposição por categoria: exercícios de sessões onde o atleta esteve presente.
+    prisma.sessaoExercicio.findMany({
+      where: {
+        sessao: {
+          epocaId: epoca.id,
+          escalaoId: { in: escaloesCtx },
+          presencas: {
+            some: {
+              atletaId: parsed.data.atletaId,
+              estado: { in: [...ESTADOS_PRESENTE] },
+            },
+          },
+        },
+      },
+      select: { exercicio: { select: { categoriaPrincipal: true } } },
+    }),
+  ]);
+
+  const agora = Date.now();
+  // Denominador = sessões EXECUTADAS desde o ingresso (as presenças só existem em
+  // sessões realizadas, pelo que fica simétrico — BUG-P1-08).
+  const totalSessoesNormal = sessoes.filter((s) => s.data.getTime() < agora).length;
+  const totalPresencas = presencas.length;
+  const taxaPresenca =
+    totalSessoesNormal > 0 ? Math.min(totalPresencas / totalSessoesNormal, 1) : 0;
+
+  const rpeMedia =
+    rpes.length > 0 ? arredondar2(rpes.reduce((a, r) => a + r.rpe, 0) / rpes.length) : null;
+  const rpeEvolucao = rpes.map((r) => ({
+    sessaoId: r.sessaoId,
+    dataHora: r.sessao.data,
+    rpe: r.rpe,
+  }));
+
+  const categoriaMap = new Map<CategoriaExercicioPrincipal, number>();
+  for (const se of exerciciosPresente) {
+    const categoria = se.exercicio.categoriaPrincipal ?? CATEGORIA_FALLBACK;
+    categoriaMap.set(categoria, (categoriaMap.get(categoria) ?? 0) + 1);
+  }
+  const exerciciosPorCategoria = [...categoriaMap.entries()]
+    .map(([categoria, totalExercicios]) => ({ categoria, totalExercicios }))
+    .sort((a, b) => b.totalExercicios - a.totalExercicios);
+
+  const presencasSet = new Set(presencas.map((p) => p.sessaoId));
+
+  return ok({
+    taxaPresenca,
+    totalSessoesNormal,
+    totalPresencas,
+    rpeMedia,
+    totalSessoesComRpe: rpes.length,
+    rpeEvolucao,
+    exerciciosPorCategoria,
+    presencasMensais: montarPresencasMensais(sessoes, presencasSet),
+  });
 }

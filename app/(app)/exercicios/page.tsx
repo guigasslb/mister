@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus, Clock, Backpack, Landmark, Sparkles, LayoutTemplate } from "lucide-react";
+import { Plus, Clock, Backpack, Landmark, Sparkles, LayoutTemplate, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { listarExercicios } from "@/lib/actions/exercicios";
@@ -142,6 +142,7 @@ export default async function ExerciciosPage({
 
   const utilizadorId = membro?.utilizadorId ?? null;
   const podeGerirBibliotecaClube = membro?.capacidades.includes("EXERCICIOS_GERIR") ?? false;
+  const podeVerRelatorios = membro?.capacidades.includes("RELATORIOS_VER") ?? false;
 
   // 🎒 Pessoal: biblioteca pessoal visível (§8.6) — os exercícios do próprio
   // (portáteis) E os exercícios pessoais de treinadores que partilham ≥1 escalão
@@ -170,6 +171,14 @@ export default async function ExerciciosPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1>Exercícios</h1>
         <div className="flex flex-wrap gap-2">
+          {podeVerRelatorios && (
+            <Button asChild variant="outline">
+              <Link href="/exercicios/analiticos">
+                <BarChart3 className="h-4 w-4" />
+                Ver ranking de uso
+              </Link>
+            </Button>
+          )}
           <Button asChild variant="outline">
             <Link href="/treinos/templates">
               <LayoutTemplate className="h-4 w-4" />

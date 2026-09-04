@@ -8,6 +8,7 @@ import { obterExercicio } from "@/lib/actions/exercicios";
 import { LABEL_CATEGORIA, diagramaSchema } from "@/lib/schemas/exercicio";
 import { CampoFutsal } from "@/components/campo/CampoFutsal";
 import { CampoAnimado } from "@/components/campo/CampoAnimado";
+import { UsoExercicioCard } from "@/components/analiticos/UsoExercicioCard";
 
 export const metadata: Metadata = { title: "Detalhe do exercício" };
 
@@ -94,6 +95,9 @@ export default async function DetalheExercicioPage({
           </div>
         </div>
       )}
+
+      {/* Uso na época (§8.15 / §10.2) */}
+      <UsoExercicioCard exercicioId={id} />
     </div>
   );
 }

@@ -71,6 +71,40 @@ export const gerarRelatorioSchema = z
     }
   });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Analíticos de TREINO (secção 10.2 — uso de exercícios e carga de treino)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Uso de um exercício específico ao longo da época (todas as sessões legíveis). */
+export const obterUsoExercicioSchema = z.object({
+  exercicioId: z.string().cuid(),
+  epocaId: z.string().cuid().optional(),
+});
+
+/** Ranking de uso da biblioteca de exercícios (inclui os nunca usados). */
+export const obterRankingUsoExerciciosSchema = z.object({
+  escalaoId: z.string().cuid().optional(),
+  epocaId: z.string().cuid().optional(),
+});
+
+/** Analítico de treino de um escalão (volume, composição, evolução, presença). */
+export const obterAnaliticoTreinoEscalaoSchema = z.object({
+  escalaoId: z.string().cuid(),
+  epocaId: z.string().cuid().optional(),
+});
+
+/** Analítico de treino de um atleta (assiduidade, RPE, exposição por categoria). */
+export const obterAnaliticoTreinoAtletaSchema = z.object({
+  atletaId: z.string().cuid(),
+  escalaoId: z.string().cuid().optional(),
+  epocaId: z.string().cuid().optional(),
+});
+
+export type ObterUsoExercicioInput = z.infer<typeof obterUsoExercicioSchema>;
+export type ObterRankingUsoExerciciosInput = z.infer<typeof obterRankingUsoExerciciosSchema>;
+export type ObterAnaliticoTreinoEscalaoInput = z.infer<typeof obterAnaliticoTreinoEscalaoSchema>;
+export type ObterAnaliticoTreinoAtletaInput = z.infer<typeof obterAnaliticoTreinoAtletaSchema>;
+
 /**
  * F1.2 — export CSV do analítico de escalão. Reaproveita os parâmetros de
  * `analiticoEscalaoSchema` (sem `epocaId` — usa a época em contexto).
