@@ -40,6 +40,13 @@
     --ring: 14 87% 53%; /* laranja */
 
     --radius: 8px;
+
+    /* Neutros dos gráficos SVG (grelha/eixos/rótulos/realce de linha) — adaptam
+       ao tema. Em claro: cinzas quentes da marca sobre superfície branca. */
+    --grafico-grid: #e4e1db; /* cinza-200 quente (hairline) */
+    --grafico-texto: #57514a; /* cinza-600 (rótulos) */
+    --grafico-texto-muted: #98938d; /* cinza-400 (valores/eixos) */
+    --grafico-realce: color-mix(in srgb, var(--cor-primaria, #f0531e) 8%, white);
   }
 
   /*
@@ -76,6 +83,13 @@
     --border: 246 9% 22%;
     --input: 246 9% 22%;
     --ring: 14 87% 53%;
+
+    /* Neutros dos gráficos em tema escuro — legíveis sobre superfícies #1c1b22.
+       A cor das barras/linhas continua a seguir --cor-primaria (cor do clube). */
+    --grafico-grid: #2a2933; /* hairline discreta sobre escuro */
+    --grafico-texto: #d8d3cb; /* rótulos claros (contraste AA) */
+    --grafico-texto-muted: #928c84; /* valores/eixos */
+    --grafico-realce: color-mix(in srgb, var(--cor-primaria, #f0531e) 20%, #1c1b22);
 
     color-scheme: dark;
   }

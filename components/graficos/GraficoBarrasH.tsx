@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 
-// Cor do clube (herda de --cor-primaria no layout) + neutros quentes da marca
+// Cor do clube (herda de --cor-primaria no layout) + neutros que adaptam ao tema.
+// Os neutros usam variáveis (--grafico-*) definidas em globals.css, com valores
+// distintos em claro/escuro, para o gráfico ser legível sobre superfícies claras
+// (#fff) e escuras (#1c1b22). Fallbacks = tons quentes da marca (tema claro).
 const C_BARRA = "var(--cor-primaria, #F0531E)";
 const C_BARRA_HOVER = "color-mix(in srgb, var(--cor-primaria, #F0531E) 80%, #000)";
-const C_GRID = "#E4E1DB";        // cinza-200 quente (hairline)
-const C_TEXTO_MUTED = "#98938D"; // cinza-400 (axis/labels)
-const C_TEXTO = "#57514A";       // cinza-600
+const C_GRID = "var(--grafico-grid, #E4E1DB)";              // hairline
+const C_TEXTO_MUTED = "var(--grafico-texto-muted, #98938D)"; // axis/labels
+const C_TEXTO = "var(--grafico-texto, #57514A)";            // rótulos
+const C_REALCE = "var(--grafico-realce, color-mix(in srgb, var(--cor-primaria, #F0531E) 8%, white))";
 
 const LABEL_W = 148;
 const BAR_AREA = 200;
@@ -102,7 +106,7 @@ export function GraficoBarrasH({
                   y={PAD_V + i * ROW_H}
                   width={TOTAL_W}
                   height={ROW_H}
-                  fill="color-mix(in srgb, var(--cor-primaria, #F0531E) 8%, white)"
+                  fill={C_REALCE}
                   rx={2}
                 />
               )}

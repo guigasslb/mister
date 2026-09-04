@@ -112,21 +112,36 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
         </div>
       </SecaoAnalitico>
 
-      {/* Distribuição por tipo de sessão */}
-      {barrasTipoSessao.length > 0 && (
-        <SecaoAnalitico titulo="Tipos de sessão">
-          <CartaoGrafico>
-            <GraficoBarrasH
-              dados={barrasTipoSessao}
-              titulo="Distribuição por tipo de sessão"
-              unidade="sessões"
-              maxRows={barrasTipoSessao.length}
-            />
-          </CartaoGrafico>
+      {/* Composição dos treinos — tipos de sessão + categorias lado a lado, na
+          mesma densidade 2-up do PainelEscalao ("Rankings ofensivos"). */}
+      {(barrasTipoSessao.length > 0 || barrasCategoria.length > 0) && (
+        <SecaoAnalitico titulo="Composição dos treinos">
+          <div className="grid gap-6 sm:grid-cols-2">
+            {barrasTipoSessao.length > 0 && (
+              <CartaoGrafico>
+                <GraficoBarrasH
+                  dados={barrasTipoSessao}
+                  titulo="Por tipo de sessão"
+                  unidade="sessões"
+                  maxRows={barrasTipoSessao.length}
+                />
+              </CartaoGrafico>
+            )}
+            {barrasCategoria.length > 0 && (
+              <CartaoGrafico>
+                <GraficoBarrasH
+                  dados={barrasCategoria}
+                  titulo="Por categoria"
+                  unidade="utilizações"
+                  maxRows={barrasCategoria.length}
+                />
+              </CartaoGrafico>
+            )}
+          </div>
         </SecaoAnalitico>
       )}
 
-      {/* Top 10 exercícios mais usados */}
+      {/* Top 10 exercícios mais usados — largura total (até 10 linhas). */}
       {barrasExercicios.length > 0 && (
         <SecaoAnalitico titulo="Exercícios mais usados">
           <CartaoGrafico>
@@ -135,20 +150,6 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
               titulo="Top 10 exercícios"
               unidade="utilizações"
               maxRows={10}
-            />
-          </CartaoGrafico>
-        </SecaoAnalitico>
-      )}
-
-      {/* Distribuição por categoria de exercício */}
-      {barrasCategoria.length > 0 && (
-        <SecaoAnalitico titulo="Distribuição por categoria">
-          <CartaoGrafico>
-            <GraficoBarrasH
-              dados={barrasCategoria}
-              titulo="Utilização por categoria"
-              unidade="utilizações"
-              maxRows={barrasCategoria.length}
             />
           </CartaoGrafico>
         </SecaoAnalitico>
