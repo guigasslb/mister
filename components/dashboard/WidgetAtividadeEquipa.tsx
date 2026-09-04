@@ -18,6 +18,7 @@ import {
   type EventoAtividade,
   type TipoAtividade,
 } from "@/lib/actions/analise";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 const ICONE_POR_TIPO: Record<TipoAtividade, typeof Calendar> = {
   SESSAO_CRIADA: Calendar,
@@ -51,7 +52,7 @@ function tempoRelativo(data: Date, agora: Date): string {
     (hoje.getTime() - inicioDiaEvento.getTime()) / 86_400_000,
   );
 
-  const horas = d.toLocaleTimeString("pt-PT", {
+  const horas = formatarDataHoraLisboa(d, {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -59,7 +60,7 @@ function tempoRelativo(data: Date, agora: Date): string {
   if (diffDias === 0) return `há ${diffH}h`;
   if (diffDias === 1) return `ontem às ${horas}`;
 
-  return `${d.toLocaleDateString("pt-PT", {
+  return `${formatarDataHoraLisboa(d, {
     day: "2-digit",
     month: "short",
   })} às ${horas}`;

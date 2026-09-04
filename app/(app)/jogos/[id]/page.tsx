@@ -23,6 +23,7 @@ import { BadgeModalidade } from "@/components/plantel/BadgeModalidade";
 import { eEscalaoFormacaoJovem } from "@/lib/schemas/social";
 import { mostrarCargaTreino } from "@/lib/utils";
 import { urlCard } from "@/lib/social/token";
+import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
 
 // 🔁 v7 (§3.7): rótulos PT-PT dos formatos de jogo (para o cabeçalho do detalhe).
 const LABEL_FORMATO: Record<string, string> = {
@@ -35,7 +36,7 @@ const LABEL_FORMATO: Record<string, string> = {
 };
 
 function formatarData(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -47,9 +48,9 @@ function formatarData(data: Date): string {
  * (meia-noite, 00:00), típico de registos antigos — nesse caso não se mostra.
  */
 function formatarHora(data: Date): string | null {
-  const d = new Date(data);
-  if (d.getHours() === 0 && d.getMinutes() === 0) return null;
-  return d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+  const { hora, minuto } = partesDataLisboa(data);
+  if (hora === 0 && minuto === 0) return null;
+  return formatarDataHoraLisboa(data, { hour: "2-digit", minute: "2-digit" });
 }
 
 export const metadata: Metadata = { title: "Detalhe do jogo" };

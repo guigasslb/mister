@@ -13,6 +13,7 @@ import { obterEpocaAtiva } from "@/lib/epoca-context";
 import { GestorExercicios } from "@/components/treinos/GestorExercicios";
 import { resolverExercicioSessao } from "@/lib/snapshot-exercicio";
 import { mostrarCargaTreino } from "@/lib/utils";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 import {
   MarcadorPresencas,
   type PresencaInicial,
@@ -29,7 +30,7 @@ import { nomeParticipanteMatch } from "@/lib/mano-a-mano-ui";
 import { BlocoManoManoSessao } from "@/components/mano-a-mano/BlocoManoManoSessao";
 
 function formatarDataHora(data: Date): string {
-  return new Date(data).toLocaleString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     weekday: "long",
     day: "2-digit",
     month: "long",

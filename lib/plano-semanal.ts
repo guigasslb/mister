@@ -9,27 +9,64 @@
  * Nunca devolve datas anteriores a `hoje` (o plano nunca gera treinos no
  * passado — §8.8.1). `hoje` é injetável para testes deterministas; por defeito
  * usa o momento atual.
+ *
+ * ⚠️ Fuso: TODA a lógica de fronteiras de dia/semana (dia da semana, chave de
+ * dedup, início/fim de dia, iteração de calendário) é ancorada ao fuso
+ * `Europe/Lisbon` — nunca ao fuso do processo Node. Em produção o processo
+ * corre em UTC; usar `getDay()`/`getDate()`/`getHours()` colocaria as datas de
+ * Lisboa no dia errado (−1h no Verão, WEST=UTC+1), quebrando a deduplicação e a
+ * geração de sessões. Ver `lib/utils-datas.ts`.
  */
 
-/** Dia da semana ISO-8601 (1=segunda … 7=domingo) de uma data JS. */
+import { partesDataLisboa } from "@/lib/utils-datas";
+
+const MS_DIA = 24 * 60 * 60 * 1000;
+
+/**
+ * Dia da semana ISO-8601 (1=segunda … 7=domingo) do dia de calendário de
+ * Lisboa a que o instante `d` pertence. Independente do fuso do processo.
+ */
 export function diaSemanaISO(d: Date): number {
-  const dow = d.getDay(); // 0=domingo … 6=sábado
+  const { ano, mes, dia } = partesDataLisboa(d);
+  // getUTCDay() sobre a data de calendário (sem componente de hora) devolve o
+  // dia da semana correto sem interferência de fuso.
+  const dow = new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay(); // 0=dom … 6=sáb
   return dow === 0 ? 7 : dow;
 }
 
-/** Cópia da data ao início do dia (00:00:00.000, hora local). */
+/** Instante do início do dia (00:00, hora de parede de Lisboa) do dia a que `d` pertence. */
 export function inicioDoDia(d: Date): Date {
-  const dt = new Date(d);
-  dt.setHours(0, 0, 0, 0);
-  return dt;
+  const { ano, mes, dia } = partesDataLisboa(d);
+  return horaParedeLisboaParaInstante(ano, mes, dia, 0, 0);
 }
 
-/** Chave de calendário `YYYY-MM-DD` (hora local) para deduplicação por dia. */
+/** Instante do fim do dia (23:59:59.999, hora de parede de Lisboa) do dia a que `d` pertence. */
+export function fimDoDia(d: Date): Date {
+  const { ano, mes, dia } = partesDataLisboa(d);
+  const inicioMinutoFinal = horaParedeLisboaParaInstante(ano, mes, dia, 23, 59);
+  return new Date(inicioMinutoFinal.getTime() + 59_999); // 23:59:59.999 Lisboa
+}
+
+/** Chave de calendário `YYYY-MM-DD` (dia de Lisboa) para deduplicação por dia. */
 export function chaveDia(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dia}`;
+  const { ano, mes, dia } = partesDataLisboa(d);
+  const m = String(mes).padStart(2, "0");
+  const dd = String(dia).padStart(2, "0");
+  return `${ano}-${m}-${dd}`;
+}
+
+/**
+ * Número de dia de calendário de Lisboa, comparável (`AAAAMMDD`). Usado para
+ * comparar fronteiras de dia sem depender do fuso do processo nem de horas.
+ */
+function numeroDiaLisboa(d: Date): number {
+  const { ano, mes, dia } = partesDataLisboa(d);
+  return ano * 10000 + mes * 100 + dia;
+}
+
+/** Decompõe um `AAAAMMDD` nas suas partes de calendário. */
+function partesDeNumeroDia(n: number): { ano: number; mes: number; dia: number } {
+  return { ano: Math.floor(n / 10000), mes: Math.floor((n % 10000) / 100), dia: n % 100 };
 }
 
 // ─── Ancoragem ao fuso Europe/Lisbon (§ bug de timezone) ─────────────────────
@@ -115,10 +152,11 @@ export function combinarDataHora(data: Date, hora: string): Date {
   return horaParedeLisboaParaInstante(ano, mes, dia, h, m);
 }
 
-/** "HH:MM" (hora local) de uma data. */
+/** "HH:MM" (hora de parede de Lisboa) de um instante. */
 export function horaDeData(d: Date): string {
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
+  const { hora, minuto } = partesDataLisboa(d);
+  const h = String(hora).padStart(2, "0");
+  const m = String(minuto).padStart(2, "0");
   return `${h}:${m}`;
 }
 
@@ -156,20 +194,25 @@ export function gerarDatasDePlano(
   const dias = new Set(diasSemana);
   if (dias.size === 0) return [];
 
-  const fim = inicioDoDia(dataFim);
-  const corte = inicioDoDia(hoje);
+  // Fronteiras como número de dia de calendário de Lisboa (comparáveis, sem
+  // horas nem fuso do processo). Arranca no maior de (dataInicio, hoje).
+  const fimNum = numeroDiaLisboa(dataFim);
+  const corteNum = numeroDiaLisboa(hoje);
+  const inicioNum = Math.max(numeroDiaLisboa(dataInicio), corteNum);
+  if (inicioNum > fimNum) return [];
 
-  // Arranca no maior de (dataInicio, hoje): nunca gera no passado.
-  const inicioIntervalo = inicioDoDia(dataInicio);
-  let cursor = inicioIntervalo.getTime() < corte.getTime() ? corte : inicioIntervalo;
+  // Itera dia-a-dia ancorando ao MEIO-DIA de Lisboa: 12:00 ± 1h (DST) nunca
+  // atravessa a meia-noite, pelo que o dia de calendário permanece correto sem
+  // acumular desvio ao longo das transições de horário de verão/inverno.
+  const inicio = partesDeNumeroDia(inicioNum);
+  let cursor = horaParedeLisboaParaInstante(inicio.ano, inicio.mes, inicio.dia, 12, 0);
 
   const datas: Date[] = [];
-  while (cursor.getTime() <= fim.getTime()) {
+  while (numeroDiaLisboa(cursor) <= fimNum) {
     if (dias.has(diaSemanaISO(cursor))) {
-      datas.push(new Date(cursor));
+      datas.push(cursor);
     }
-    cursor = new Date(cursor);
-    cursor.setDate(cursor.getDate() + 1);
+    cursor = new Date(cursor.getTime() + MS_DIA);
   }
   return datas;
 }

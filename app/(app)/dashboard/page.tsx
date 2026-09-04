@@ -49,9 +49,10 @@ import {
 } from "@/lib/dashboard-lembretes";
 import { ListaLembretes } from "@/components/lembretes/ListaLembretes";
 import type { Reuniao } from "@prisma/client";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 function dataLonga(data: Date): string {
-  return new Date(data).toLocaleString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -61,7 +62,7 @@ function dataLonga(data: Date): string {
 }
 
 function dataCurta(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     weekday: "short",
     day: "2-digit",
     month: "short",
@@ -726,7 +727,7 @@ function CartaoReuniao({
           <span className="truncate">{r.titulo}</span>
         </p>
         <p className="text-legenda text-cinza-500">
-          {new Date(r.data).toLocaleString("pt-PT", {
+          {formatarDataHoraLisboa(r.data, {
             day: "2-digit",
             month: "short",
             hour: "2-digit",

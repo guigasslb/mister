@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ─── Função pura de geração de datas (sem mocks) ─────────────────────────────
 import {
@@ -9,6 +9,7 @@ import {
   duracaoEntreHoras,
   somarMinutos,
 } from "@/lib/plano-semanal";
+import { partesDataLisboa, wallClockLisbonToInstant } from "@/lib/utils-datas";
 
 // Âncoras conhecidas (2026-08-31 é uma segunda-feira — ver tests/semana.test.ts).
 const D = (ano: number, mes1: number, dia: number) => new Date(ano, mes1 - 1, dia);
@@ -61,11 +62,14 @@ describe("helpers de hora (§8.8.1)", () => {
     expect(diaSemanaISO(D(2026, 9, 6))).toBe(7); // domingo
   });
 
-  it("combinarDataHora aplica HH:MM ao dia", () => {
+  it("combinarDataHora aplica HH:MM ao dia (hora de parede de Lisboa)", () => {
+    // Asserção ancorada a Lisboa (não a `getHours()`, que depende do fuso do
+    // processo): sob TZ=UTC o instante é 17:30Z mas continua a ser 18:30 em Lisboa.
     const dt = combinarDataHora(D(2026, 9, 2), "18:30");
-    expect(dt.getHours()).toBe(18);
-    expect(dt.getMinutes()).toBe(30);
-    expect(dt.getDate()).toBe(2);
+    const { dia, hora, minuto } = partesDataLisboa(dt);
+    expect(hora).toBe(18);
+    expect(minuto).toBe(30);
+    expect(dia).toBe(2);
   });
 
   it("duracaoEntreHoras calcula minutos", () => {
@@ -123,7 +127,12 @@ const EPOCA = {
 const PERM_OK = { ok: true, ctx: { clube: { id: "clube1" } } };
 
 describe("criarPlanoSemanal (§8.8.1)", () => {
+  // Congela o "agora" ANTES do intervalo da época de teste (08-31…09-13) para
+  // que o corte "nunca no passado" (§8.8.1) seja determinista e independente da
+  // data real de execução. Instante em UTC → válido sob qualquer TZ.
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-24T09:00:00Z"));
     vi.clearAllMocks();
     mocked(auth).mockResolvedValue({ user: { id: "user1" } });
     mocked(obterClubeIdAtual).mockResolvedValue("clube1");
@@ -135,6 +144,10 @@ describe("criarPlanoSemanal (§8.8.1)", () => {
       typeof arg === "function" ? (arg as (tx: unknown) => unknown)(prisma) : Promise.all(arg as unknown[]),
     );
     mocked(prisma.sessao.createMany).mockResolvedValue({ count: 0 });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   const dadosBase = {
@@ -241,7 +254,10 @@ describe("atualizarSessao — alcance ESTA_E_FUTURAS (§8.8.1)", () => {
   });
 
   const dados = {
-    data: new Date(2026, 8, 7, 20, 0), // 2026-09-07 20:00
+    // 2026-09-07 20:00 hora de parede de Lisboa (como o <input datetime-local>
+    // produz na app). Construído via `wallClockLisbonToInstant` para ser
+    // independente do fuso do processo (sob TZ=UTC o instante é 19:00Z).
+    data: wallClockLisbonToInstant("2026-09-07T20:00"),
     escalaoId: ESC_ID,
     tipoSessao: "NORMAL" as const,
     duracaoMin: 75,

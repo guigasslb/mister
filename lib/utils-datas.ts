@@ -13,7 +13,7 @@
 // dependências externas) para respeitar automaticamente o horário de verão.
 
 /** Fuso canónico da aplicação (Portugal continental). */
-const FUSO_LISBOA = "Europe/Lisbon";
+export const FUSO_LISBOA = "Europe/Lisbon";
 
 /**
  * Minutos que Lisboa está adiantada face ao UTC para uma dada data wall-clock.
@@ -65,4 +65,55 @@ export function instantToWallClockLisbon(date: Date): string {
     minute: "2-digit",
   });
   return formatador.format(date).replace(" ", "T").slice(0, 16);
+}
+
+/**
+ * Formata um instante (Date/ISO/epoch) em pt-PT, SEMPRE no fuso de Lisboa.
+ *
+ * Necessário porque os Server Components correm em UTC (produção): sem fixar o
+ * fuso, `toLocaleString`/`toLocaleTimeString` usariam UTC e mostrariam a hora
+ * −1h no verão de Lisboa (bug do detalhe do treino: 18:30 exibido como 17:30).
+ * Ao fixar Europe/Lisbon o resultado é correto e idêntico em servidor e cliente,
+ * respeitando automaticamente o horário de verão (WEST/WET).
+ */
+export function formatarDataHoraLisboa(
+  data: Date | string | number,
+  opcoes: Intl.DateTimeFormatOptions,
+): string {
+  return new Intl.DateTimeFormat("pt-PT", {
+    timeZone: FUSO_LISBOA,
+    ...opcoes,
+  }).format(new Date(data));
+}
+
+/**
+ * Componentes wall-clock de Lisboa (números), para lógica dependente do dia/hora
+ * (ex.: detetar 00:00 «sem hora», agrupar eventos por dia) sem depender do fuso
+ * do runtime. Substitui `getHours()`/`getDate()`/… que usam o fuso do servidor.
+ */
+export function partesDataLisboa(data: Date | string | number): {
+  ano: number;
+  mes: number; // 1-12
+  dia: number;
+  hora: number; // 0-23
+  minuto: number;
+} {
+  const partes = new Intl.DateTimeFormat("en-GB", {
+    timeZone: FUSO_LISBOA,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(data));
+  const valor = (tipo: string) =>
+    Number(partes.find((p) => p.type === tipo)!.value);
+  return {
+    ano: valor("year"),
+    mes: valor("month"),
+    dia: valor("day"),
+    hora: valor("hour") % 24, // en-GB pode devolver "24" à meia-noite
+    minuto: valor("minute"),
+  };
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 type SessaoCalendario = {
   id: string;
@@ -140,7 +141,7 @@ export function CalendarioTreinos({
                     className="block truncate rounded bg-primary px-1 py-0.5 text-legenda text-white hover:bg-azul-900"
                     title={s.escalaoNome}
                   >
-                    {new Date(s.data).toLocaleTimeString("pt-PT", {
+                    {formatarDataHoraLisboa(s.data, {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}{" "}
@@ -154,7 +155,7 @@ export function CalendarioTreinos({
                     className="block truncate rounded bg-verde-600 px-1 py-0.5 text-legenda text-white hover:opacity-90"
                     title={`Reunião · ${r.titulo}`}
                   >
-                    {new Date(r.data).toLocaleTimeString("pt-PT", {
+                    {formatarDataHoraLisboa(r.data, {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}{" "}

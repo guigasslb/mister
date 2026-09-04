@@ -21,9 +21,10 @@ import { obterSeccoes } from "@/lib/actions/seccoes";
 import { mapaModalidadePorEscalao } from "@/lib/modalidade-escalao";
 import { BadgeModalidade } from "@/components/plantel/BadgeModalidade";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
+import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
 
 function formatarData(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     weekday: "short",
     day: "2-digit",
     month: "short",
@@ -35,9 +36,9 @@ function formatarData(data: Date): string {
  * (meia-noite, 00:00), típico de registos antigos — nesse caso não se mostra.
  */
 function formatarHora(data: Date): string | null {
-  const d = new Date(data);
-  if (d.getHours() === 0 && d.getMinutes() === 0) return null;
-  return d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+  const { hora, minuto } = partesDataLisboa(data);
+  if (hora === 0 && minuto === 0) return null;
+  return formatarDataHoraLisboa(data, { hour: "2-digit", minute: "2-digit" });
 }
 
 export const metadata: Metadata = { title: "Jogos" };

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { CasaFora, TipoJogo, TipoSessao } from "@prisma/client";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 // Forma completa do evento da agenda unificada (treinos + jogos + reuniões).
 // Definida localmente (e não importada de `lib/actions/agenda`) para que o
@@ -83,7 +84,7 @@ function indiceSemana(date: Date): number {
 }
 
 function formatarHora(data: Date): string {
-  return new Date(data).toLocaleTimeString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     hour: "2-digit",
     minute: "2-digit",
   });

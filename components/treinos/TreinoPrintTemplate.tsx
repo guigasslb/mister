@@ -4,6 +4,7 @@ import { diagramaSchema, LABEL_PARTE_TREINO } from "@/lib/schemas/exercicio";
 import { LABEL_CATEGORIA_PRINCIPAL } from "@/lib/schemas/subcategoria";
 import { LABEL_TIPO_SESSAO, LABEL_MOMENTO_SEMANA, type MomentoSemana } from "@/lib/schemas/treino";
 import { LABEL_PERIODO } from "@/lib/schemas/planeamento";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 import type {
   TipoSessao,
   ParteTreino,
@@ -57,17 +58,16 @@ export type DadosImpressaoTreino = {
 };
 
 function formatarDataLonga(data: Date): string {
-  const d = new Date(data);
   // `pt-PT` devolve o dia da semana/mês em minúsculas ("quinta-feira, 27 de
   // agosto de 2026"); capitalizamos apenas a primeira letra da frase para não
   // ficar "Quinta-Feira De Agosto" (evita depender do CSS `capitalize`).
-  const dataStr = d.toLocaleDateString("pt-PT", {
+  const dataStr = formatarDataHoraLisboa(data, {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
   });
-  const horaStr = d.toLocaleTimeString("pt-PT", {
+  const horaStr = formatarDataHoraLisboa(data, {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -76,7 +76,7 @@ function formatarDataLonga(data: Date): string {
 }
 
 function formatarDataImpressao(data: Date): string {
-  return new Date(data).toLocaleString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

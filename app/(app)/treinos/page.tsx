@@ -32,6 +32,7 @@ import { LABEL_MOMENTO_SEMANA, type MomentoSemana } from "@/lib/schemas/treino";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { CalendarioTreinos } from "@/components/treinos/CalendarioTreinos";
 import { AjudaPlaneamento } from "@/components/treinos/AjudaPlaneamento";
+import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
 
 const PRESENTES = new Set(["PRESENTE", "ATRASADO"]);
 
@@ -43,13 +44,13 @@ function capitalizar(s: string): string {
 
 /** "Ter 17 set · 20h00" */
 function formatarDiaHora(data: Date): string {
-  const d = new Date(data);
-  const dia = capitalizar(d.toLocaleDateString("pt-PT", { weekday: "short" }).replace(".", ""));
-  const mes = d.toLocaleDateString("pt-PT", { month: "short" }).replace(".", "");
-  const hora = d
-    .toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })
-    .replace(":", "h");
-  return `${dia} ${d.getDate()} ${mes} · ${hora}`;
+  const { dia: diaMes, hora, minuto } = partesDataLisboa(data);
+  const dia = capitalizar(
+    formatarDataHoraLisboa(data, { weekday: "short" }).replace(".", ""),
+  );
+  const mes = formatarDataHoraLisboa(data, { month: "short" }).replace(".", "");
+  const horaStr = `${String(hora).padStart(2, "0")}h${String(minuto).padStart(2, "0")}`;
+  return `${dia} ${diaMes} ${mes} · ${horaStr}`;
 }
 
 /** "15–21 set" (mesmo mês) ou "29 set–5 out" (meses diferentes). */

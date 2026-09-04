@@ -17,6 +17,7 @@ import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { FiltroEscalaoAgenda } from "@/components/agenda/FiltroEscalaoAgenda";
 import { FiltroTipoAgenda } from "@/components/agenda/FiltroTipoAgenda";
 import { CalendarioAgenda } from "@/components/agenda/CalendarioAgenda";
+import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
 
 export const metadata: Metadata = { title: "Agenda" };
 
@@ -25,7 +26,7 @@ type TipoEvento = "TREINO" | "JOGO" | "REUNIAO";
 
 /** Cabeçalho de dia: "seg, 12 ago". */
 function formatarDia(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -34,16 +35,16 @@ function formatarDia(data: Date): string {
 
 /** Hora do evento: "18:30". */
 function formatarHora(data: Date): string {
-  return new Date(data).toLocaleTimeString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-/** Chave YYYY-MM-DD (hora local) para agrupar eventos por dia. */
+/** Chave YYYY-MM-DD (fuso de Lisboa) para agrupar eventos por dia. */
 function chaveDia(data: Date): string {
-  const d = new Date(data);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const { ano, mes, dia } = partesDataLisboa(data);
+  return `${ano}-${mes}-${dia}`;
 }
 
 function agruparPorDia(eventos: EventoAgenda[]): { dia: Date; eventos: EventoAgenda[] }[] {

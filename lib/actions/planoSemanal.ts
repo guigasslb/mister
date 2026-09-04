@@ -16,6 +16,7 @@ import {
   gerarDatasDePlano,
   diaSemanaISO,
   inicioDoDia,
+  fimDoDia,
   chaveDia,
   combinarDataHora,
   duracaoEntreHoras,
@@ -48,7 +49,10 @@ class ErroNegocio extends Error {}
  * é responsabilidade de `gerarDatasDePlano`.
  */
 function inicioEfetivo(dataInicioGeracao: string, epoca: Epoca): Date {
-  const pedido = inicioDoDia(new Date(`${dataInicioGeracao}T00:00:00`));
+  // "YYYY-MM-DD" ancorado ao meio-dia UTC: garante que o dia de calendário de
+  // Lisboa é o pretendido (imune ao fuso do processo), antes de o normalizar
+  // para o início do dia de Lisboa via `inicioDoDia`.
+  const pedido = inicioDoDia(new Date(`${dataInicioGeracao}T12:00:00Z`));
   const inicioEpoca = inicioDoDia(epoca.dataInicio);
   return pedido.getTime() < inicioEpoca.getTime() ? inicioEpoca : pedido;
 }
@@ -144,10 +148,8 @@ async function diasOcupados(
   fim: Date,
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<Set<string>> {
-  const fimDoDia = new Date(inicioDoDia(fim));
-  fimDoDia.setHours(23, 59, 59, 999);
   const existentes = await client.sessao.findMany({
-    where: { escalaoId, epocaId, data: { gte: inicioDoDia(inicio), lte: fimDoDia } },
+    where: { escalaoId, epocaId, data: { gte: inicioDoDia(inicio), lte: fimDoDia(fim) } },
     select: { data: true },
   });
   return new Set(existentes.map((s) => chaveDia(s.data)));

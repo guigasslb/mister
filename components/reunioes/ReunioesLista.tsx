@@ -39,7 +39,7 @@ import {
   alternarAfixadaReuniao,
 } from "@/lib/actions/reunioes";
 import { LABEL_AMBITO_REUNIAO } from "@/lib/schemas/reuniao";
-import { instantToWallClockLisbon, wallClockLisbonToInstant } from "@/lib/utils-datas";
+import { formatarDataHoraLisboa, instantToWallClockLisbon, wallClockLisbonToInstant } from "@/lib/utils-datas";
 import type { Reuniao } from "@prisma/client";
 
 type EscalaoBasico = { id: string; nome: string };
@@ -218,7 +218,7 @@ export function ReunioesLista({
                 <div className="flex-1">
                   <p className="text-corpo font-semibold text-cinza-900">{r.titulo}</p>
                   <p className="text-legenda text-cinza-500">
-                    {new Date(r.data).toLocaleString("pt-PT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    {formatarDataHoraLisboa(r.data, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                     {" · "}
                     {r.ambito === "CLUBE" ? LABEL_AMBITO_REUNIAO.CLUBE : nomeEscalao(r.escalaoId)}
                   </p>
