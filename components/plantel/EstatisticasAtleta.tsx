@@ -27,11 +27,20 @@ export function EstatisticasAtleta({
   eGR,
   evolucao,
   presencas,
+  mostrarPresencaMensal = true,
 }: {
   stats: EstatisticasAgregadas;
   eGR: boolean;
   evolucao?: JogoDadosAtleta[];
   presencas?: PresencaMensal[];
+  /**
+   * Controla a renderização do gráfico «Taxa de presença por mês». No perfil do
+   * atleta, quando os analíticos avançados (PainelAtleta) estão visíveis, esse
+   * painel já apresenta o mesmo gráfico — a base deve escondê-lo para não
+   * duplicar. Sem permissão de relatórios o painel avançado não aparece, pelo
+   * que a base mantém o gráfico (default true).
+   */
+  mostrarPresencaMensal?: boolean;
 }) {
   const semDados = stats.jogosConvocado === 0 && stats.sessoesTotais === 0;
 
@@ -61,7 +70,7 @@ export function EstatisticasAtleta({
   }));
 
   const temEvolucaoJogos = pontosJogos.length >= 2;
-  const temPresencaMensal = pontosPresenca.length >= 2;
+  const temPresencaMensal = mostrarPresencaMensal && pontosPresenca.length >= 2;
 
   return (
     <div className="space-y-6">

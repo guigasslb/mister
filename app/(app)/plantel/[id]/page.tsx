@@ -246,6 +246,10 @@ export default async function PerfilAtletaPage({
                 eGR={eGR}
                 evolucao={resEvolucao.sucesso ? resEvolucao.dados : undefined}
                 presencas={resPresencas.sucesso ? resPresencas.dados : undefined}
+                // Com permissão de relatórios, o painel avançado (PainelAtleta)
+                // apresenta o gráfico de presença mensal; esconder o da base
+                // evita a duplicação na mesma aba.
+                mostrarPresencaMensal={!podeVerRelatorios}
               />
             ) : (
               <p className="text-corpo-sec text-vermelho-600">{resStats.erro}</p>
