@@ -315,9 +315,23 @@ export function GestorExercicios({
       </div>
 
       {exercicios.length === 0 ? (
-        <p className="rounded-md border border-dashed border-cinza-300 p-4 text-center text-corpo-sec text-cinza-500">
-          Sem exercícios. Adiciona exercícios da biblioteca.
-        </p>
+        // §8.8.2: sessões (incl. concluídas) são sempre editáveis. O empty state
+        // é acionável — nunca um dead-end — para permitir adicionar exercícios
+        // retroativamente a treinos já realizados.
+        <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-cinza-300 p-6 text-center">
+          <p className="text-corpo-sec text-cinza-500">
+            Sem exercícios. Adiciona exercícios da biblioteca.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDialogAberto(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Adicionar exercício
+          </Button>
+        </div>
       ) : (
         <>
           {ORDEM_FASES.filter((fase) => grupos[fase].length > 0).map((fase) => (
