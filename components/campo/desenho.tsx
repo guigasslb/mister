@@ -112,7 +112,10 @@ export const ESCADINHA_DEGRAUS: Record<TamanhoEscadinha, number> = {
 // elementos, animação e interação é agnóstico ao fundo.
 
 const BRANCO = "#FFFFFF";
-const RELVA = "#0E7A3C";
+// Fundo do campo = cor do clube (--cor-primaria, alimentada pelo layout — ver
+// docs/BRAND.md §3). Fallback = laranja da marca, como no resto do ficheiro.
+// As linhas mantêm-se a branco (BRANCO) para contraste sobre o acento do clube.
+const RELVA = "var(--cor-primaria, #F0531E)";
 const TRACO = 1.5;
 const MEIO_Y = CAMPO_H / 2;
 

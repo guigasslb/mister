@@ -233,6 +233,7 @@ export default async function DetalheSessaoPage({
           nome: a.nome,
           // Número da participação neste escalão (F1).
           numero: a.participacaoContexto?.numero ?? s.numeroPorAtleta[a.id] ?? null,
+          praticaDuplaModalidade: a.praticaDuplaModalidade,
         }))}
         presencasIniciais={presencasIniciais}
         // Sessão fechada → marcação de presenças em modo só-leitura (§8).
@@ -268,6 +269,9 @@ export default async function DetalheSessaoPage({
           diagrama: b.diagrama,
           // §3.5: fase sugerida por defeito ao adicionar (herdada do exercício).
           parteTreino: b.parteTreino,
+          // Detalhe mostrado ao expandir o exercício no seletor.
+          descricao: b.descricao,
+          objetivo: b.objetivo,
         }))}
       />
 

@@ -76,7 +76,14 @@ type ExercicioBiblioteca = {
   diagrama: unknown;
   // §3.5: fase sugerida por defeito ao adicionar (herdada do exercício).
   parteTreino: ParteTreinoValor | null;
+  // Detalhe mostrado ao expandir o exercício no seletor (campo maior + descrição).
+  descricao: string | null;
+  objetivo: string | null;
 };
+
+// Sentinela do filtro "todas as fases" no seletor da biblioteca.
+const TODAS_FASES = "__todas__" as const;
+type FiltroFaseValor = ParteTreinoValor | typeof TODAS_FASES;
 
 // §3.5: ordem canónica das fases + bucket para exercícios sem fase (rows legadas).
 const SEM_FASE = "SEM_FASE" as const;
@@ -142,6 +149,10 @@ export function GestorExercicios({
   const [dialogAberto, setDialogAberto] = useState(false);
   const [modoEdicao, setModoEdicao] = useState(false);
   const [expandido, setExpandido] = useState<string | null>(null);
+  // Bug 1: exercício da biblioteca expandido no seletor (campo maior + descrição).
+  const [bibExpandido, setBibExpandido] = useState<string | null>(null);
+  // Bug 2: filtro por fase de treino aplicado à lista da biblioteca no seletor.
+  const [filtroFase, setFiltroFase] = useState<FiltroFaseValor>(TODAS_FASES);
   // §3.5: fase escolhida no formulário de adição (aplica-se ao exercício adicionado).
   const [faseAdicionar, setFaseAdicionar] = useState<ParteTreinoValor>("PRINCIPAL");
   const [exercicioModal, setExercicioModal] = useState<
@@ -151,6 +162,13 @@ export function GestorExercicios({
 
   const total = exercicios.reduce((acc, e) => acc + (e.duracaoMin ?? 0), 0);
   const jaAdicionados = new Set(exercicios.map((e) => e.exercicio.id));
+
+  // Bug 2: aplicar o filtro por fase à biblioteca mostrada no seletor. Filtra pela
+  // fase sugerida do exercício (`parteTreino`); "todas as fases" mostra tudo.
+  const bibliotecaFiltrada =
+    filtroFase === TODAS_FASES
+      ? biblioteca
+      : biblioteca.filter((ex) => ex.parteTreino === filtroFase);
 
   // §3.5: agrupamento por fase, preservando a ordem (exercícios já vêm ordenados
   // por `ordem`). Só se renderizam grupos com exercícios.
@@ -236,7 +254,13 @@ export function GestorExercicios({
               )}
             </Button>
           )}
-          <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
+          <Dialog
+            open={dialogAberto}
+            onOpenChange={(aberto) => {
+              setDialogAberto(aberto);
+              if (!aberto) setBibExpandido(null);
+            }}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">
                 <Plus className="h-4 w-4" />
@@ -268,45 +292,131 @@ export function GestorExercicios({
                 </Select>
               </div>
 
+              {/* Bug 2: filtro por fase — restringe a biblioteca à fase sugerida. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="filtro-fase">Filtrar por fase</Label>
+                <Select
+                  value={filtroFase}
+                  onValueChange={(v) => {
+                    setFiltroFase(v as FiltroFaseValor);
+                    setBibExpandido(null);
+                  }}
+                >
+                  <SelectTrigger id="filtro-fase">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={TODAS_FASES}>Todas as fases</SelectItem>
+                    {PARTES_TREINO.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {LABEL_PARTE_TREINO[p]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {biblioteca.length === 0 ? (
                 <p className="text-corpo-sec text-cinza-600">
                   A biblioteca está vazia. Cria exercícios primeiro.
                 </p>
+              ) : bibliotecaFiltrada.length === 0 ? (
+                <p className="text-corpo-sec text-cinza-600">
+                  Nenhum exercício na fase &ldquo;{LABEL_PARTE_TREINO[filtroFase as ParteTreinoValor]}&rdquo;.
+                </p>
               ) : (
                 <ul className="space-y-2">
-                  {biblioteca.map((ex) => (
-                    <li
-                      key={ex.id}
-                      className="flex items-center gap-3 rounded-md border border-cinza-200 p-3"
-                    >
-                      {/* Melhoria 1: pré-visualização do diagrama no seletor. */}
-                      <DiagramaCartao
-                        diagrama={ex.diagrama}
-                        nome={ex.nome}
-                        largura={80}
-                        className="w-20"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-corpo font-medium text-cinza-900">
-                          {ex.nome}
-                        </p>
-                        <p className="text-legenda text-cinza-500">
-                          {ex.categoriaPrincipal
-                            ? LABEL_CATEGORIA[ex.categoriaPrincipal]
-                            : "Sem categoria"}
-                          {ex.duracaoMin ? ` · ${ex.duracaoMin} min` : ""}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant={jaAdicionados.has(ex.id) ? "ghost" : "outline"}
-                        disabled={pending}
-                        onClick={() => adicionar(ex.id)}
+                  {bibliotecaFiltrada.map((ex) => {
+                    // Bug 1: clicar no exercício expande (campo maior + descrição).
+                    const aberto = bibExpandido === ex.id;
+                    const temDetalhe = Boolean(ex.descricao || ex.objetivo);
+                    return (
+                      <li
+                        key={ex.id}
+                        className="overflow-hidden rounded-md border border-cinza-200"
                       >
-                        {jaAdicionados.has(ex.id) ? "Adicionar +1" : "Adicionar"}
-                      </Button>
-                    </li>
-                  ))}
+                        <div className="flex items-center gap-3 p-3">
+                          {/* Melhoria 1: pré-visualização do diagrama no seletor. */}
+                          <DiagramaCartao
+                            diagrama={ex.diagrama}
+                            nome={ex.nome}
+                            largura={80}
+                            className="w-20"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setBibExpandido(aberto ? null : ex.id)}
+                            aria-expanded={aberto}
+                            className="flex min-w-0 flex-1 items-start gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-corpo font-medium text-cinza-900">
+                                {ex.nome}
+                              </span>
+                              <span className="block text-legenda text-cinza-500">
+                                {ex.categoriaPrincipal
+                                  ? LABEL_CATEGORIA[ex.categoriaPrincipal]
+                                  : "Sem categoria"}
+                                {ex.duracaoMin ? ` · ${ex.duracaoMin} min` : ""}
+                              </span>
+                            </span>
+                            <ChevronRight
+                              className={`mt-0.5 h-4 w-4 flex-shrink-0 text-cinza-400 transition-transform ${
+                                aberto ? "rotate-90" : ""
+                              }`}
+                            />
+                          </button>
+                          <Button
+                            size="sm"
+                            variant={jaAdicionados.has(ex.id) ? "ghost" : "outline"}
+                            disabled={pending}
+                            onClick={() => adicionar(ex.id)}
+                          >
+                            {jaAdicionados.has(ex.id) ? "Adicionar +1" : "Adicionar"}
+                          </Button>
+                        </div>
+
+                        {aberto && (
+                          <div className="flex flex-col gap-3 border-t border-cinza-100 bg-cinza-50 p-3 sm:flex-row">
+                            {/* Campo maior no estado expandido. */}
+                            <DiagramaCartao
+                              diagrama={ex.diagrama}
+                              nome={ex.nome}
+                              largura={220}
+                              className="w-full sm:w-56"
+                            />
+                            <div className="min-w-0 flex-1 space-y-2">
+                              {ex.objetivo && (
+                                <div>
+                                  <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+                                    Objetivo
+                                  </p>
+                                  <p className="mt-0.5 whitespace-pre-wrap text-corpo-sec text-cinza-900">
+                                    {ex.objetivo}
+                                  </p>
+                                </div>
+                              )}
+                              {ex.descricao && (
+                                <div>
+                                  <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+                                    Descrição / montagem
+                                  </p>
+                                  <p className="mt-0.5 whitespace-pre-wrap text-corpo-sec text-cinza-900">
+                                    {ex.descricao}
+                                  </p>
+                                </div>
+                              )}
+                              {!temDetalhe && (
+                                <p className="text-corpo-sec text-cinza-500">
+                                  Sem descrição para este exercício.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </DialogContent>

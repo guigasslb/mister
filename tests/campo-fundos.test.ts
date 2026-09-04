@@ -30,8 +30,8 @@ describe("LinhasCampo — fundos por formato (§11.5 / Apêndice B)", () => {
       expect(markup).toContain("<g");
       // Relvado + contorno (dois rects comuns a todos os fundos).
       expect(contar(markup, "<rect")).toBeGreaterThanOrEqual(2);
-      // Relva verde.
-      expect(markup).toContain("#0E7A3C");
+      // Relva = cor do clube (--cor-primaria), com fallback laranja da marca.
+      expect(markup).toContain("var(--cor-primaria, #F0531E)");
     }
   });
 
