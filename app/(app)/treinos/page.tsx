@@ -355,7 +355,7 @@ export default async function TreinosPage({
                 className="overflow-hidden rounded-lg border border-cinza-200 bg-white shadow-card"
               >
                 {/* Cabeçalho da semana */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cinza-200 bg-cinza-50/70 px-4 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cinza-200 bg-cinza-50/70 px-4 py-2.5 dark:bg-[#24232c]">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="text-corpo font-semibold text-cinza-900">
                       Semana {g.numero}
@@ -390,7 +390,7 @@ export default async function TreinosPage({
                     </Button>
                   </div>
                 ) : (
-                  <ul className="divide-y divide-cinza-100">
+                  <ul className="divide-y divide-[#EEEBE6] dark:divide-[#2c2b35]">
                     {g.sessoes.map((s) => {
                       const presentes = s.presencas.filter((p) => PRESENTES.has(p.estado)).length;
                       const momento = s.momentoSemana as MomentoSemana | null;
@@ -402,7 +402,7 @@ export default async function TreinosPage({
                           <Link
                             href={`/treinos/${s.id}`}
                             className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-cinza-50 ${
-                              concluido ? "bg-cinza-50/40" : ""
+                              concluido ? "bg-cinza-50/40 dark:bg-black/20" : ""
                             }`}
                           >
                             <div className="min-w-0 flex-1">
@@ -422,19 +422,19 @@ export default async function TreinosPage({
                                 )}
                                 {concluido &&
                                   (s.fechado ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-verde-600/30 bg-verde-600/10 px-2 py-0.5 text-legenda font-medium text-verde-600">
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-verde-600/30 bg-verde-600/10 px-2 py-0.5 text-legenda font-medium text-verde-600 dark:border-[#1E9E5A]/45 dark:bg-[#1E9E5A]/15 dark:text-[#4FD98D]">
                                       <CheckCircle2 className="h-3 w-3" />
                                       Fechado
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-ambar-500/30 bg-ambar-500/10 px-2 py-0.5 text-legenda font-medium text-ambar-600">
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-ambar-500/30 bg-ambar-500/10 px-2 py-0.5 text-legenda font-medium text-ambar-600 dark:border-[#E0900A]/45 dark:bg-[#E0900A]/15 dark:text-[#F5B44A]">
                                       <CircleAlert className="h-3 w-3" />
                                       Por fechar
                                     </span>
                                   ))}
                                 {/* Sessão realizada sem exercícios registados — precisa de atenção. */}
                                 {concluido && s._count.exercicios === 0 && (
-                                  <span className="inline-flex items-center gap-1 rounded-full border border-ambar-500/30 bg-ambar-500/10 px-2 py-0.5 text-legenda font-medium text-ambar-600">
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-ambar-500/30 bg-ambar-500/10 px-2 py-0.5 text-legenda font-medium text-ambar-600 dark:border-[#E0900A]/45 dark:bg-[#E0900A]/15 dark:text-[#F5B44A]">
                                     <CircleAlert className="h-3 w-3" />
                                     Sem exercícios
                                   </span>

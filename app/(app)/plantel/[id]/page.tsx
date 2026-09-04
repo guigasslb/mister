@@ -31,8 +31,6 @@ import { PainelAtleta } from "@/components/analiticos/PainelAtleta";
 import { ExportarCsvBotao } from "@/components/analiticos/ExportarCsvBotao";
 import { GerarRelatorioBotao } from "@/components/relatorios/GerarRelatorioBotao";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
-import { ApagarAtletaDefinitivamenteButton } from "@/components/plantel/ApagarAtletaDefinitivamenteButton";
-import { ToggleAtivoAtleta } from "@/components/plantel/ToggleAtivoAtleta";
 import { BadgeInscricao } from "@/components/plantel/BadgeInscricao";
 import { LABEL_POSICAO } from "@/lib/schemas/atleta";
 
@@ -43,14 +41,6 @@ function calcularIdade(dataNascimento: Date): number {
   const m = hoje.getMonth() - nasc.getMonth();
   if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
   return idade;
-}
-
-function formatarData(date: Date): string {
-  return new Date(date).toLocaleDateString("pt-PT", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
 }
 
 export const metadata: Metadata = { title: "Perfil do atleta" };
@@ -243,7 +233,6 @@ export default async function PerfilAtletaPage({
           <TabsTrigger value="caderneta">Caderneta</TabsTrigger>
           <TabsTrigger value="participacoes">Participações</TabsTrigger>
           <TabsTrigger value="carreira">Carreira</TabsTrigger>
-          <TabsTrigger value="dados">Dados</TabsTrigger>
         </TabsList>
 
         <TabsContent value="estatisticas" className="space-y-3">
@@ -329,80 +318,6 @@ export default async function PerfilAtletaPage({
 
         <TabsContent value="carreira">
           <CarreiraAtleta atletaId={a.id} />
-        </TabsContent>
-
-        <TabsContent value="dados" className="space-y-4">
-          {/* Estado do atleta no plantel (secção 8). Gerível por quem gere o plantel. */}
-          {podeGerirPlantel && (
-            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-              <ToggleAtivoAtleta atletaId={a.id} ativoInicial={a.ativo} />
-            </div>
-          )}
-
-          {a.dataNascimento || a.observacoes ? (
-            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card space-y-4">
-              {a.dataNascimento && (
-                <div>
-                  <p className="text-legenda uppercase tracking-wide text-cinza-500">
-                    Data de nascimento
-                  </p>
-                  <p className="text-corpo text-cinza-900">{formatarData(a.dataNascimento)}</p>
-                </div>
-              )}
-              {a.observacoes && (
-                <div>
-                  <p className="text-legenda uppercase tracking-wide text-cinza-500">
-                    Observações
-                  </p>
-                  <p className="text-corpo text-cinza-900 whitespace-pre-wrap">
-                    {a.observacoes}
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-corpo-sec text-cinza-500">Sem dados pessoais adicionais.</p>
-          )}
-
-          {(a.encarregadoNome || a.encarregadoContacto || a.encarregadoEmail) && (
-            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card space-y-3">
-              <p className="text-corpo font-semibold text-cinza-900">Encarregado de educação</p>
-              {a.encarregadoNome && (
-                <div>
-                  <p className="text-legenda uppercase tracking-wide text-cinza-500">Nome</p>
-                  <p className="text-corpo text-cinza-900">{a.encarregadoNome}</p>
-                </div>
-              )}
-              <div className="flex flex-wrap gap-6">
-                {a.encarregadoContacto && (
-                  <div>
-                    <p className="text-legenda uppercase tracking-wide text-cinza-500">Contacto</p>
-                    <p className="text-corpo text-cinza-900">{a.encarregadoContacto}</p>
-                  </div>
-                )}
-                {a.encarregadoEmail && (
-                  <div>
-                    <p className="text-legenda uppercase tracking-wide text-cinza-500">Email</p>
-                    <p className="text-corpo text-cinza-900">{a.encarregadoEmail}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Zona de perigo — hard-delete RGPD (P1.3). Só para quem gere o plantel. */}
-          {podeGerirPlantel && (
-            <div className="rounded-lg border border-vermelho-600/40 bg-vermelho-600/5 p-5 space-y-3">
-              <p className="text-corpo font-semibold text-vermelho-600">Zona de perigo</p>
-              <p className="text-corpo-sec text-cinza-600">
-                Apagar definitivamente remove o atleta e todos os dados pessoais associados
-                (presenças, caderneta, convocatórias, participações). A ação é irreversível
-                e destina-se ao cumprimento do direito ao apagamento (RGPD). Para apenas o
-                retirar das listas, usa «Arquivar atleta» no ecrã de edição.
-              </p>
-              <ApagarAtletaDefinitivamenteButton atletaId={a.id} nomeAtleta={a.nome} />
-            </div>
-          )}
         </TabsContent>
       </Tabs>
     </div>

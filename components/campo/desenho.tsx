@@ -458,6 +458,7 @@ export function ElementoSVG({
   focado,
   raioHit = 0,
   onFocarHit,
+  pathSelecionavel = true,
 }: {
   elemento: ElementoCampo;
   selecionado?: boolean;
@@ -465,6 +466,10 @@ export function ElementoSVG({
   // Raio (em unidades) do círculo de hit/toque invisível. 0 = read-only.
   raioHit?: number;
   onFocarHit?: (id: string) => void;
+  // Setas/linhas selecionáveis? `false` no modo animação (§11): as setas não
+  // participam nos passos, logo a faixa de hit/foco do trajecto é desativada para
+  // não interceptar cliques/foco de teclado destinados aos elementos-ponto.
+  pathSelecionavel?: boolean;
 }) {
   // B3: para setas/linhas o anel usa o primeiro ponto do trajecto (não (0,0)).
   const ancora = ancoraElemento(elemento);
@@ -515,7 +520,7 @@ export function ElementoSVG({
   // trajecto (stroke largo transparente) para aumentar a área de clique/toque e
   // servir de alvo de foco de teclado — paridade com o círculo dos elementos-ponto.
   const hitPath =
-    !temPonto && "pontos" in elemento && raioHit > 0 ? (
+    !temPonto && "pontos" in elemento && raioHit > 0 && pathSelecionavel ? (
       <path
         d={pontosParaPath(pontosSemRepetidos(elemento.pontos))}
         fill="none"

@@ -21,6 +21,8 @@ type EventoAgenda = {
   tipoJogo?: TipoJogo; // só para JOGO
   casaFora?: CasaFora; // só para JOGO
   descricao?: string; // só para REUNIAO
+  /** Só para TREINO: sessão realizada sem exercícios → indicador âmbar na pill. */
+  precisaAtencao?: boolean;
 };
 
 type Props = {
@@ -180,10 +182,22 @@ export function CalendarioAgenda({ eventos, ano, mes, hrefBase }: Props) {
                   <Link
                     key={`${ev.tipo}-${ev.id}`}
                     href={hrefEvento(ev)}
-                    className={`block truncate rounded px-1 py-0.5 text-legenda ${PILL_CLS[ev.tipo]}`}
-                    title={`${ROTULO_TIPO[ev.tipo]} · ${ev.titulo} · ${ev.escalaoNome}`}
+                    className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-legenda ${PILL_CLS[ev.tipo]}`}
+                    title={
+                      ev.precisaAtencao
+                        ? `${ROTULO_TIPO[ev.tipo]} · ${ev.titulo} · ${ev.escalaoNome} · sessão sem exercícios`
+                        : `${ROTULO_TIPO[ev.tipo]} · ${ev.titulo} · ${ev.escalaoNome}`
+                    }
                   >
-                    {formatarHora(ev.data)} {ev.titulo}
+                    {ev.precisaAtencao && (
+                      <span
+                        className="h-2 w-2 flex-shrink-0 rounded-full bg-ambar-500 ring-1 ring-white"
+                        aria-label="Sessão sem exercícios"
+                      />
+                    )}
+                    <span className="truncate">
+                      {formatarHora(ev.data)} {ev.titulo}
+                    </span>
                   </Link>
                 ))}
               </div>

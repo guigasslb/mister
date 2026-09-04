@@ -267,7 +267,7 @@ export function GestorExercicios({
                 Adicionar
               </Button>
             </DialogTrigger>
-            <DialogContent className="flex max-h-[85vh] flex-col p-0 sm:max-w-xl">
+            <DialogContent className="flex max-h-[85vh] flex-col p-0 sm:max-w-2xl">
               <DialogHeader className="border-b border-cinza-200 px-6 pb-4 pt-6">
                 <DialogTitle>Adicionar exercício da biblioteca</DialogTitle>
               </DialogHeader>
@@ -320,7 +320,7 @@ export function GestorExercicios({
               </div>
 
               {/* Lista scrollable — só a lista scrolla, os filtros ficam fixos. */}
-              <div className="flex-1 overflow-y-auto px-6 pb-6">
+              <div className="flex-1 overflow-y-auto px-6 pb-6 [scrollbar-gutter:stable]">
                 {biblioteca.length === 0 ? (
                   <p className="text-corpo-sec text-cinza-600">
                     A biblioteca está vazia. Cria exercícios primeiro.
@@ -340,19 +340,19 @@ export function GestorExercicios({
                         key={ex.id}
                         className="overflow-hidden rounded-md border border-cinza-200"
                       >
-                        <div className="flex items-center gap-3 p-3">
-                          {/* Melhoria 1: pré-visualização do diagrama no seletor. */}
+                        <div className="flex items-center gap-2 p-2.5">
+                          {/* Pré-visualização do diagrama no seletor. */}
                           <DiagramaCartao
                             diagrama={ex.diagrama}
                             nome={ex.nome}
-                            largura={80}
-                            className="w-20"
+                            largura={64}
+                            className="w-16 flex-shrink-0"
                           />
                           <button
                             type="button"
                             onClick={() => setBibExpandido(aberto ? null : ex.id)}
                             aria-expanded={aberto}
-                            className="flex min-w-0 flex-1 items-start gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            className="flex min-w-0 flex-1 items-start gap-1 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           >
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-corpo font-medium text-cinza-900">
@@ -371,15 +371,14 @@ export function GestorExercicios({
                               }`}
                             />
                           </button>
-                          <Button
-                            size="sm"
-                            variant={jaAdicionados.has(ex.id) ? "ghost" : "outline"}
+                          <button
+                            type="button"
                             disabled={pending}
                             onClick={() => adicionar(ex.id)}
-                            className="flex-shrink-0 whitespace-nowrap"
+                            className="flex-shrink-0 whitespace-nowrap rounded-md border border-cinza-300 bg-transparent px-3 py-1.5 text-sm font-medium text-cinza-700 hover:border-cinza-400 hover:bg-cinza-50 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
                           >
-                            {jaAdicionados.has(ex.id) ? "Adicionar +1" : "Adicionar"}
-                          </Button>
+                            {jaAdicionados.has(ex.id) ? "+1" : "Adicionar"}
+                          </button>
                         </div>
 
                         {aberto && (

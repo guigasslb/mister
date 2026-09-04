@@ -65,6 +65,7 @@ describe("obterAgendaClube", () => {
         objetivo: "Transições rápidas",
         tipoSessao: "NORMAL",
         escalao: { nome: "Sub-15" },
+        _count: { exercicios: 3 },
       },
     ] as never);
     vi.mocked(prisma.jogo.findMany).mockResolvedValue([
@@ -106,6 +107,7 @@ describe("obterAgendaClube", () => {
         objetivo: null,
         tipoSessao: "CAPTACAO",
         escalao: { nome: "Sub-13" },
+        _count: { exercicios: 1 },
       },
     ] as never);
 
@@ -168,6 +170,7 @@ describe("obterAgendaClube", () => {
         objetivo: "Bola parada",
         tipoSessao: "ABERTO",
         escalao: { nome: "Sub-15" },
+        _count: { exercicios: 2 },
       },
     ] as never);
     vi.mocked(prisma.jogo.findMany).mockResolvedValue([
@@ -187,6 +190,56 @@ describe("obterAgendaClube", () => {
     if (!r.sucesso) return;
     expect(r.dados[0]).toMatchObject({ tipo: "TREINO", tipoSessao: "ABERTO" });
     expect(r.dados[1]).toMatchObject({ tipo: "JOGO", tipoJogo: "AMIGAVEL", casaFora: "FORA" });
+  });
+
+  it("marca precisaAtencao só em treinos concluídos sem exercícios", async () => {
+    const agora = new Date();
+    const passado = new Date(agora);
+    passado.setDate(passado.getDate() - 5);
+    const futuro = new Date(agora);
+    futuro.setDate(futuro.getDate() + 5);
+
+    vi.mocked(prisma.sessao.findMany).mockResolvedValue([
+      // Concluída sem exercícios → precisa de atenção.
+      {
+        id: "s-atencao",
+        data: passado,
+        local: null,
+        objetivo: "Sem plano",
+        tipoSessao: "NORMAL",
+        escalao: { nome: "Sub-15" },
+        _count: { exercicios: 0 },
+      },
+      // Concluída com exercícios → não precisa.
+      {
+        id: "s-ok",
+        data: passado,
+        local: null,
+        objetivo: "Com plano",
+        tipoSessao: "NORMAL",
+        escalao: { nome: "Sub-15" },
+        _count: { exercicios: 4 },
+      },
+      // Futura sem exercícios → ainda não concluída, não precisa.
+      {
+        id: "s-futura",
+        data: futuro,
+        local: null,
+        objetivo: "Por planear",
+        tipoSessao: "NORMAL",
+        escalao: { nome: "Sub-15" },
+        _count: { exercicios: 0 },
+      },
+    ] as never);
+
+    const r = await obterAgendaClube();
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+
+    const porId = (id: string) => r.dados.find((e) => e.id === id);
+    expect(porId("s-atencao")?.precisaAtencao).toBe(true);
+    expect(porId("s-ok")?.precisaAtencao).toBe(false);
+    expect(porId("s-futura")?.precisaAtencao).toBe(false);
   });
 
   it("inclui reuniões, resolvendo o nome do escalão e a descrição", async () => {

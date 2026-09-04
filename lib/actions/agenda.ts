@@ -16,6 +16,7 @@ import {
   verificarConflitoSchema,
   type VerificarConflitoInput,
 } from "@/lib/schemas/agenda";
+import { treinoConcluido } from "@/lib/semana";
 import type { Prisma, Epoca, TipoSessao, TipoJogo, CasaFora } from "@prisma/client";
 
 /**
@@ -43,6 +44,12 @@ export interface EventoAgenda {
   casaFora?: CasaFora;
   /** Descrição da reunião — só presente em eventos de tipo REUNIAO. */
   descricao?: string;
+  /**
+   * Só para TREINO: sessão já realizada sem exercícios registados — sinaliza um
+   * indicador de aviso na UI (mesmo critério da lista/calendário de Treinos:
+   * `treinoConcluido(data) && _count.exercicios === 0`).
+   */
+  precisaAtencao?: boolean;
 }
 
 export interface FiltrosAgenda {
@@ -168,6 +175,7 @@ export async function obterAgendaClube(
             objetivo: true,
             tipoSessao: true,
             escalao: { select: { nome: true } },
+            _count: { select: { exercicios: true } },
           },
           orderBy: { data: "asc" },
         })
@@ -235,6 +243,8 @@ export async function obterAgendaClube(
       titulo: s.objetivo?.trim() || ROTULO_TIPO_SESSAO[s.tipoSessao],
       local: s.local,
       tipoSessao: s.tipoSessao,
+      // Sessão já realizada sem exercícios registados — precisa de atenção.
+      precisaAtencao: treinoConcluido(s.data) && s._count.exercicios === 0,
     })),
     ...jogos.map((j): EventoAgenda => ({
       id: j.id,

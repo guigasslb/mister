@@ -91,16 +91,27 @@ function distanciaAoSegmento(
 // Setas/linhas: mede a distância aos SEGMENTOS do trajecto (não só aos vértices),
 // para que clicar sobre o corpo da seta a selecione (corrige o bug em que só
 // clicar exactamente num extremo funcionava).
+//
+// `opcoes.apenasPontos`: ignora setas/linhas no hit-test, deixando apenas
+// elementos-ponto (jogadores, bola, cones, pessoas…) selecionáveis. Usado no modo
+// animação (§11), onde só os elementos-ponto participam nos passos — as setas não
+// devem ser selecionáveis para animação. Sem isto, uma seta desenhada por cima de
+// uma bola (índice mais alto → avaliada primeiro) intercepta o clique.
 export function elementoEmPonto(
   elementos: ElementoCampo[],
   x: number,
   y: number,
   raioHit: number,
+  opcoes?: { apenasPontos?: boolean },
 ): ElementoCampo | null {
+  const apenasPontos = opcoes?.apenasPontos ?? false;
   for (let i = elementos.length - 1; i >= 0; i--) {
     const el = elementos[i];
     if ("x" in el && "y" in el) {
       if (Math.hypot(el.x - x, el.y - y) <= raioHit) return el;
+    } else if (apenasPontos) {
+      // Modo animação: setas/linhas não são alvos de seleção.
+      continue;
     } else if (el.pontos.length === 1) {
       const p = el.pontos[0];
       if (Math.hypot(p.x - x, p.y - y) <= raioHit) return el;

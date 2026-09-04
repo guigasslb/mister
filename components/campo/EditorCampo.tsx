@@ -368,7 +368,11 @@ export function EditorCampo({
 
     switch (ferramenta) {
       case "selecionar": {
-        const alvo = elementoEmPonto(elementosRender, x, y, drag.raioHit);
+        // Modo animação: só elementos-ponto são selecionáveis (as setas não
+        // participam nos passos — §11). Fora da animação mantém tudo selecionável.
+        const alvo = elementoEmPonto(elementosRender, x, y, drag.raioHit, {
+          apenasPontos: modoAnimacao,
+        });
         if (alvo) {
           setSelecionadoId(alvo.id);
           setFocadoId(alvo.id);
@@ -887,6 +891,9 @@ export function EditorCampo({
                 selecionado={el.id === selecionadoId}
                 focado={el.id === focadoId}
                 raioHit={drag.raioHit}
+                // Modo animação: setas/linhas não selecionáveis (§11) — desativa a
+                // faixa de hit/foco do trajecto para não roubar o clique à bola.
+                pathSelecionavel={!modoAnimacao}
                 onFocarHit={(id) => {
                   setFocadoId(id);
                   setSelecionadoId(id);

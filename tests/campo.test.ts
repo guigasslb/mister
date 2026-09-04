@@ -160,6 +160,49 @@ describe("elementoEmPonto (hit-test com raio expandido)", () => {
     const dois = [jogador("baixo", 100, 100), jogador("cima", 100, 100)];
     expect(elementoEmPonto(dois, 100, 100, 14)?.id).toBe("cima");
   });
+
+  // §11: no modo animação as setas não são selecionáveis — só elementos-ponto.
+  // Sem `apenasPontos`, uma seta desenhada por cima da bola (índice mais alto →
+  // avaliada primeiro) roubava o clique; com `apenasPontos` a bola é selecionada.
+  describe("apenasPontos (modo animação)", () => {
+    const bola: ElementoCampo = { id: "b", tipo: "bola", x: 100, y: 100 };
+    const setaPorCima: ElementoCampo = {
+      id: "s",
+      tipo: "seta",
+      estilo: "movimento",
+      cor: "#000",
+      pontos: [
+        { x: 100, y: 100 },
+        { x: 180, y: 100 },
+      ],
+    };
+    const cena = [bola, setaPorCima];
+
+    it("sem apenasPontos, a seta por cima intercepta o clique na bola", () => {
+      expect(elementoEmPonto(cena, 100, 100, 14)?.id).toBe("s");
+    });
+
+    it("com apenasPontos, seleciona a bola (ignora a seta)", () => {
+      expect(elementoEmPonto(cena, 100, 100, 14, { apenasPontos: true })?.id).toBe(
+        "b",
+      );
+    });
+
+    it("com apenasPontos, um clique só sobre a seta não seleciona nada", () => {
+      // (150,100) está sobre o trajecto da seta mas longe de qualquer ponto.
+      expect(
+        elementoEmPonto(cena, 150, 100, 14, { apenasPontos: true }),
+      ).toBeNull();
+    });
+
+    it("com apenasPontos, elementos-ponto continuam selecionáveis pelo raio", () => {
+      expect(
+        elementoEmPonto([jogador("a", 100, 100)], 109, 109, 20, {
+          apenasPontos: true,
+        })?.id,
+      ).toBe("a");
+    });
+  });
 });
 
 describe("ancoraElemento", () => {

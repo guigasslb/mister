@@ -10,6 +10,7 @@ import { eAdminPlataforma } from "@/lib/admin-guard";
 import { temLicencaValida } from "@/lib/licenca";
 import { BarraTopo } from "@/components/layout/BarraTopo";
 import { Navegacao } from "@/components/layout/Navegacao";
+import { TemaClubeGlobal } from "@/components/layout/TemaClubeGlobal";
 import { MarcaAguaClube } from "@/components/layout/MarcaAguaClube";
 import { ScrollTopo } from "@/components/layout/ScrollTopo";
 import { ServicoIndisponivel } from "@/components/layout/ServicoIndisponivel";
@@ -154,6 +155,13 @@ export default async function AppLayout({
     return (
       <GuardaLicenca licencaOk={licencaOk}>
         <div className="flex min-h-screen flex-col" style={estiloClube}>
+          {/* Propaga a cor do clube ao :root para que os portais do Radix
+              (diálogos, selects) herdem `--cor-primaria`/`--cor-secundaria` —
+              sem isto, campos/miniaturas em diálogos caem no laranja da marca. */}
+          <TemaClubeGlobal
+            corPrimaria={clube.corPrimaria}
+            corSecundaria={clube.corSecundaria}
+          />
           <BarraTopo
             nomeUtilizador={session.user.name ?? "Utilizador"}
             nomeClube={clube.nome}
