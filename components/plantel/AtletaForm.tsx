@@ -47,6 +47,7 @@ export type AtletaParaEdicao = {
   observacoes: string | null;
   fotoUrl: string | null;
   inscrito: boolean;
+  praticaDuplaModalidade: boolean;
   encarregadoNome: string | null;
   encarregadoContacto: string | null;
   encarregadoEmail: string | null;
@@ -75,6 +76,11 @@ export function AtletaForm({
   // Estado de inscrição (secção 8): editável aqui. Gerido em estado local (o
   // Switch não é um input nativo) e enviado no objeto `pessoal`.
   const [inscrito, setInscrito] = useState(atleta?.inscrito ?? false);
+  // §3.2: atleta que pratica futebol e futsal em simultâneo. Gerido em estado
+  // local (o Switch não é input nativo) e enviado no objeto `pessoal`.
+  const [praticaDuplaModalidade, setPraticaDuplaModalidade] = useState(
+    atleta?.praticaDuplaModalidade ?? false,
+  );
 
   // Modalidade em contexto para o seletor de posições (§3.2): na criação deriva do
   // escalão selecionado; na edição não há escalão em contexto → mostra todas.
@@ -132,6 +138,7 @@ export function AtletaForm({
       observacoes: val("observacoes") || undefined,
       fotoUrl: val("fotoUrl"),
       inscrito,
+      praticaDuplaModalidade,
       encarregadoNome: val("encarregadoNome") || undefined,
       encarregadoContacto: val("encarregadoContacto") || undefined,
       encarregadoEmail: val("encarregadoEmail"),
@@ -245,6 +252,30 @@ export function AtletaForm({
             checked={inscrito}
             onCheckedChange={setInscrito}
             aria-label={inscrito ? "Marcar como por inscrever" : "Marcar como inscrito"}
+          />
+        </div>
+
+        {/* §3.2: prática simultânea de futebol e futsal (dupla modalidade). */}
+        <div className="flex min-h-[44px] items-center justify-between gap-4 rounded-lg border border-cinza-200 px-4 py-2">
+          <div>
+            <Label htmlFor="praticaDuplaModalidade" className="cursor-pointer select-none">
+              Pratica futebol e futsal
+            </Label>
+            <p className="text-legenda text-cinza-400">
+              {praticaDuplaModalidade
+                ? "O atleta joga nas duas modalidades — pode faltar a treinos por jogos de futebol."
+                : "Ativa se o atleta jogar futebol e futsal em simultâneo."}
+            </p>
+          </div>
+          <Switch
+            id="praticaDuplaModalidade"
+            checked={praticaDuplaModalidade}
+            onCheckedChange={setPraticaDuplaModalidade}
+            aria-label={
+              praticaDuplaModalidade
+                ? "Marcar como praticante de uma só modalidade"
+                : "Marcar como praticante de futebol e futsal"
+            }
           />
         </div>
       </div>

@@ -10,7 +10,14 @@ import { MOTIVOS_FALTA, LABEL_MOTIVO_FALTA } from "@/lib/schemas/treino";
 import { presencasAlteradas, type RegistoPresenca } from "@/lib/presencas";
 import type { EstadoPresenca, MotivoFalta } from "@prisma/client";
 
-type Atleta = { id: string; nome: string; numero: number | null };
+type Atleta = {
+  id: string;
+  nome: string;
+  numero: number | null;
+  // §3.2: atletas de dupla modalidade podem faltar por jogo de futebol, pelo que
+  // o motivo JOGO_FUTEBOL só lhes é oferecido.
+  praticaDuplaModalidade: boolean;
+};
 
 /**
  * Estado de presença + motivo/justificação da falta (F1 — secção 8.5).
@@ -272,7 +279,9 @@ export function MarcadorPresencas({
                     aria-label={`Motivo da falta de ${a.nome}`}
                     className="flex flex-wrap gap-1.5"
                   >
-                    {MOTIVOS_FALTA.map((m) => {
+                    {MOTIVOS_FALTA.filter(
+                      (m) => m !== "JOGO_FUTEBOL" || a.praticaDuplaModalidade,
+                    ).map((m) => {
                       const ativo = registo.motivo === m;
                       return (
                         <Button

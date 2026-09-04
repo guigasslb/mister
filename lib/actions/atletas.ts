@@ -66,6 +66,8 @@ export interface AtletaPessoal {
   ativo: boolean;
   /** Inscrição federativa/no clube (secção 8 — plantel). */
   inscrito: boolean;
+  /** Atleta que pratica também futebol (dupla modalidade). */
+  praticaDuplaModalidade: boolean;
   dataIngresso: Date | null;
   encarregadoNome: string | null;
   encarregadoContacto: string | null;
@@ -99,6 +101,7 @@ const SELECT_PESSOAL = {
   fotoUrl: true,
   ativo: true,
   inscrito: true,
+  praticaDuplaModalidade: true,
   dataIngresso: true,
   encarregadoNome: true,
   encarregadoContacto: true,
@@ -388,6 +391,7 @@ export async function criarAtleta(dados: unknown): Promise<Resultado<Atleta>> {
         ativo: pessoal.ativo ?? true,
         // Inscrição (secção 8): por omissão nasce «por inscrever».
         inscrito: pessoal.inscrito ?? false,
+        praticaDuplaModalidade: pessoal.praticaDuplaModalidade ?? false,
         numero,
       },
     });
@@ -479,6 +483,11 @@ export async function atualizarAtleta(
       // `inscrito` é editável no formulário do atleta (secção 8). Só se escreve
       // quando fornecido, para não repor o valor a partir de callers que o omitam.
       ...(parsed.data.inscrito !== undefined ? { inscrito: parsed.data.inscrito } : {}),
+      // Dupla modalidade: só se escreve quando fornecido, seguindo o mesmo
+      // padrão defensivo de `inscrito`.
+      ...(parsed.data.praticaDuplaModalidade !== undefined
+        ? { praticaDuplaModalidade: parsed.data.praticaDuplaModalidade }
+        : {}),
     },
   });
   revalidatePath(PATH);

@@ -261,6 +261,7 @@ export default async function DetalheJogoPage({
           numero: a.participacaoContexto?.numero ?? j.numeroPorAtleta[a.id] ?? null,
           eGR: a.posicoes.includes("GUARDA_REDES"),
           posicoes: a.posicoes,
+          praticaDuplaModalidade: a.praticaDuplaModalidade,
         }))}
         metricas={metricas.map((m) => ({
           id: m.id,

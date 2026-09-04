@@ -90,13 +90,14 @@ export const ESTADOS_PRESENCA = [
   "ATRASADO",
 ] as const;
 
-export const MOTIVOS_FALTA = ["LESAO", "DOENCA", "OUTRO", "SEM_JUSTIFICACAO"] as const;
+export const MOTIVOS_FALTA = ["LESAO", "DOENCA", "OUTRO", "SEM_JUSTIFICACAO", "JOGO_FUTEBOL"] as const;
 
 export const LABEL_MOTIVO_FALTA: Record<(typeof MOTIVOS_FALTA)[number], string> = {
   LESAO: "Lesão",
   DOENCA: "Doença",
   OUTRO: "Outro",
   SEM_JUSTIFICACAO: "Sem justificação",
+  JOGO_FUTEBOL: "Jogo de futebol",
 };
 
 export const presencaSchema = z.object({

@@ -60,6 +60,7 @@ type Atleta = {
   numero: number | null;
   eGR: boolean;
   posicoes: Posicao[];
+  praticaDuplaModalidade: boolean;
 };
 
 type Metrica = { id: string; nome: string; tipo: TipoMetrica; ativa: boolean };
@@ -397,6 +398,17 @@ export function JogoDetalhe({
                   <label htmlFor={`conv-${a.id}`} className="flex-1 text-corpo text-cinza-900">
                     {a.numero != null && <span className="mr-1 text-cinza-400">#{a.numero}</span>}
                     {a.nome}
+                    {/* §3.2: atleta de dupla modalidade (futebol + futsal). */}
+                    {a.praticaDuplaModalidade && (
+                      <span
+                        title="Pratica futebol e futsal"
+                        className="ml-1.5 inline-flex items-center gap-1 rounded-full border border-azul-300/50 bg-azul-50 px-2 py-0.5 align-middle text-legenda font-medium text-azul-700"
+                      >
+                        <span aria-hidden>⚽</span>
+                        <span aria-hidden>🥅</span>
+                        <span className="sr-only">Futebol e futsal</span>
+                      </span>
+                    )}
                   </label>
                   {suspensao && (
                     <span

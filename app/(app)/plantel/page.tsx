@@ -314,6 +314,16 @@ export default async function PlantelPage({
                       </span>
                     )}
                     <BadgeInscricao inscrito={a.inscrito} />
+                    {a.praticaDuplaModalidade && (
+                      <span
+                        title="Pratica futebol e futsal"
+                        className="inline-flex items-center gap-1 rounded-full border border-azul-300/50 bg-azul-50 px-2 py-0.5 text-legenda font-medium text-azul-700"
+                      >
+                        <span aria-hidden>⚽</span>
+                        <span aria-hidden>🥅</span>
+                        <span className="sr-only">Futebol e futsal</span>
+                      </span>
+                    )}
                   </div>
                   <p className="text-legenda text-cinza-600">
                     {numero != null && (
