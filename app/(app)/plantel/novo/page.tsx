@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { listarEscaloes } from "@/lib/actions/escaloes";
+import { listarEscaloesLegiveis } from "@/lib/actions/escaloes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
 import { AtletaForm } from "@/components/plantel/AtletaForm";
 import { EstadoErro } from "@/components/layout/EstadosUI";
@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Novo atleta" };
 
 export default async function NovoAtletaPage() {
   const [resEscaloes, resSeccoes] = await Promise.all([
-    listarEscaloes(),
+    listarEscaloesLegiveis(),
     obterSeccoes(),
   ]);
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;

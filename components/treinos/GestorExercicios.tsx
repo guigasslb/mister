@@ -214,7 +214,7 @@ export function GestorExercicios({
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-subtitulo text-cinza-900">Exercícios</h2>
         <div className="flex items-center gap-2">
-          {exercicios.length > 1 && (
+          {exercicios.length > 0 && (
             <Button
               type="button"
               variant={modoEdicao ? "default" : "outline"}
@@ -229,7 +229,9 @@ export function GestorExercicios({
               ) : (
                 <>
                   <ListOrdered className="h-4 w-4" />
-                  Editar ordem
+                  {/* Um único exercício não se reordena, mas tem de poder remover-se
+                      (§8.8.2 — sessões, incl. concluídas, são editáveis). */}
+                  {exercicios.length > 1 ? "Editar ordem" : "Editar"}
                 </>
               )}
             </Button>

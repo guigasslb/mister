@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import {
   Prisma,
+  type CasaFora,
   type Modalidade,
   type Posicao,
   type TipoEventoJogo,
@@ -147,7 +148,11 @@ export async function obterEvolucaoAtleta(
     where: { id: atletaId, clubeId },
     select: {
       participacoes: {
-        where: { epocaId: epoca.id, estado: "ATIVO" },
+        // Histórico persistente (§10.1): todas as participações da época (qualquer
+        // estado). A evolução do atleta por jogo não deve desaparecer quando ele
+        // deixa de ser participante ativo do escalão (INATIVO/TRANSICAO). O gate
+        // de leitura vale para qualquer escalão onde participou, não só os ativos.
+        where: { epocaId: epoca.id },
         select: { escalaoId: true },
       },
     },
@@ -189,15 +194,19 @@ export async function obterPresencasMensal(
       criadoEm: true,
       dataIngresso: true,
       participacoes: {
-        where: { epocaId: epoca.id, estado: "ATIVO" },
+        // Histórico persistente (§10.1): todas as participações da época (qualquer
+        // estado). A grelha de presenças mensais tem de contar as sessões do(s)
+        // escalão(ões) onde o atleta esteve, mesmo depois de sair (INATIVO/
+        // TRANSICAO) — as presenças ficam ligadas ao atleta/sessão, não ao estado.
+        where: { epocaId: epoca.id },
         select: { escalaoId: true },
       },
     },
   });
   if (!atleta) return erro("Atleta não encontrado");
 
-  const escaloesAtivos = atleta.participacoes.map((p) => p.escalaoId);
-  if (!(await podeLerAlgumEscalao(escaloesAtivos)))
+  const escaloesParticipados = atleta.participacoes.map((p) => p.escalaoId);
+  if (!(await podeLerAlgumEscalao(escaloesParticipados)))
     return erro("Sem permissão neste escalão");
 
   const ingresso = atleta.dataIngresso ?? atleta.criadoEm;
@@ -206,7 +215,7 @@ export async function obterPresencasMensal(
     prisma.sessao.findMany({
       where: {
         epocaId: epoca.id,
-        escalaoId: { in: escaloesAtivos },
+        escalaoId: { in: escaloesParticipados },
         data: { gte: ingresso },
         // Só sessões NORMAL contam para assiduidade — CAPTACAO/EVENTO/ABERTO
         // não são treino regular e não devem inflar o denominador (BUG-P1-07).
@@ -348,7 +357,14 @@ export async function obterAnaliticoAtleta(
       criadoEm: true,
       dataIngresso: true,
       participacoes: {
-        where: { epocaId: epoca.id, estado: "ATIVO" },
+        // Histórico persistente (§10.1): TODAS as participações da época,
+        // independentemente do estado. Quando um atleta é removido/promovido/
+        // desativado, `terminarParticipacao` marca a participação como INATIVO e
+        // `transferirEscalao` marca a de origem como TRANSICAO_PERMANENTE — a
+        // linha nunca é apagada. As estatísticas/presenças ficam ligadas ao
+        // atleta/jogo/escalão (não ao estado da participação), pelo que filtrar
+        // por `estado: "ATIVO"` escondia o histórico de quem já saiu do escalão.
+        where: { epocaId: epoca.id },
         select: {
           escalaoId: true,
           escalao: {
@@ -360,8 +376,8 @@ export async function obterAnaliticoAtleta(
   });
   if (!atleta) return erro("Atleta não encontrado");
 
-  const escaloesAtivos = atleta.participacoes.map((p) => p.escalaoId);
-  if (!(await podeLerAlgumEscalao(escaloesAtivos)))
+  const escaloesParticipados = atleta.participacoes.map((p) => p.escalaoId);
+  if (!(await podeLerAlgumEscalao(escaloesParticipados)))
     return erro("Sem permissão neste escalão");
 
   // 🔁 v7 (§10.1/§10.8): a vista conjunta segmenta por modalidade — só entram as
@@ -581,6 +597,265 @@ async function calcularComparacaoEquipa(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// M4 — Resumo leve do atleta para comparação (§10.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Versão leve de `obterAnaliticoAtleta` para COMPARAR atletas do mesmo escalão/época
+ * (só nome, posições, se é GR e o agregado de estatísticas). Reutiliza EXACTAMENTE
+ * o mesmo padrão de queries do agregado individual (convocatórias, estatísticas,
+ * sessões NORMAL desde o ingresso e presenças), pelo que os números batem por
+ * construção com os do painel do atleta (Regra Nº 6). Sem exigir `RELATORIOS_VER`:
+ * é uma leitura de atleta do clube (auth + multi-tenant pelo clube).
+ */
+export async function obterResumoAtletaParaComparacao(
+  atletaId: string,
+  escalaoId: string,
+  epocaId: string,
+): Promise<
+  Resultado<{
+    nome: string;
+    posicoes: Posicao[];
+    eGR: boolean;
+    agregado: EstatisticasAgregadas;
+  }>
+> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const atleta = await prisma.atleta.findFirst({
+    where: { id: atletaId, clubeId },
+    select: { nome: true, posicoes: true, criadoEm: true, dataIngresso: true },
+  });
+  if (!atleta) return erro("Atleta não encontrado");
+
+  const eGR = atleta.posicoes.includes("GUARDA_REDES");
+  const ingresso = atleta.dataIngresso ?? atleta.criadoEm;
+  const filtroJogo = { epocaId, escalaoId };
+
+  const [jogosConvocado, estatisticas, sessoes, presencas] = await Promise.all([
+    prisma.convocatoria.count({
+      where: { convocado: true, atletaId, jogo: filtroJogo },
+    }),
+    prisma.estatisticaAtleta.findMany({
+      where: { atletaId, jogo: filtroJogo },
+      select: {
+        utilizacao: true,
+        blocoTempo: true,
+        minutos: true,
+        golos: true,
+        assistencias: true,
+        defesas: true,
+        golosSofridosGR: true,
+        // §10.8: o formato determina os minutos por bloco (tempo de jogo).
+        jogo: { select: { formato: true } },
+      },
+      orderBy: { jogo: { data: "asc" } },
+    }),
+    prisma.sessao.findMany({
+      where: {
+        epocaId,
+        escalaoId,
+        data: { gte: ingresso },
+        // Só sessões NORMAL contam para assiduidade (BUG-P1-07).
+        tipoSessao: "NORMAL",
+      },
+      select: { data: true },
+    }),
+    prisma.presenca.findMany({
+      where: {
+        atletaId,
+        estado: { in: [...ESTADOS_PRESENTE] },
+        // Simetria com o denominador: presenças desde o ingresso, sessões NORMAL.
+        sessao: { epocaId, data: { gte: ingresso }, tipoSessao: "NORMAL" },
+        escalaoId,
+      },
+      select: { sessaoId: true },
+    }),
+  ]);
+
+  const linhas: LinhaEstatistica[] = estatisticas.map((e) => ({
+    utilizacao: e.utilizacao,
+    blocoTempo: e.blocoTempo,
+    minutos: e.minutos,
+    golos: e.golos,
+    assistencias: e.assistencias,
+    defesas: e.defesas,
+    golosSofridosGR: e.golosSofridosGR,
+    formato: e.jogo.formato,
+  }));
+
+  // Denominador da assiduidade = sessões EXECUTADAS (data < agora), nunca as
+  // programadas (BUG-P1-08): simetria com obterAnaliticoAtleta.
+  const agora = Date.now();
+  const sessoesExecutadas = sessoes.filter((s) => s.data.getTime() < agora).length;
+  const agregado = agregarEstatisticas({
+    eGR,
+    jogosConvocado,
+    sessoesTotais: sessoesExecutadas,
+    presencas: presencas.length,
+    estatisticas: linhas,
+  });
+
+  return ok({ nome: atleta.nome, posicoes: atleta.posicoes, eGR, agregado });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// M5 — Evolução do atleta ao longo das épocas (§10.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Resumo do atleta numa época (linha da evolução multi-época). */
+export interface EpocaResumoAtleta {
+  epocaId: string;
+  epocaNome: string;
+  escalaoNome: string | null;
+  totalGolos: number;
+  totalAssistencias: number;
+  jogosUtilizados: number;
+  jogosConvocado: number;
+  taxaPresenca: number; // 0-1
+  habilidades: { desbloqueadas: number; total: number };
+}
+
+/**
+ * Evolução do atleta ao longo de TODAS as épocas em que participou (§10.1).
+ * Estratégia batch (evita N+1): 1 query pelas participações (fonte das épocas) e,
+ * em paralelo, queries planas de estatísticas, convocatórias, presenças e
+ * progressos — todas agregadas em memória por época. Auth + multi-tenant pelo
+ * clube; leitura permitida se o membro puder ler ≥1 escalão do atleta.
+ */
+export async function obterEvolucaoMultiEpoca(
+  atletaId: string,
+): Promise<Resultado<EpocaResumoAtleta[]>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const atleta = await prisma.atleta.findFirst({
+    where: { id: atletaId, clubeId },
+    select: { id: true },
+  });
+  if (!atleta) return erro("Atleta não encontrado");
+
+  // Participações do atleta (fonte das épocas): época (nome + data de início para
+  // ordenação) e escalão (nome). Uma linha por (escalão, época) — deduplicamos por
+  // época em memória, ficando com o primeiro escalão encontrado por época.
+  const participacoes = await prisma.atletaEscalao.findMany({
+    where: { atletaId, escalao: { clubeId } },
+    select: {
+      epocaId: true,
+      escalaoId: true,
+      escalao: { select: { nome: true } },
+      epoca: { select: { nome: true, dataInicio: true } },
+    },
+    orderBy: [{ epoca: { dataInicio: "asc" } }, { tipo: "asc" }],
+  });
+
+  if (participacoes.length === 0) return ok([]);
+
+  if (!(await podeLerAlgumEscalao(participacoes.map((p) => p.escalaoId))))
+    return erro("Sem permissão neste escalão");
+
+  const [estatisticas, convocatorias, presencas, progressos] = await Promise.all([
+    prisma.estatisticaAtleta.findMany({
+      where: { atletaId, jogo: { escalao: { clubeId } } },
+      select: {
+        golos: true,
+        assistencias: true,
+        utilizacao: true,
+        jogo: { select: { epocaId: true } },
+      },
+    }),
+    prisma.convocatoria.findMany({
+      where: { convocado: true, atletaId, jogo: { escalao: { clubeId } } },
+      select: { jogo: { select: { epocaId: true } } },
+    }),
+    // Todas as presenças em sessões NORMAL: numerador (PRESENTE/ATRASADO) e
+    // denominador (todas as presenças marcadas) da assiduidade, por época.
+    prisma.presenca.findMany({
+      where: { atletaId, sessao: { tipoSessao: "NORMAL", escalao: { clubeId } } },
+      select: { estado: true, sessao: { select: { epocaId: true } } },
+    }),
+    prisma.progressoHabilidade.findMany({
+      where: { atletaId },
+      select: { epocaId: true, estado: true },
+    }),
+  ]);
+
+  interface AccEpoca {
+    epocaNome: string;
+    escalaoNome: string | null;
+    dataInicio: Date;
+    totalGolos: number;
+    totalAssistencias: number;
+    jogosUtilizados: number;
+    jogosConvocado: number;
+    presentes: number;
+    presencasMarcadas: number;
+    habDesbloqueadas: number;
+    habTotal: number;
+  }
+  const porEpoca = new Map<string, AccEpoca>();
+  for (const p of participacoes) {
+    if (porEpoca.has(p.epocaId)) continue;
+    porEpoca.set(p.epocaId, {
+      epocaNome: p.epoca.nome,
+      escalaoNome: p.escalao.nome,
+      dataInicio: p.epoca.dataInicio,
+      totalGolos: 0,
+      totalAssistencias: 0,
+      jogosUtilizados: 0,
+      jogosConvocado: 0,
+      presentes: 0,
+      presencasMarcadas: 0,
+      habDesbloqueadas: 0,
+      habTotal: 0,
+    });
+  }
+
+  for (const e of estatisticas) {
+    const acc = porEpoca.get(e.jogo.epocaId);
+    if (!acc) continue;
+    acc.totalGolos += e.golos;
+    acc.totalAssistencias += e.assistencias;
+    if (e.utilizacao !== "NAO_UTILIZADO") acc.jogosUtilizados++;
+  }
+  for (const c of convocatorias) {
+    const acc = porEpoca.get(c.jogo.epocaId);
+    if (acc) acc.jogosConvocado++;
+  }
+  for (const pr of presencas) {
+    const acc = porEpoca.get(pr.sessao.epocaId);
+    if (!acc) continue;
+    acc.presencasMarcadas++;
+    if ((ESTADOS_PRESENTE as readonly string[]).includes(pr.estado)) acc.presentes++;
+  }
+  for (const h of progressos) {
+    const acc = porEpoca.get(h.epocaId);
+    if (!acc) continue;
+    acc.habTotal++;
+    if (h.estado === "DESBLOQUEADO") acc.habDesbloqueadas++;
+  }
+
+  const resultado: EpocaResumoAtleta[] = [...porEpoca.entries()]
+    .map(([epocaId, a]) => ({
+      epocaId,
+      epocaNome: a.epocaNome,
+      escalaoNome: a.escalaoNome,
+      totalGolos: a.totalGolos,
+      totalAssistencias: a.totalAssistencias,
+      jogosUtilizados: a.jogosUtilizados,
+      jogosConvocado: a.jogosConvocado,
+      taxaPresenca: a.presencasMarcadas > 0 ? a.presentes / a.presencasMarcadas : 0,
+      habilidades: { desbloqueadas: a.habDesbloqueadas, total: a.habTotal },
+      dataInicio: a.dataInicio,
+    }))
+    .sort((x, y) => x.dataInicio.getTime() - y.dataInicio.getTime())
+    .map(({ dataInicio: _dataInicio, ...linha }) => linha);
+
+  return ok(resultado);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // NÍVEL 2 — Analítico do escalão/equipa (secção 10.2)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -612,6 +887,21 @@ export interface ResultadoJogoResumo {
   golosMarcados: number | null;
   golosSofridos: number | null;
   resultado: "V" | "E" | "D" | null;
+  /**
+   * Local do jogo (§10.2 — casa/fora). O campo `Jogo.casaFora` é obrigatório em
+   * BD (`@default(CASA)`), pelo que vem sempre preenchido nas leituras; `null`
+   * apenas em snapshots de relatórios antigos (pré-adição do campo).
+   */
+  casaFora: CasaFora | null;
+}
+
+/** Balanço V/E/D por local do jogo (casa/fora — §10.2). */
+export interface RecordCasaFora {
+  vitorias: number;
+  empates: number;
+  derrotas: number;
+  /** Jogos com resultado registado (denominador de V+E+D). */
+  jogos: number;
 }
 
 /** Ranking de atletas por uma métrica configurável (vista de equipa). */
@@ -629,6 +919,17 @@ export interface RankingDisciplina {
   vermelhos: number;
 }
 
+/**
+ * Eventos de jogo agregados por período (M6 — §10.2). Contagem por tipo separada
+ * pela parte do jogo (1ª/2ª parte). Mapas parciais: só os tipos com ≥1 ocorrência
+ * aparecem. Default `{ parte1: {}, parte2: {} }` para snapshots antigos (o campo
+ * `EventoJogo.parte` não existia na origem de relatórios pré-M6).
+ */
+export interface EventosPorParte {
+  parte1: Partial<Record<TipoEventoJogo, number>>;
+  parte2: Partial<Record<TipoEventoJogo, number>>;
+}
+
 export interface AnaliticoEscalao {
   escalao: { id: string; nome: string };
   epoca: { id: string; nome: string };
@@ -640,6 +941,10 @@ export interface AnaliticoEscalao {
   golosSofridos: number;
   golosMarcadosMedia: number;
   golosSofridosMedia: number;
+  /** Balanço V/E/D dos jogos em casa (§10.2; default `{0,0,0,0}` em snapshots antigos). */
+  recordCasa: RecordCasaFora;
+  /** Balanço V/E/D dos jogos fora (§10.2; default `{0,0,0,0}` em snapshots antigos). */
+  recordFora: RecordCasaFora;
   /** Sessões programadas (todas as criadas no escalão/época — o total). */
   sessoes: number;
   /**
@@ -655,6 +960,8 @@ export interface AnaliticoEscalao {
   /** Lista completa de atletas por taxa de presença (default `[]` em snapshots antigos). */
   rankingAssiduidade: RankingAssiduidade[];
   eventosPorTipo: Record<TipoEventoJogo, number>;
+  /** Eventos por tipo separados por parte do jogo (M6 — §10.2; default `{parte1:{},parte2:{}}`). */
+  eventosPorParte: EventosPorParte;
   presencaMensal: PresencaMensal[];
   distribuicaoTipoTreino: Record<TipoSessao, number>;
   resultados: ResultadoJogoResumo[];
@@ -763,7 +1070,15 @@ export async function obterAnaliticoEscalao(
     await Promise.all([
     prisma.jogo.findMany({
       where: filtroJogo,
-      select: { id: true, data: true, adversario: true, golosMarcados: true, golosSofridos: true },
+      select: {
+        id: true,
+        data: true,
+        adversario: true,
+        golosMarcados: true,
+        golosSofridos: true,
+        // §10.2: local do jogo (casa/fora) para o balanço por local.
+        casaFora: true,
+      },
       orderBy: { data: "asc" },
     }),
     prisma.sessao.findMany({
@@ -791,7 +1106,8 @@ export async function obterAnaliticoEscalao(
     }),
     prisma.eventoJogo.findMany({
       where: { jogo: filtroJogo },
-      select: { tipo: true },
+      // M6 (§10.2): `parte` (1|2) alimenta a análise por período (1ª/2ª parte).
+      select: { tipo: true, parte: true },
     }),
     prisma.presenca.findMany({
       where: {
@@ -826,12 +1142,24 @@ export async function obterAnaliticoEscalao(
   let derrotas = 0;
   let golosMarcados = 0;
   let golosSofridos = 0;
+  // Balanço por local do jogo (§10.2): só jogos COM resultado entram no V/E/D.
+  // `casaFora` é obrigatório em BD (`@default(CASA)`), pelo que "FORA" separa
+  // os de fora e tudo o resto (CASA) fica no balanço de casa.
+  const recordCasa: RecordCasaFora = { vitorias: 0, empates: 0, derrotas: 0, jogos: 0 };
+  const recordFora: RecordCasaFora = { vitorias: 0, empates: 0, derrotas: 0, jogos: 0 };
   const resultados: ResultadoJogoResumo[] = [];
   for (const j of jogos) {
     const r = resultadoJogo(j.golosMarcados, j.golosSofridos);
     if (r === "V") vitorias++;
     else if (r === "E") empates++;
     else if (r === "D") derrotas++;
+    if (r) {
+      const rec = j.casaFora === "FORA" ? recordFora : recordCasa;
+      rec.jogos++;
+      if (r === "V") rec.vitorias++;
+      else if (r === "E") rec.empates++;
+      else rec.derrotas++;
+    }
     if (j.golosMarcados != null) golosMarcados += j.golosMarcados;
     if (j.golosSofridos != null) golosSofridos += j.golosSofridos;
     resultados.push({
@@ -841,6 +1169,7 @@ export async function obterAnaliticoEscalao(
       golosMarcados: j.golosMarcados,
       golosSofridos: j.golosSofridos,
       resultado: r,
+      casaFora: j.casaFora ?? null,
     });
   }
   const jogosComResultado = jogos.filter(
@@ -919,7 +1248,14 @@ export async function obterAnaliticoEscalao(
   const eventosPorTipo = Object.fromEntries(
     (Object.values(EVENTO_TIPOS) as TipoEventoJogo[]).map((t) => [t, 0]),
   ) as Record<TipoEventoJogo, number>;
-  for (const ev of eventos) eventosPorTipo[ev.tipo]++;
+  // M6 (§10.2): mesma agregação, mas separada por parte (1|2). Mapas parciais
+  // (só tipos com ocorrências); default `{}` para snapshots antigos.
+  const eventosPorParte: EventosPorParte = { parte1: {}, parte2: {} };
+  for (const ev of eventos) {
+    eventosPorTipo[ev.tipo]++;
+    const alvo = ev.parte === 2 ? eventosPorParte.parte2 : eventosPorParte.parte1;
+    alvo[ev.tipo] = (alvo[ev.tipo] ?? 0) + 1;
+  }
 
   // Distribuição de tipos de treino.
   const distribuicaoTipoTreino = Object.fromEntries(
@@ -1003,6 +1339,8 @@ export async function obterAnaliticoEscalao(
     golosSofridos,
     golosMarcadosMedia: jogosComResultado > 0 ? golosMarcados / jogosComResultado : 0,
     golosSofridosMedia: jogosComResultado > 0 ? golosSofridos / jogosComResultado : 0,
+    recordCasa,
+    recordFora,
     sessoes: sessoes.length,
     sessoesExecutadas,
     nAtletas,
@@ -1016,6 +1354,7 @@ export async function obterAnaliticoEscalao(
     maisUtilizados,
     rankingAssiduidade,
     eventosPorTipo,
+    eventosPorParte,
     presencaMensal,
     distribuicaoTipoTreino,
     resultados,
@@ -1783,4 +2122,384 @@ export async function exportarAnaliticoAtletaCsv(
   const nomeFicheiro = `analitico-${slugificar(a.atleta.nome)}-${carimboData()}.csv`;
 
   return ok({ csv, nomeFicheiro });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DT1 — Analítico da equipa técnica (§10 — gestão do Diretor Técnico)
+//
+// Vista transversal de produtividade dos treinadores do clube (sessões e jogos
+// criados, presenças marcadas e assiduidade média dos escalões que gerem). Só
+// disponível a quem tem `RELATORIOS_VER` E âmbito TODO_CLUBE (DT/Admin) — o
+// Presidente (âmbito próprio/limitado) não acede a esta vista de gestão de pessoas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AnaliticoTreinador {
+  membroId: string;
+  utilizadorId: string;
+  nome: string;
+  perfilNome: string;
+  escaloes: { id: string; nome: string }[];
+  sessoesCount: number;
+  jogosCount: number;
+  presencasMarcadasCount: number;
+  taxaPresencaMediaEscaloes: number; // média das taxas dos escalões atribuídos
+}
+
+export async function obterAnaliticoEquipaTecnica(
+  epocaId?: string,
+): Promise<Resultado<AnaliticoTreinador[]>> {
+  const perm = await exigirRelatorios();
+  if (!perm.ok) return erro(perm.erro);
+  // Vista de gestão de pessoas: exclusiva de quem gere todo o clube (DT/Admin).
+  if (perm.ctx.ambito !== "TODO_CLUBE") return erro("Sem permissão");
+  const clubeId = perm.ctx.clube.id;
+
+  const epoca = await resolverEpoca(clubeId, epocaId);
+  if (!epoca) return erro("Nenhuma época ativa");
+
+  const [membros, sessoesPorCriador, jogosPorCriador, presencasPorMarcador, clubeAnalitico] =
+    await Promise.all([
+      prisma.membroClube.findMany({
+        where: { clubeId, estado: "ATIVO" },
+        select: {
+          id: true,
+          utilizadorId: true,
+          utilizador: { select: { nome: true } },
+          perfil: { select: { nome: true } },
+          atribuicoes: { select: { escalao: { select: { id: true, nome: true } } } },
+        },
+      }),
+      prisma.sessao.groupBy({
+        by: ["criadorId"],
+        where: { epocaId: epoca.id, escalao: { clubeId } },
+        _count: { _all: true },
+      }),
+      prisma.jogo.groupBy({
+        by: ["criadorId"],
+        where: { epocaId: epoca.id, escalao: { clubeId } },
+        _count: { _all: true },
+      }),
+      prisma.presenca.groupBy({
+        by: ["marcadoPorId"],
+        where: { sessao: { epocaId: epoca.id, escalao: { clubeId } } },
+        _count: { _all: true },
+      }),
+      // Reutiliza a taxa de presença média por escalão já calculada (sem duplicar
+      // lógica). Com âmbito TODO_CLUBE, cobre todos os escalões do clube.
+      obterAnaliticoClubeEpoca(epoca.id),
+    ]);
+
+  // Sessões/jogos são criados por um Utilizador (criadorId = utilizadorId);
+  // presenças são marcadas por um MembroClube (marcadoPorId = membroId).
+  const sessoesMap = new Map<string, number>(
+    sessoesPorCriador.map((s) => [s.criadorId, s._count._all]),
+  );
+  const jogosMap = new Map<string, number>(
+    jogosPorCriador.map((j) => [j.criadorId, j._count._all]),
+  );
+  const presencasMap = new Map<string, number>(
+    presencasPorMarcador
+      .filter((p): p is typeof p & { marcadoPorId: string } => p.marcadoPorId !== null)
+      .map((p) => [p.marcadoPorId, p._count._all]),
+  );
+  const taxaPorEscalao = new Map<string, number>(
+    clubeAnalitico.sucesso
+      ? clubeAnalitico.dados.escaloes.map((e) => [e.escalaoId, e.taxaPresencaMedia])
+      : [],
+  );
+
+  const resultado: AnaliticoTreinador[] = membros
+    // Só treinadores com escalões atribuídos entram na vista de produtividade.
+    .filter((m) => m.atribuicoes.length > 0)
+    .map((m) => {
+      const escaloes = m.atribuicoes.map((a) => a.escalao);
+      const somaTaxas = escaloes.reduce((acc, e) => acc + (taxaPorEscalao.get(e.id) ?? 0), 0);
+      return {
+        membroId: m.id,
+        utilizadorId: m.utilizadorId,
+        nome: m.utilizador.nome,
+        perfilNome: m.perfil.nome,
+        escaloes,
+        sessoesCount: sessoesMap.get(m.utilizadorId) ?? 0,
+        jogosCount: jogosMap.get(m.utilizadorId) ?? 0,
+        presencasMarcadasCount: presencasMap.get(m.id) ?? 0,
+        taxaPresencaMediaEscaloes: escaloes.length > 0 ? somaTaxas / escaloes.length : 0,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.sessoesCount + b.jogosCount - (a.sessoesCount + a.jogosCount) ||
+        a.nome.localeCompare(b.nome, "pt"),
+    );
+
+  return ok(resultado);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DT2 — Feed de atividade da equipa (§10 — gestão do Diretor Técnico)
+//
+// Cronologia unificada das ações recentes do clube (sessões e jogos criados,
+// presenças marcadas, reuniões criadas) numa janela de horas. Só para quem gere
+// todo o clube (RELATORIOS_VER + âmbito TODO_CLUBE).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type TipoAtividade =
+  | "SESSAO_CRIADA"
+  | "JOGO_CRIADO"
+  | "PRESENCAS_MARCADAS"
+  | "REUNIAO_CRIADA";
+
+export interface EventoAtividade {
+  tipo: TipoAtividade;
+  id: string;
+  quando: Date;
+  autorNome: string;
+  escalaoNome: string | null;
+  detalhe: string;
+  href: string;
+}
+
+export async function obterFeedAtividadeEquipa(
+  horas?: number,
+): Promise<Resultado<EventoAtividade[]>> {
+  const perm = await exigirRelatorios();
+  if (!perm.ok) return erro(perm.erro);
+  if (perm.ctx.ambito !== "TODO_CLUBE") return erro("Sem permissão");
+  const clubeId = perm.ctx.clube.id;
+
+  const epoca = await resolverEpoca(clubeId, undefined);
+  if (!epoca) return erro("Nenhuma época ativa");
+
+  const horasJanela = horas ?? 72;
+  const janela = new Date(Date.now() - horasJanela * 60 * 60 * 1000);
+  const dia = (d: Date) => d.toISOString().slice(0, 10);
+
+  const [sessoes, jogos, presencas, reunioes] = await Promise.all([
+    prisma.sessao.findMany({
+      where: { epocaId: epoca.id, escalao: { clubeId }, criadoEm: { gte: janela } },
+      select: {
+        id: true,
+        criadoEm: true,
+        data: true,
+        tipoSessao: true,
+        escalao: { select: { nome: true } },
+        criador: { select: { nome: true } },
+      },
+      orderBy: { criadoEm: "desc" },
+      take: 30,
+    }),
+    prisma.jogo.findMany({
+      where: { epocaId: epoca.id, escalao: { clubeId }, criadoEm: { gte: janela } },
+      select: {
+        id: true,
+        criadoEm: true,
+        adversario: true,
+        casaFora: true,
+        escalao: { select: { nome: true } },
+        criador: { select: { nome: true } },
+      },
+      orderBy: { criadoEm: "desc" },
+      take: 30,
+    }),
+    // `Presenca` não tem `criadoEm`: usamos a data da sessão como referência
+    // temporal. `distinct` por (marcadoPorId, sessaoId) → uma entrada por marcação
+    // de sessão; ignoramos presenças sem autor (marcadoPorId null).
+    prisma.presenca.findMany({
+      where: {
+        marcadoPorId: { not: null },
+        sessao: { epocaId: epoca.id, escalao: { clubeId }, data: { gte: janela } },
+      },
+      distinct: ["marcadoPorId", "sessaoId"],
+      select: {
+        sessaoId: true,
+        marcadoPorId: true,
+        sessao: { select: { id: true, data: true, escalao: { select: { nome: true } } } },
+        marcadoPor: { select: { utilizador: { select: { nome: true } } } },
+      },
+      take: 60,
+    }),
+    prisma.reuniao.findMany({
+      where: { clubeId, criadoEm: { gte: janela } },
+      select: {
+        id: true,
+        criadoEm: true,
+        titulo: true,
+        criador: { select: { nome: true } },
+      },
+      orderBy: { criadoEm: "desc" },
+      take: 30,
+    }),
+  ]);
+
+  const eventos: EventoAtividade[] = [];
+
+  for (const s of sessoes) {
+    eventos.push({
+      tipo: "SESSAO_CRIADA",
+      id: s.id,
+      quando: s.criadoEm,
+      autorNome: s.criador.nome,
+      escalaoNome: s.escalao.nome,
+      detalhe:
+        s.tipoSessao === "NORMAL"
+          ? `Treino de ${dia(s.data)}`
+          : `Sessão (${s.tipoSessao}) de ${dia(s.data)}`,
+      href: `/treinos/${s.id}`,
+    });
+  }
+  for (const j of jogos) {
+    eventos.push({
+      tipo: "JOGO_CRIADO",
+      id: j.id,
+      quando: j.criadoEm,
+      autorNome: j.criador.nome,
+      escalaoNome: j.escalao.nome,
+      detalhe: `${j.casaFora === "FORA" ? "Fora" : "Casa"} vs ${j.adversario}`,
+      href: `/jogos/${j.id}`,
+    });
+  }
+  // Salvaguarda: dedup em memória por (sessaoId, marcadoPorId) — um evento por par.
+  const paresPresenca = new Set<string>();
+  for (const p of presencas) {
+    if (!p.marcadoPorId) continue;
+    const chave = `${p.sessaoId}:${p.marcadoPorId}`;
+    if (paresPresenca.has(chave)) continue;
+    paresPresenca.add(chave);
+    eventos.push({
+      tipo: "PRESENCAS_MARCADAS",
+      id: chave,
+      quando: p.sessao.data,
+      autorNome: p.marcadoPor?.utilizador.nome ?? "—",
+      escalaoNome: p.sessao.escalao.nome,
+      detalhe: `Presenças do treino de ${dia(p.sessao.data)}`,
+      href: `/treinos/${p.sessaoId}`,
+    });
+  }
+  for (const r of reunioes) {
+    eventos.push({
+      tipo: "REUNIAO_CRIADA",
+      id: r.id,
+      quando: r.criadoEm,
+      autorNome: r.criador?.nome ?? "—",
+      // `Reuniao` não tem relação a `Escalao` (só `escalaoId` opcional): sem nome.
+      escalaoNome: null,
+      detalhe: r.titulo,
+      href: `/reunioes`,
+    });
+  }
+
+  eventos.sort((a, b) => b.quando.getTime() - a.quando.getTime());
+  return ok(eventos);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DT3 — Evolução multi-época do clube (§10.3)
+//
+// Uma linha por época com os grandes números do clube (atletas, escalões, jogos,
+// sessões, assiduidade média), para ver a evolução ao longo dos anos. Visível a
+// quem tem `RELATORIOS_VER` (incl. Presidente — é uma vista de gestão do clube,
+// não de pessoas).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LinhaEvolucaoEpoca {
+  epocaId: string;
+  nome: string;
+  dataInicio: Date;
+  ativa: boolean;
+  nAtletas: number;
+  nEscaloes: number;
+  nJogos: number;
+  nSessoes: number;
+  taxaPresencaMedia: number;
+}
+
+export async function obterEvolucaoMultiepocaClube(): Promise<
+  Resultado<LinhaEvolucaoEpoca[]>
+> {
+  const perm = await exigirRelatorios();
+  if (!perm.ok) return erro(perm.erro);
+  const clubeId = perm.ctx.clube.id;
+
+  const [epocas, atletasPorEpoca, jogosPorEpoca, sessoesPorEpoca, escaloesPorEpoca] =
+    await Promise.all([
+      prisma.epoca.findMany({
+        where: { clubeId },
+        orderBy: { dataInicio: "asc" },
+        select: { id: true, nome: true, dataInicio: true, ativa: true },
+      }),
+      prisma.atletaEscalao.groupBy({
+        by: ["epocaId"],
+        where: { escalao: { clubeId }, estado: "ATIVO", atleta: { ativo: true } },
+        _count: { _all: true },
+      }),
+      prisma.jogo.groupBy({
+        by: ["epocaId"],
+        where: { escalao: { clubeId } },
+        _count: { _all: true },
+      }),
+      // "Sessão realizada" = fechada pelo treinador (§10.3 — decisão do plano DT3).
+      prisma.sessao.groupBy({
+        by: ["epocaId"],
+        where: { escalao: { clubeId }, fechado: true },
+        _count: { _all: true },
+      }),
+      // Escalões por época = nº de escalaoId distintos em participações.
+      prisma.atletaEscalao.groupBy({
+        by: ["epocaId", "escalaoId"],
+        where: { escalao: { clubeId } },
+        _count: { _all: true },
+      }),
+    ]);
+
+  if (epocas.length === 0) return ok([]);
+
+  const atletasMap = new Map<string, number>(
+    atletasPorEpoca.map((a) => [a.epocaId, a._count._all]),
+  );
+  const jogosMap = new Map<string, number>(
+    jogosPorEpoca.map((j) => [j.epocaId, j._count._all]),
+  );
+  const sessoesMap = new Map<string, number>(
+    sessoesPorEpoca.map((s) => [s.epocaId, s._count._all]),
+  );
+  const escaloesMap = new Map<string, number>();
+  for (const e of escaloesPorEpoca)
+    escaloesMap.set(e.epocaId, (escaloesMap.get(e.epocaId) ?? 0) + 1);
+
+  // Taxa de presença por época (N ≈ nº de épocas, tipicamente < 10): presenças
+  // NORMAL executadas / (nAtletas × nSessoesFechadas). Cap a 1 (BUG-P1-06).
+  const presencasPorEpoca = await Promise.all(
+    epocas.map((ep) =>
+      prisma.presenca.count({
+        where: {
+          estado: { in: [...ESTADOS_PRESENTE] },
+          sessao: {
+            epocaId: ep.id,
+            tipoSessao: "NORMAL",
+            fechado: true,
+            escalao: { clubeId },
+          },
+        },
+      }),
+    ),
+  );
+
+  const resultado: LinhaEvolucaoEpoca[] = epocas.map((ep, i) => {
+    const nAtletas = atletasMap.get(ep.id) ?? 0;
+    const nSessoes = sessoesMap.get(ep.id) ?? 0;
+    const slots = nAtletas * nSessoes;
+    return {
+      epocaId: ep.id,
+      nome: ep.nome,
+      dataInicio: ep.dataInicio,
+      ativa: ep.ativa,
+      nAtletas,
+      nEscaloes: escaloesMap.get(ep.id) ?? 0,
+      nJogos: jogosMap.get(ep.id) ?? 0,
+      nSessoes,
+      taxaPresencaMedia: slots > 0 ? Math.min(presencasPorEpoca[i] / slots, 1) : 0,
+    };
+  });
+
+  return ok(resultado);
 }

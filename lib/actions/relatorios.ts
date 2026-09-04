@@ -37,7 +37,12 @@ export async function obterRelatorioEquipa(
       where: { epocaId: epoca.id, escalaoId },
       select: { golosMarcados: true, golosSofridos: true },
     }),
-    prisma.sessao.count({ where: { epocaId: epoca.id, escalaoId } }),
+    // Só sessões JÁ EXECUTADAS (data < agora) — simetria com obterAnaliticoEscalao
+    // (sessoesExecutadas) e com a contagem de jogos com resultado abaixo: o
+    // relatório reflete o que já aconteceu, não o que está agendado.
+    prisma.sessao.count({
+      where: { epocaId: epoca.id, escalaoId, data: { lt: new Date() } },
+    }),
     // F1: nº de atletas = participações ativas neste escalão/época.
     prisma.atletaEscalao.count({
       where: {
@@ -58,8 +63,13 @@ export async function obterRelatorioEquipa(
   let derrotas = 0;
   let golosMarcados = 0;
   let golosSofridos = 0;
+  // Só jogos COM RESULTADO contam (golos ambos != null) — em simetria com
+  // obterAnaliticoEscalao (jogosComResultado). Contar jogos.length incluía os
+  // agendados/futuros e quebrava a identidade jogos === V + E + D.
+  let jogosComResultado = 0;
   for (const j of jogos) {
     if (j.golosMarcados == null || j.golosSofridos == null) continue;
+    jogosComResultado++;
     golosMarcados += j.golosMarcados;
     golosSofridos += j.golosSofridos;
     if (j.golosMarcados > j.golosSofridos) vitorias++;
@@ -92,7 +102,7 @@ export async function obterRelatorioEquipa(
   return ok({
     escalaoNome: escalao.nome,
     epocaNome: epoca.nome,
-    jogos: jogos.length,
+    jogos: jogosComResultado,
     vitorias,
     empates,
     derrotas,

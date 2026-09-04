@@ -54,6 +54,9 @@ export default async function ImprimirTreinoPage({
       duracaoMin: se.duracaoMin,
       series: se.series ?? null,
       notas: se.notas ?? null,
+      // Plano de treino imprimível (§4.2.1): override por sessão → snapshot → null.
+      numeroJogadores: r.numeroJogadores,
+      espaco: r.espaco,
       diagrama: r.diagrama,
     };
   });
@@ -61,6 +64,12 @@ export default async function ImprimirTreinoPage({
   // Duração total: a planeada na sessão, ou o somatório dos exercícios.
   const somaExercicios = exercicios.reduce((tot, e) => tot + (e.duracaoMin ?? 0), 0);
   const duracaoTotalMin = s.duracaoMin ?? (somaExercicios > 0 ? somaExercicios : null);
+
+  // Presenças (Gap 4): presentes = PRESENTE ou ATRASADO; denominador = registados.
+  const nRegistados = s.presencas.length;
+  const nPresentes = s.presencas.filter(
+    (p) => p.estado === "PRESENTE" || p.estado === "ATRASADO",
+  ).length;
 
   const dados: DadosImpressaoTreino = {
     clubeNome: membro?.clube.nome ?? "Clube",
@@ -73,6 +82,13 @@ export default async function ImprimirTreinoPage({
     objetivo: s.objetivo,
     notas: s.notas,
     duracaoTotalMin,
+    // Periodização federativa (Gaps 3+5): escalares na Sessao; período no planeamento.
+    microciclo: s.microciclo,
+    mesociclo: s.mesociclo,
+    momentoSemana: s.momentoSemana,
+    periodo: s.planeamento?.periodo ?? null,
+    nPresentes,
+    nRegistados,
     exercicios,
   };
 

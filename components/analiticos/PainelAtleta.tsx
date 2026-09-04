@@ -12,9 +12,27 @@ import {
   Star,
   Percent,
   Clock,
+  Crosshair,
+  TrendingUp,
+  TrendingDown,
+  Minus,
 } from "lucide-react";
-import type { AnaliticoAtleta } from "@/lib/actions/analise";
+import { useState } from "react";
+import {
+  obterResumoAtletaParaComparacao,
+  type AnaliticoAtleta,
+  type EpocaResumoAtleta,
+} from "@/lib/actions/analise";
+import type { EstatisticasAgregadas } from "@/lib/estatisticas";
 import { LABEL_POSICAO } from "@/lib/schemas/atleta";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SecaoAnalitico } from "./Kpi";
 import dynamic from "next/dynamic";
 
 const GraficoLinhas = dynamic(
@@ -28,7 +46,17 @@ const GraficoBarrasV = dynamic(
 import { CartaoKpi, corTaxa } from "./CartaoKpi";
 import { pct, n1 } from "./Cartao";
 
-export function PainelAtleta({ dados }: { dados: AnaliticoAtleta }) {
+export function PainelAtleta({
+  dados,
+  atletasEscalao,
+  evolucaoEpocas,
+}: {
+  dados: AnaliticoAtleta;
+  /** Colegas do mesmo escalão/época para comparação directa (M4). Opcional. */
+  atletasEscalao?: { id: string; nome: string }[];
+  /** Resumo do atleta por época para a evolução multi-época (M5). Opcional. */
+  evolucaoEpocas?: EpocaResumoAtleta[];
+}) {
   const {
     atleta,
     agregado,
@@ -45,8 +73,83 @@ export function PainelAtleta({ dados }: { dados: AnaliticoAtleta }) {
   } = dados;
   const eGR = atleta.eGR;
 
+  // M4 — Comparação directa com um colega do mesmo escalão/época. Só é possível
+  // dentro do contexto de um escalão (precisa do escalaoId para bater números).
+  const escalaoIdComparacao = escalaoContexto?.id ?? null;
+  const [atletaComparacaoId, setAtletaComparacaoId] = useState<string | null>(
+    null,
+  );
+  const [dadosComparacao, setDadosComparacao] = useState<{
+    nome: string;
+    eGR: boolean;
+    agregado: EstatisticasAgregadas;
+  } | null>(null);
+  const [loadingComparacao, setLoadingComparacao] = useState(false);
+
+  async function selecionarComparacao(outroId: string) {
+    setAtletaComparacaoId(outroId);
+    if (!escalaoIdComparacao) return;
+    setLoadingComparacao(true);
+    const res = await obterResumoAtletaParaComparacao(
+      outroId,
+      escalaoIdComparacao,
+      dados.epoca.id,
+    );
+    setDadosComparacao(res.sucesso ? res.dados : null);
+    setLoadingComparacao(false);
+  }
+
+  function limparComparacao() {
+    setAtletaComparacaoId(null);
+    setDadosComparacao(null);
+  }
+
+  const podeComparar =
+    !!escalaoIdComparacao && !!atletasEscalao && atletasEscalao.length > 0;
+
   const semDados =
     agregado.jogosConvocado === 0 && agregado.sessoesTotais === 0;
+
+  // M1 — Rácios de eficácia ofensiva (cálculo puro sobre o agregado já recebido).
+  const golosPorJogo =
+    agregado.jogosUtilizados > 0
+      ? (agregado.totalGolos / agregado.jogosUtilizados).toFixed(2)
+      : null;
+  const golosPorConvocatoria =
+    agregado.jogosConvocado > 0
+      ? (agregado.totalGolos / agregado.jogosConvocado).toFixed(2)
+      : null;
+  const defesasPorJogo =
+    eGR && agregado.jogosUtilizados > 0
+      ? ((agregado.totalDefesas ?? 0) / agregado.jogosUtilizados).toFixed(2)
+      : null;
+
+  // M3 — Tendência de desempenho (forma recente vs. média da época, em golos).
+  const jogosUsados = evolucaoJogos.filter((j) => j.utilizado);
+  const mediaEpoca =
+    jogosUsados.length > 0
+      ? jogosUsados.reduce((s, j) => s + (j.golos ?? 0), 0) / jogosUsados.length
+      : 0;
+  const ultimos5 = jogosUsados.slice(-5);
+  const mediaRecente =
+    ultimos5.length >= 3 // mínimo 3 jogos para mostrar tendência
+      ? ultimos5.reduce((s, j) => s + (j.golos ?? 0), 0) / ultimos5.length
+      : null;
+  const tendencia: "up" | "flat" | "down" | null =
+    mediaRecente !== null
+      ? mediaRecente > mediaEpoca + 0.1
+        ? "up"
+        : mediaRecente < mediaEpoca - 0.1
+          ? "down"
+          : "flat"
+      : null;
+  // Tendência baseada em golos: só faz sentido para jogadores de campo.
+  const mostrarTendencia = !eGR && tendencia !== null;
+  const TREND = {
+    up: { icon: TrendingUp, cor: "verde" as const },
+    flat: { icon: Minus, cor: "cinza" as const },
+    down: { icon: TrendingDown, cor: "vermelho" as const },
+  };
 
   const pontosJogos = evolucaoJogos
     .filter((j) => j.utilizado)
@@ -91,6 +194,12 @@ export function PainelAtleta({ dados }: { dados: AnaliticoAtleta }) {
           <>
             <CartaoKpi valor={agregado.totalDefesas ?? 0} label="defesas" icon={Hand} cor="verde" />
             <CartaoKpi
+              valor={defesasPorJogo ?? "—"}
+              label="defesas/jogo"
+              icon={Target}
+              cor="verde"
+            />
+            <CartaoKpi
               valor={agregado.totalGolosSofridos ?? 0}
               label="sofridos"
               icon={ShieldAlert}
@@ -100,6 +209,26 @@ export function PainelAtleta({ dados }: { dados: AnaliticoAtleta }) {
         ) : (
           <>
             <CartaoKpi valor={agregado.totalGolos} label="golos" icon={Target} cor="verde" />
+            {mostrarTendencia && tendencia && (
+              <CartaoKpi
+                valor={`${mediaRecente!.toFixed(1)}/jogo`}
+                label="forma (últ. 5)"
+                icon={TREND[tendencia].icon}
+                cor={TREND[tendencia].cor}
+              />
+            )}
+            <CartaoKpi
+              valor={golosPorJogo ?? "—"}
+              label="golos/jogo"
+              icon={Target}
+              cor="primary"
+            />
+            <CartaoKpi
+              valor={golosPorConvocatoria ?? "—"}
+              label="golos/conv."
+              icon={Crosshair}
+              cor="primary"
+            />
             <CartaoKpi
               valor={agregado.totalAssistencias}
               label="assist."
@@ -129,6 +258,62 @@ export function PainelAtleta({ dados }: { dados: AnaliticoAtleta }) {
             <span>🟥 {cartoes.vermelhos} {cartoes.vermelhos === 1 ? "vermelho" : "vermelhos"}</span>
           )}
         </p>
+      )}
+
+      {/* Comparação directa com um colega de equipa (M4 — §10.1) */}
+      {podeComparar && (
+        <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-legenda font-medium uppercase tracking-wide text-cinza-400">
+              Comparação directa
+            </p>
+            <div className="flex items-center gap-3">
+              <Select
+                value={atletaComparacaoId ?? undefined}
+                onValueChange={selecionarComparacao}
+                disabled={loadingComparacao}
+              >
+                <SelectTrigger className="w-56" aria-label="Comparar com atleta">
+                  <SelectValue placeholder="Comparar com..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {atletasEscalao!.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {dadosComparacao && (
+                <button
+                  type="button"
+                  onClick={limparComparacao}
+                  className="text-corpo-sec text-cinza-500 underline-offset-2 hover:text-cinza-900 hover:underline"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {loadingComparacao ? (
+            <p className="text-corpo-sec text-cinza-500">
+              A carregar comparação…
+            </p>
+          ) : dadosComparacao ? (
+            <ComparacaoDirecta
+              atletaA={{ nome: atleta.nome, agregado }}
+              atletaB={{
+                nome: dadosComparacao.nome,
+                agregado: dadosComparacao.agregado,
+              }}
+            />
+          ) : (
+            <p className="text-corpo-sec text-cinza-500">
+              Seleciona um colega de equipa para comparar lado a lado.
+            </p>
+          )}
+        </div>
       )}
 
       {/* Comparação com a média da equipa */}
@@ -215,6 +400,7 @@ export function PainelAtleta({ dados }: { dados: AnaliticoAtleta }) {
             serie1={eGR ? "Defesas" : "Golos"}
             serie2={eGR ? undefined : "Assistências"}
             titulo={eGR ? "Defesas por jogo" : "Golos e assistências por jogo"}
+            mediaReferencia={eGR ? undefined : mediaEpoca}
           />
         </div>
       )}
@@ -224,6 +410,16 @@ export function PainelAtleta({ dados }: { dados: AnaliticoAtleta }) {
         <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
           <GraficoBarrasV dados={pontosPresenca} titulo="Taxa de presença por mês" />
         </div>
+      )}
+
+      {/* Evolução por época (M5 — §10.1). Só com histórico (≥ 2 épocas). */}
+      {evolucaoEpocas && evolucaoEpocas.length >= 2 && (
+        <SecaoAnalitico titulo="Evolução por época">
+          <TabelaEvolucaoAtleta
+            epocas={evolucaoEpocas}
+            epocaAtualId={dados.epoca.id}
+          />
+        </SecaoAnalitico>
       )}
     </div>
   );
@@ -253,6 +449,119 @@ function Comparacao({
           média {fmt(equipa)}
         </span>
       </dd>
+    </div>
+  );
+}
+
+// M4 — Vista lado-a-lado de dois atletas (§10.1). Métricas ofensivas comuns a
+// todas as posições (o GR aparece com os seus números de campo, tipicamente 0).
+function ComparacaoDirecta({
+  atletaA,
+  atletaB,
+}: {
+  atletaA: { nome: string; agregado: EstatisticasAgregadas };
+  atletaB: { nome: string; agregado: EstatisticasAgregadas };
+}) {
+  const golosJogo = (ag: EstatisticasAgregadas) =>
+    ag.jogosUtilizados > 0
+      ? (ag.totalGolos / ag.jogosUtilizados).toFixed(2)
+      : "—";
+  const linhas: { label: string; a: string | number; b: string | number }[] = [
+    { label: "Golos", a: atletaA.agregado.totalGolos, b: atletaB.agregado.totalGolos },
+    { label: "Jogos", a: atletaA.agregado.jogosUtilizados, b: atletaB.agregado.jogosUtilizados },
+    {
+      label: "Presenças",
+      a: pct(atletaA.agregado.taxaPresenca),
+      b: pct(atletaB.agregado.taxaPresenca),
+    },
+    { label: "Golos/jogo", a: golosJogo(atletaA.agregado), b: golosJogo(atletaB.agregado) },
+  ];
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-corpo-sec">
+        <thead>
+          <tr className="border-b border-cinza-200 text-left text-legenda uppercase tracking-wide text-cinza-500">
+            <th className="py-2 pr-3 font-medium">Métrica</th>
+            <th className="px-3 py-2 text-right font-medium text-primary">{atletaA.nome}</th>
+            <th className="py-2 pl-3 text-right font-medium">{atletaB.nome}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-cinza-100">
+          {linhas.map((l) => (
+            <tr key={l.label} className="text-cinza-900">
+              <td className="py-2.5 pr-3">{l.label}</td>
+              <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-primary">
+                {l.a}
+              </td>
+              <td className="py-2.5 pl-3 text-right tabular-nums">{l.b}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// M5 — Tabela de evolução do atleta ao longo das épocas (§10.1). Uma linha por
+// época (mais antigas primeiro, ordenadas na origem). Época atual destacada.
+function TabelaEvolucaoAtleta({
+  epocas,
+  epocaAtualId,
+}: {
+  epocas: EpocaResumoAtleta[];
+  epocaAtualId: string;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-cinza-200 bg-white">
+      <table className="w-full min-w-[560px] text-corpo-sec">
+        <thead>
+          <tr className="border-b border-cinza-200 text-left text-legenda uppercase tracking-wide text-cinza-500">
+            <th className="px-5 py-3 font-medium">Época</th>
+            <th className="px-3 py-3 font-medium">Escalão</th>
+            <th className="px-3 py-3 text-right font-medium">Golos</th>
+            <th className="px-3 py-3 text-right font-medium">Jogos</th>
+            <th className="px-3 py-3 text-right font-medium">Presenças</th>
+            <th className="px-5 py-3 text-right font-medium">Habilidades</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-cinza-100">
+          {epocas.map((e) => {
+            const ativa = e.epocaId === epocaAtualId;
+            return (
+              <tr
+                key={e.epocaId}
+                className={
+                  ativa
+                    ? "bg-primary/5 text-cinza-900"
+                    : "text-cinza-900 transition-colors hover:bg-cinza-50"
+                }
+              >
+                <td
+                  className={`px-5 py-3 ${
+                    ativa ? "font-bold text-primary" : "font-medium"
+                  }`}
+                >
+                  {e.epocaNome}
+                  {ativa && (
+                    <span className="ml-2 text-legenda font-medium uppercase tracking-wide text-primary">
+                      Atual
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-3">{e.escalaoNome ?? "—"}</td>
+                <td className="px-3 py-3 text-right tabular-nums">{e.totalGolos}</td>
+                <td className="px-3 py-3 text-right tabular-nums">{e.jogosUtilizados}</td>
+                <td className="px-3 py-3 text-right tabular-nums">
+                  {pct(e.taxaPresenca)}
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {e.habilidades.desbloqueadas}/{e.habilidades.total}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

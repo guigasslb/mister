@@ -16,11 +16,17 @@ export interface HabilidadeComProgresso extends Habilidade {
 
 export async function obterCadernetaAtleta(
   atletaId: string,
+  // M5 (§10.1/§12.7): época em contexto. Quando indicada, a caderneta é lida
+  // dessa época (validada contra o clube do utilizador) — usado pela vista de
+  // evolução multi-época. Omitida = época ativa (comportamento pré-existente).
+  epocaId?: string,
 ): Promise<Resultado<HabilidadeComProgresso[]>> {
   const clubeId = await obterClubeIdAtual();
   if (!clubeId) return erro("Não autenticado");
 
-  const epoca = await obterEpocaAtiva();
+  const epoca = epocaId
+    ? await prisma.epoca.findFirst({ where: { id: epocaId, clubeId }, select: { id: true } })
+    : await obterEpocaAtiva();
   if (!epoca) return erro("Nenhuma época ativa");
 
   // F1: permissão pelas participações ativas do atleta na época.

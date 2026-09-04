@@ -41,6 +41,14 @@ interface Props {
     descricaoOverride: string | null;
     notas: string | null;
     parteTreino: ParteTreinoValor | null;
+    // Plano de treino imprimível (§4.2.1) — overrides por sessão. Opcionais para
+    // retrocompatibilidade com callers ainda por ligar aos novos campos.
+    numeroJogadoresOverride?: string | null;
+    espacoOverride?: string | null;
+    // Valores base do exercício, usados para pré-preencher quando o override é nulo
+    // (melhor UX: o treinador vê o valor original e ajusta a partir dele).
+    numeroJogadoresBase?: string | null;
+    espacoBase?: string | null;
   };
   aberto: boolean;
   onFechar: () => void;
@@ -82,16 +90,27 @@ export function AdaptarExercicioDialog({
   const [parteTreino, setParteTreino] = useState<string>(
     valorActual.parteTreino ?? SEM_FASE,
   );
+  // Pré-preencher com o override existente ou, se nulo, com o valor base do exercício.
+  const [numeroJogadores, setNumeroJogadores] = useState(
+    valorActual.numeroJogadoresOverride ?? valorActual.numeroJogadoresBase ?? "",
+  );
+  const [espaco, setEspaco] = useState(
+    valorActual.espacoOverride ?? valorActual.espacoBase ?? "",
+  );
 
   function guardar() {
     setErro(null);
     const descricaoLimpa = descricaoOverride.trim();
     const notasLimpa = notas.trim();
+    const numeroJogadoresLimpo = numeroJogadores.trim();
+    const espacoLimpo = espaco.trim();
     const dados: SessaoExercicioOverrideInput = {
       duracaoMin: paraNumero(duracaoMin),
       series: paraNumero(series),
       descricaoOverride: descricaoLimpa === "" ? null : descricaoLimpa,
       notas: notasLimpa === "" ? null : notasLimpa,
+      numeroJogadoresOverride: numeroJogadoresLimpo === "" ? null : numeroJogadoresLimpo,
+      espacoOverride: espacoLimpo === "" ? null : espacoLimpo,
       parteTreino: parteTreino === SEM_FASE ? null : (parteTreino as ParteTreinoValor),
     };
     startTransition(async () => {
@@ -143,6 +162,29 @@ export function AdaptarExercicioDialog({
                 inputMode="numeric"
                 value={series}
                 onChange={(e) => setSeries(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="adaptar-num-jogadores">Nº de jogadores</Label>
+              <Input
+                id="adaptar-num-jogadores"
+                maxLength={40}
+                placeholder="ex: 4+GR, 3x3, Todos"
+                value={numeroJogadores}
+                onChange={(e) => setNumeroJogadores(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="adaptar-espaco">Espaço</Label>
+              <Input
+                id="adaptar-espaco"
+                maxLength={60}
+                placeholder="ex: campo inteiro, 20x20m"
+                value={espaco}
+                onChange={(e) => setEspaco(e.target.value)}
               />
             </div>
           </div>

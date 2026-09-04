@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { listarEscaloes } from "@/lib/actions/escaloes";
+import { listarEscaloesLegiveis } from "@/lib/actions/escaloes";
 import { listarCompeticoes } from "@/lib/actions/competicoes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
 import { escaloesComModalidade } from "@/lib/modalidade-escalao";
@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Novo jogo" };
 
 export default async function NovoJogoPage() {
   const [resEscaloes, resComp, resSeccoes] = await Promise.all([
-    listarEscaloes(),
+    listarEscaloesLegiveis(),
     listarCompeticoes(),
     obterSeccoes(),
   ]);

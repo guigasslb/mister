@@ -22,6 +22,9 @@ export type ExercicioParaSnapshot = {
   descricao: string | null;
   objetivo: string | null;
   diagrama: Prisma.JsonValue | null;
+  // Plano de treino imprimível (§4.2.1). Opcionais: rows legadas podem não os ter.
+  numeroJogadores?: string | null;
+  espaco?: string | null;
 };
 
 /** Campos `snap*` a persistir no `SessaoExercicio` (input de escrita Prisma). */
@@ -30,6 +33,8 @@ export type DadosSnapshot = {
   snapDescricao: string | null;
   snapObjetivo: string | null;
   snapDiagrama: Prisma.InputJsonValue | typeof Prisma.DbNull;
+  snapNumeroJogadores: string | null;
+  snapEspaco: string | null;
   snapCriadoEm: Date;
 };
 
@@ -53,6 +58,8 @@ export function construirSnapshotExercicio(
       exercicio.diagrama === null
         ? Prisma.DbNull
         : (exercicio.diagrama as Prisma.InputJsonValue),
+    snapNumeroJogadores: exercicio.numeroJogadores ?? null,
+    snapEspaco: exercicio.espaco ?? null,
     snapCriadoEm: agora,
   };
 }
@@ -78,6 +85,12 @@ export type SessaoExercicioParaExibir = {
   snapDescricao: string | null;
   snapObjetivo: string | null;
   snapDiagrama: Prisma.JsonValue | null;
+  // Plano de treino imprimível (§4.2.1): override por sessão (semeado da base ao
+  // adicionar) com fallback ao snapshot. Opcionais — rows legadas podem não os ter.
+  numeroJogadoresOverride?: string | null;
+  espacoOverride?: string | null;
+  snapNumeroJogadores?: string | null;
+  snapEspaco?: string | null;
 };
 
 /** Dados resolvidos para exibição do plano de treino histórico. */
@@ -89,6 +102,10 @@ export type ExercicioResolvido = {
   descricao: string | null;
   objetivo: string | null;
   diagrama: Prisma.JsonValue | null;
+  /** Nº de jogadores (§4.2.1): override por sessão → snapshot → null. */
+  numeroJogadores: string | null;
+  /** Espaço (§4.2.1): override por sessão → snapshot → null. */
+  espaco: string | null;
   /** `true` quando os dados vieram do snapshot (exercício original indisponível). */
   origemSnapshot: boolean;
 };
@@ -110,6 +127,10 @@ export function resolverExercicioSessao(se: SessaoExercicioParaExibir): Exercici
     descricao: ex?.descricao ?? se.snapDescricao ?? null,
     objetivo: ex?.objetivo ?? se.snapObjetivo ?? null,
     diagrama: ex?.diagrama ?? se.snapDiagrama ?? null,
+    // Nº de jogadores/espaço: override por sessão prevalece (semeado da base ao
+    // adicionar), com fallback ao snapshot congelado (§4.2.1).
+    numeroJogadores: se.numeroJogadoresOverride ?? se.snapNumeroJogadores ?? null,
+    espaco: se.espacoOverride ?? se.snapEspaco ?? null,
     origemSnapshot: !temExercicio && se.snapNome != null,
   };
 }

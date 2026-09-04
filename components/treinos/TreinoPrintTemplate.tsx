@@ -2,8 +2,14 @@ import { Logo } from "@/components/layout/Logo";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
 import { diagramaSchema, LABEL_PARTE_TREINO } from "@/lib/schemas/exercicio";
 import { LABEL_CATEGORIA_PRINCIPAL } from "@/lib/schemas/subcategoria";
-import { LABEL_TIPO_SESSAO } from "@/lib/schemas/treino";
-import type { TipoSessao, ParteTreino, CategoriaExercicioPrincipal } from "@prisma/client";
+import { LABEL_TIPO_SESSAO, LABEL_MOMENTO_SEMANA, type MomentoSemana } from "@/lib/schemas/treino";
+import { LABEL_PERIODO } from "@/lib/schemas/planeamento";
+import type {
+  TipoSessao,
+  ParteTreino,
+  CategoriaExercicioPrincipal,
+  PeriodoEpoca,
+} from "@prisma/client";
 
 /** Laranja da marca Mister (§12 / docs/BRAND.md) — acento dos cabeçalhos de secção. */
 const MISTER_LARANJA = "#F0531E";
@@ -20,6 +26,10 @@ export type ExercicioImpressao = {
   duracaoMin: number | null;
   series: number | null;
   notas: string | null;
+  /** Nº de jogadores do exercício (§4.2.1), ou null. */
+  numeroJogadores?: string | null;
+  /** Espaço/dimensões do exercício (§4.2.1), ou null. */
+  espaco?: string | null;
   /** Diagrama de campo (DiagramaCampo em JSON) ou null. */
   diagrama: unknown;
 };
@@ -35,6 +45,14 @@ export type DadosImpressaoTreino = {
   objetivo: string | null;
   notas: string | null;
   duracaoTotalMin: number | null;
+  // Periodização federativa (§8.9.1 / §16 Grupo B) — cabeçalho do plano de treino.
+  microciclo?: number | null;
+  mesociclo?: number | null;
+  momentoSemana?: MomentoSemana | null;
+  periodo?: PeriodoEpoca | null;
+  // Presenças: presentes (PRESENTE/ATRASADO) sobre total de registos.
+  nPresentes?: number | null;
+  nRegistados?: number | null;
   exercicios: ExercicioImpressao[];
 };
 
@@ -94,6 +112,16 @@ function MetaExercicio({ rotulo, valor }: { rotulo: string; valor: string }) {
   );
 }
 
+/** Chip de metadado federativo no cabeçalho (microciclo, mesociclo, período…). */
+function MetaCabecalho({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-cinza-300 px-2.5 py-0.5 text-legenda text-cinza-700">
+      <span className="font-semibold text-cinza-900">{rotulo}:</span>
+      {valor}
+    </span>
+  );
+}
+
 /**
  * Template imprimível de uma sessão de treino completa (§ produto — "levar
  * impresso quando não há tablet"). Puro (server component): renderiza o
@@ -112,8 +140,23 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
     objetivo,
     notas,
     duracaoTotalMin,
+    microciclo,
+    mesociclo,
+    momentoSemana,
+    periodo,
+    nPresentes,
+    nRegistados,
     exercicios,
   } = dados;
+
+  // Cabeçalho federativo: só mostramos a linha se houver pelo menos um dado.
+  const temPresencas = nRegistados != null && nRegistados > 0;
+  const temPeriodizacao =
+    microciclo != null ||
+    mesociclo != null ||
+    periodo != null ||
+    momentoSemana != null ||
+    temPresencas;
 
   return (
     <article className="mx-auto max-w-[820px] bg-white px-8 py-8 text-cinza-900 print:px-0 print:py-0">
@@ -161,6 +204,33 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
         <p className="mt-1 text-corpo text-cinza-600">
           {formatarDataLonga(data)}
         </p>
+
+        {/* Metadados federativos (§8.9.1 / §16 Grupo B): periodização + presenças. */}
+        {temPeriodizacao && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {microciclo != null && (
+              <MetaCabecalho rotulo="Microciclo" valor={String(microciclo)} />
+            )}
+            {mesociclo != null && (
+              <MetaCabecalho rotulo="Mesociclo" valor={String(mesociclo)} />
+            )}
+            {periodo != null && (
+              <MetaCabecalho rotulo="Período" valor={LABEL_PERIODO[periodo]} />
+            )}
+            {momentoSemana != null && (
+              <MetaCabecalho
+                rotulo="Momento"
+                valor={LABEL_MOMENTO_SEMANA[momentoSemana]}
+              />
+            )}
+            {temPresencas && (
+              <MetaCabecalho
+                rotulo="Nº jogadores"
+                valor={`${nPresentes ?? 0}/${nRegistados}`}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Resumo da sessão */}
@@ -263,6 +333,12 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
                     )}
                     {ex.series != null && (
                       <MetaExercicio rotulo="Séries" valor={String(ex.series)} />
+                    )}
+                    {ex.numeroJogadores && (
+                      <MetaExercicio rotulo="Nº jogadores" valor={ex.numeroJogadores} />
+                    )}
+                    {ex.espaco && (
+                      <MetaExercicio rotulo="Espaço" valor={ex.espaco} />
                     )}
                   </div>
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft, CalendarPlus, CalendarRange } from "lucide-react";
-import { listarEscaloes } from "@/lib/actions/escaloes";
+import { listarEscaloesLegiveis } from "@/lib/actions/escaloes";
 import { SessaoForm } from "@/components/treinos/SessaoForm";
 import { PlanoSemanalForm } from "@/components/treinos/PlanoSemanalForm";
 import { EstadoErro } from "@/components/layout/EstadosUI";
@@ -23,7 +23,7 @@ export default async function NovaSessaoPage({
   const { data, escalaoId, modo } = await searchParams;
   const ehPlano = modo === "plano";
 
-  const resEscaloes = await listarEscaloes();
+  const resEscaloes = await listarEscaloesLegiveis();
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
 
   const qs = escalaoId ? `escalaoId=${escalaoId}&` : "";

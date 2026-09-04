@@ -28,6 +28,8 @@ describe("construirSnapshotExercicio (§4.2.1)", () => {
       snapDescricao: "Posse em espaço reduzido",
       snapObjetivo: "Circulação de bola sob pressão",
       snapDiagrama: diagramaExemplo,
+      snapNumeroJogadores: null,
+      snapEspaco: null,
       snapCriadoEm: agora,
     });
   });

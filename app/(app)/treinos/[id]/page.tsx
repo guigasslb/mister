@@ -234,6 +234,8 @@ export default async function DetalheSessaoPage({
           numero: a.participacaoContexto?.numero ?? s.numeroPorAtleta[a.id] ?? null,
         }))}
         presencasIniciais={presencasIniciais}
+        // Sessão fechada → marcação de presenças em modo só-leitura (§8).
+        fechado={s.fechado}
       />
 
       {/* Melhoria 1/4.4 — plano de exercícios com conteúdo (diagrama, objetivo, descrição). */}

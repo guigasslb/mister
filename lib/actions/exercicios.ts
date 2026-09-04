@@ -231,6 +231,9 @@ export async function atualizarExercicio(
       duracaoMin: parsed.data.duracaoMin ?? null,
       categoriaPrincipal: parsed.data.categoriaPrincipal ?? null,
       subcategoriaId: parsed.data.subcategoriaId ?? null,
+      // Plano de treino imprimível (§4.2.1): nº de jogadores e espaço.
+      numeroJogadores: parsed.data.numeroJogadores ?? null,
+      espaco: parsed.data.espaco ?? null,
       // Campos opcionais da organização da biblioteca (secção 3.3): só são
       // reescritos se vieram explicitamente no payload — `undefined` significa
       // "não fornecido" (não "apagar"). Ver code review F3 (M4).
@@ -312,6 +315,9 @@ export async function duplicarExercicio(id: string): Promise<Resultado<Exercicio
       modalidade: original.modalidade,
       parteTreino: original.parteTreino,
       escalaoAlvo: original.escalaoAlvo,
+      // Plano de treino imprimível (§4.2.1): a cópia leva o nº de jogadores/espaço.
+      numeroJogadores: original.numeroJogadores,
+      espaco: original.espaco,
       // O diagrama nulo tem de passar como `undefined` (o Prisma rejeita `null`
       // literal em campos Json — usaria JsonNull/DbNull).
       diagrama:

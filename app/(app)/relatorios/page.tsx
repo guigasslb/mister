@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { listarEscaloes } from "@/lib/actions/escaloes";
+import { listarEscaloesLegiveis } from "@/lib/actions/escaloes";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { obterRelatorioEquipa } from "@/lib/actions/relatorios";
 import { BotaoImprimir } from "@/components/relatorios/BotaoImprimir";
@@ -24,7 +24,7 @@ export default async function RelatoriosPage({
   searchParams: Promise<{ escalaoId?: string }>;
 }) {
   const { escalaoId } = await searchParams;
-  const resEsc = await listarEscaloes();
+  const resEsc = await listarEscaloesLegiveis();
   if (!resEsc.sucesso) return <EstadoErro mensagem={resEsc.erro} />;
   const escaloes = resEsc.dados;
   const selecionado = escalaoId ?? escaloes[0]?.id;

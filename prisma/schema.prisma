@@ -630,6 +630,8 @@ model Exercicio {
   descricao          String?                      @db.Text
   objetivo           String?                      @db.Text
   duracaoMin         Int?
+  numeroJogadores    String?
+  espaco             String?
   categoriaPrincipal CategoriaExercicioPrincipal?
   subcategoriaId     String?
   subcategoria       SubcategoriaExercicio?       @relation(fields: [subcategoriaId], references: [id])
@@ -977,6 +979,9 @@ model SessaoExercicio {
   notas             String?      @db.Text
   series            Int?
   descricaoOverride String?      @db.Text
+  // Overrides por sessão — não alteram a biblioteca (§4.2.1).
+  numeroJogadoresOverride String?
+  espacoOverride          String?
   // Fase do treino a que este exercício pertence NESTA sessão (§3.5). Reutiliza o
   // enum ParteTreino já usado em Exercicio/ModeloSessaoExercicio: AQUECIMENTO |
   // PRINCIPAL | JOGO_REDUZIDO | RETORNO_CALMA. Null = sem fase atribuída (rows
@@ -990,11 +995,13 @@ model SessaoExercicio {
   // edita nem apaga. Exercícios proprietario = CLUBE não geram snapshot (já são do clube).
   // NOTA: snapDiagrama é Json? (cópia fiel do Exercicio.diagrama, um DiagramaCampo — §11),
   // conforme a bíblia §3.5.
-  snapNome      String?
-  snapDescricao String?   @db.Text
-  snapObjetivo  String?   @db.Text
-  snapDiagrama  Json?
-  snapCriadoEm  DateTime?
+  snapNome            String?
+  snapDescricao       String?   @db.Text
+  snapObjetivo        String?   @db.Text
+  snapDiagrama        Json?
+  snapNumeroJogadores String?
+  snapEspaco          String?
+  snapCriadoEm        DateTime?
 
   @@unique([sessaoId, ordem])
   @@index([sessaoId])

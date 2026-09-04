@@ -292,6 +292,55 @@ describe("obterAnaliticoAtleta", () => {
     const r = await obterAnaliticoAtleta(ATLETA, ESCALAO);
     expect(r.sucesso).toBe(false);
   });
+
+  it("mantém o histórico de quem já saiu do escalão (não filtra participações por estado — §10.1)", async () => {
+    // Cenário do bug: o atleta foi removido do escalão. `terminarParticipacao`
+    // marca a participação como INATIVO (e `transferirEscalao` como TRANSICAO),
+    // mas a linha persiste e as estatísticas continuam ligadas ao jogo/atleta.
+    p.atleta.findFirst.mockResolvedValue({
+      id: ATLETA,
+      nome: "Tiago Coelho",
+      posicoes: ["ALA"],
+      criadoEm: new Date("2025-08-01"),
+      dataIngresso: null,
+      participacoes: [
+        {
+          escalaoId: ESCALAO,
+          escalao: { nome: "Benjamins", seccao: { modalidade: "FUTSAL" } },
+        },
+      ],
+    });
+    p.convocatoria.count.mockResolvedValue(3);
+    p.estatisticaAtleta.findMany.mockResolvedValue([
+      {
+        utilizacao: "TITULAR",
+        blocoTempo: "JOGO_COMPLETO",
+        minutos: null,
+        golos: 5,
+        assistencias: 2,
+        defesas: null,
+        golosSofridosGR: null,
+        cartaoAmarelo: 0,
+        cartaoVermelho: 0,
+        jogo: { data: new Date("2025-10-01"), adversario: "Rival", formato: null },
+      },
+    ]);
+    p.sessao.findMany.mockResolvedValue([]);
+    p.presenca.findMany.mockResolvedValue([]);
+    p.habilidade.count.mockResolvedValue(0);
+    p.progressoHabilidade.findMany.mockResolvedValue([]);
+
+    const r = await obterAnaliticoAtleta(ATLETA);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(r.dados.agregado.totalGolos).toBe(5);
+
+    // Causa raiz: a query de participações tem de estar limitada à época e NUNCA
+    // ao estado — senão o histórico de quem saiu (INATIVO/TRANSICAO) desaparece.
+    const arg = p.atleta.findFirst.mock.calls.at(-1)![0];
+    expect(arg.select.participacoes.where).toEqual({ epocaId: EPOCA });
+    expect(arg.select.participacoes.where).not.toHaveProperty("estado");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -343,6 +392,44 @@ describe("obterAnaliticoEscalao", () => {
     // Ambas as sessões (2025-09) já passaram → todas executadas.
     expect(r.dados.sessoes).toBe(2);
     expect(r.dados.sessoesExecutadas).toBe(2);
+  });
+
+  it("separa o balanço V/E/D por local do jogo (casa/fora — §10.2)", async () => {
+    p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
+    p.jogo.findMany.mockResolvedValue([
+      // Casa: 1 vitória, 1 empate.
+      { id: "j1", data: new Date("2025-09-10"), adversario: "A", golosMarcados: 3, golosSofridos: 1, casaFora: "CASA" },
+      { id: "j2", data: new Date("2025-09-17"), adversario: "B", golosMarcados: 1, golosSofridos: 1, casaFora: "CASA" },
+      // Fora: 1 derrota + 1 jogo sem resultado (não conta para o balanço).
+      { id: "j3", data: new Date("2025-09-24"), adversario: "C", golosMarcados: 0, golosSofridos: 2, casaFora: "FORA" },
+      { id: "j4", data: new Date("2025-10-01"), adversario: "D", golosMarcados: null, golosSofridos: null, casaFora: "FORA" },
+    ]);
+    p.sessao.findMany.mockResolvedValue([]);
+    p.atletaEscalao.count.mockResolvedValue(10);
+    p.estatisticaAtleta.findMany.mockResolvedValue([]);
+    p.eventoJogo.findMany.mockResolvedValue([]);
+    p.presenca.findMany.mockResolvedValue([]);
+
+    const r = await obterAnaliticoEscalao(ESCALAO);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    // O select pede o local do jogo.
+    expect(p.jogo.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ casaFora: true }),
+      }),
+    );
+    expect(r.dados.recordCasa).toEqual({ vitorias: 1, empates: 1, derrotas: 0, jogos: 2 });
+    // Fora: só o jogo com resultado (j3) entra; o agendado (j4) é ignorado.
+    expect(r.dados.recordFora).toEqual({ vitorias: 0, empates: 0, derrotas: 1, jogos: 1 });
+    // O local propaga-se para cada resultado jogo-a-jogo.
+    expect(r.dados.resultados.map((x) => x.casaFora)).toEqual([
+      "CASA", "CASA", "FORA", "FORA",
+    ]);
+    // Os totais globais mantêm-se (zero regressão).
+    expect(r.dados.vitorias).toBe(1);
+    expect(r.dados.empates).toBe(1);
+    expect(r.dados.derrotas).toBe(1);
   });
 
   it("distingue sessões programadas de executadas (data < agora)", async () => {

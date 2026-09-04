@@ -14,8 +14,10 @@ import {
   isVideoUrlValido,
   LIMITE_AMARELOS_SUSPENSAO,
   type SuspensaoPendente,
+  type EstatisticaInput,
 } from "@/lib/schemas/jogo";
 import { modalidadeEfetiva, filtroModalidadeJogo } from "@/lib/modalidade-escalao";
+import { derivarEstatisticasDeEventos } from "@/lib/eventos-para-estatisticas";
 import {
   Prisma,
   type Epoca,
@@ -642,6 +644,25 @@ export async function definirPlanoTatico(
 // ─── Modo ao vivo (registo de eventos) ───────────────────────────────────────
 
 /**
+ * Recalcula o resultado do jogo (`golosMarcados`/`golosSofridos`) a partir da
+ * contagem de eventos `GOLO`/`GOLO_SOFRIDO`. Mantém o placar sincronizado com o
+ * registo ao vivo. Corre dentro de uma transação (recebe o `tx`).
+ */
+async function recalcularResultadoJogo(
+  tx: Prisma.TransactionClient,
+  jogoId: string,
+): Promise<void> {
+  const [golosMarcados, golosSofridos] = await Promise.all([
+    tx.eventoJogo.count({ where: { jogoId, tipo: "GOLO" } }),
+    tx.eventoJogo.count({ where: { jogoId, tipo: "GOLO_SOFRIDO" } }),
+  ]);
+  await tx.jogo.update({
+    where: { id: jogoId },
+    data: { golosMarcados, golosSofridos },
+  });
+}
+
+/**
  * Regista um evento ao vivo (golo, cartão, substituição com bloco, timeout…).
  * O `jogoId` vem no próprio payload (`registarEventoJogoSchema`).
  */
@@ -690,16 +711,23 @@ export async function registarEventoJogo(
   )
     return erro("O atleta secundário não pertence à convocatória deste jogo.");
 
-  const evento = await prisma.eventoJogo.create({
-    data: {
-      jogoId: parsed.data.jogoId,
-      parte: parsed.data.parte,
-      minuto: parsed.data.minuto ?? null,
-      tipo: parsed.data.tipo,
-      bloco: parsed.data.bloco ?? null,
-      atletaId: parsed.data.atletaId ?? null,
-      atletaSecundarioId: parsed.data.atletaSecundarioId ?? null,
-    },
+  const evento = await prisma.$transaction(async (tx) => {
+    const criado = await tx.eventoJogo.create({
+      data: {
+        jogoId: parsed.data.jogoId,
+        parte: parsed.data.parte,
+        minuto: parsed.data.minuto ?? null,
+        tipo: parsed.data.tipo,
+        bloco: parsed.data.bloco ?? null,
+        atletaId: parsed.data.atletaId ?? null,
+        atletaSecundarioId: parsed.data.atletaSecundarioId ?? null,
+      },
+    });
+    // Sincroniza o resultado quando o evento afeta o placar (golo marcado/sofrido).
+    if (parsed.data.tipo === "GOLO" || parsed.data.tipo === "GOLO_SOFRIDO") {
+      await recalcularResultadoJogo(tx, parsed.data.jogoId);
+    }
+    return criado;
   });
   revalidatePath(`${PATH}/${parsed.data.jogoId}`);
   return ok(evento);
@@ -711,14 +739,20 @@ export async function removerEventoJogo(eventoId: string): Promise<Resultado<voi
 
   const evento = await prisma.eventoJogo.findFirst({
     where: { id: eventoId, jogo: { escalao: { clubeId } } },
-    select: { id: true, jogoId: true, jogo: { select: { escalaoId: true } } },
+    select: { id: true, jogoId: true, tipo: true, jogo: { select: { escalaoId: true } } },
   });
   if (!evento) return erro("Evento não encontrado");
 
   const perm = await exigirCapacidade("ESTATISTICAS_GERIR", evento.jogo.escalaoId);
   if (!perm.ok) return erro(perm.erro);
 
-  await prisma.eventoJogo.delete({ where: { id: eventoId } });
+  await prisma.$transaction(async (tx) => {
+    await tx.eventoJogo.delete({ where: { id: eventoId } });
+    // Recalcula o placar após remover um evento que o afetava.
+    if (evento.tipo === "GOLO" || evento.tipo === "GOLO_SOFRIDO") {
+      await recalcularResultadoJogo(tx, evento.jogoId);
+    }
+  });
   revalidatePath(`${PATH}/${evento.jogoId}`);
   return ok(undefined);
 }
@@ -737,6 +771,59 @@ export async function listarEventosJogo(jogoId: string): Promise<Resultado<Event
     orderBy: ORDER_EVENTOS,
   });
   return ok(eventos);
+}
+
+/**
+ * Pré-visualiza as estatísticas derivadas dos eventos ao vivo, SEM persistir.
+ * Permite ao treinador rever o que os eventos produzem antes de guardar as
+ * estatísticas do jogo. Segue o padrão de `guardarEstatisticas`: clube do
+ * utilizador + capacidade `ESTATISTICAS_GERIR` + modalidade efetiva (§10.8).
+ */
+export async function previewEstatisticasDeEventos(
+  jogoId: string,
+): Promise<Resultado<EstatisticaInput[]>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const jogo = await prisma.jogo.findFirst({
+    where: { id: jogoId, escalao: { clubeId } },
+    include: { escalao: { select: { seccao: { select: { modalidade: true } } } } },
+  });
+  if (!jogo) return erro("Jogo não encontrado");
+
+  const perm = await exigirCapacidade("ESTATISTICAS_GERIR", jogo.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  // Modalidade efetiva do jogo (§10.8): decide se o núcleo de futebol é contado.
+  const eFutebol =
+    modalidadeEfetiva(jogo.modalidadeAtividade, jogo.escalao?.seccao?.modalidade) ===
+    "FUTEBOL";
+
+  const eventos = await prisma.eventoJogo.findMany({
+    where: { jogoId },
+    orderBy: ORDER_EVENTOS,
+    select: {
+      tipo: true,
+      atletaId: true,
+      atletaSecundarioId: true,
+      bloco: true,
+      minuto: true,
+    },
+  });
+
+  const convocados = await prisma.convocatoria.findMany({
+    where: { jogoId, convocado: true },
+    select: { atletaId: true, titularPrevisto: true },
+  });
+
+  const { estatisticas } = derivarEstatisticasDeEventos(
+    eventos,
+    convocados,
+    eFutebol,
+    jogo.formato,
+  );
+
+  return ok([...estatisticas.values()]);
 }
 
 // ─── Disciplina / suspensões (BUG-P1-04) ─────────────────────────────────────

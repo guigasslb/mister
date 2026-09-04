@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Ban, Check, TriangleAlert } from "lucide-react";
+import { Ban, Check, TriangleAlert, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +28,7 @@ import {
   definirConvocatoria,
   guardarEstatisticas,
   guardarRelatorio,
+  previewEstatisticasDeEventos,
 } from "@/lib/actions/jogos";
 import {
   LABEL_BLOCO_TEMPO,
@@ -157,6 +158,7 @@ export function JogoDetalhe({
   const [pendingConv, startConv] = useTransition();
   const [pendingEstat, startEstat] = useTransition();
   const [pendingRel, startRel] = useTransition();
+  const [pendingPreview, startPreview] = useTransition();
 
   const atletaPorId = new Map(atletas.map((a) => [a.id, a]));
   const convocadosLista = atletas.filter((a) => convocados.has(a.id));
@@ -264,6 +266,48 @@ export function JogoDetalhe({
       const res = await guardarEstatisticas(jogoId, payload);
       if (res.sucesso) toast.success("Estatísticas guardadas");
       else toast.error(res.erro);
+    });
+  }
+
+  // Fix de produto: os eventos do registo ao vivo derivam a grelha de
+  // estatísticas. Só preenche o estado local — o treinador revê e grava depois.
+  function importarDeEventos() {
+    startPreview(async () => {
+      const res = await previewEstatisticasDeEventos(jogoId);
+      if (!res.sucesso) {
+        toast.error(res.erro);
+        return;
+      }
+      setEstatisticas((prev) => {
+        const novo = { ...prev };
+        for (const d of res.dados) {
+          const existente = novo[d.atletaId];
+          novo[d.atletaId] = {
+            atletaId: d.atletaId,
+            utilizacao: d.utilizacao,
+            blocoTempo: d.blocoTempo ?? null,
+            minutos: d.minutos ?? null,
+            golos: d.golos ?? 0,
+            assistencias: d.assistencias ?? 0,
+            defesas: d.defesas ?? null,
+            golosSofridosGR: d.golosSofridosGR ?? null,
+            faltasCometidas: d.faltasCometidas ?? null,
+            cartaoAmarelo: d.cartaoAmarelo ?? 0,
+            cartaoVermelho: d.cartaoVermelho ?? 0,
+            remates: d.remates ?? null,
+            cantos: d.cantos ?? null,
+            forasDeJogo: d.forasDeJogo ?? null,
+            desarmes: d.desarmes ?? null,
+            // Preserva métricas configuráveis introduzidas à mão — a derivação
+            // de eventos não as toca.
+            valoresMetricas: existente?.valoresMetricas ?? {},
+          };
+        }
+        return novo;
+      });
+      toast.success(
+        "Estatísticas preenchidas a partir do registo ao vivo. Revê e guarda.",
+      );
     });
   }
 
@@ -420,6 +464,7 @@ export function JogoDetalhe({
             }))}
             casaFora={casaFora}
             adversario={adversario}
+            modalidade={modalidade}
           />
         )}
       </TabsContent>
@@ -432,6 +477,20 @@ export function JogoDetalhe({
           </p>
         ) : (
           <>
+            {/* Fix de produto: alimenta a grelha a partir dos eventos ao vivo.
+                Só faz sentido com eventos registados. */}
+            {eventos.length > 0 && (
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={importarDeEventos}
+                  disabled={pendingPreview}
+                >
+                  <Wand2 className="h-4 w-4" />
+                  {pendingPreview ? "A preencher…" : "Preencher do registo ao vivo"}
+                </Button>
+              </div>
+            )}
             {(() => {
               const somaGolos = convocadosLista.reduce(
                 (acc, a) => acc + (estatDe(a.id).golos ?? 0),

@@ -31,6 +31,15 @@ const INCLUDE_LISTA = {
 
 const INCLUDE_DETALHE = {
   escalao: { select: { id: true, nome: true } },
+  // Plano de treino imprimível: `periodo` da periodização vive só em Planeamento
+  // (a Sessao tem os escalares microciclo/mesociclo/momentoSemana).
+  planeamento: {
+    select: {
+      periodo: true,
+      mesociclo: true,
+      microciclo: true,
+    },
+  },
   exercicios: {
     orderBy: { ordem: "asc" },
     include: {
@@ -42,6 +51,8 @@ const INCLUDE_DETALHE = {
           objetivo: true,
           duracaoMin: true,
           categoriaPrincipal: true,
+          numeroJogadores: true,
+          espaco: true,
           diagrama: true,
         },
       },
@@ -540,6 +551,10 @@ export async function adicionarExercicioSessao(
       ordem,
       duracaoMin: exercicio.duracaoMin,
       parteTreino: faseFinal,
+      // Overrides semeados da base ao adicionar (melhor UX — o treinador ajusta
+      // por sessão sem partir do vazio). §4.2.1.
+      numeroJogadoresOverride: exercicio.numeroJogadores ?? null,
+      espacoOverride: exercicio.espaco ?? null,
       ...(snapshot ?? {}),
     },
   });
@@ -648,6 +663,11 @@ export async function marcarPresencas(
 
   const sessao = await prisma.sessao.findFirst({ where: { id: sessaoId, escalao: { clubeId } } });
   if (!sessao) return erro("Sessão não encontrada");
+
+  // Sessão fechada é só-leitura: bloqueia a marcação até ser reaberta pelo
+  // treinador. Defesa no servidor além do modo só-leitura da UI.
+  if (sessao.fechado)
+    return erro("A sessão está fechada. Reabre a sessão para alterar as presenças.");
 
   const perm = await exigirCapacidade("PRESENCAS_MARCAR", sessao.escalaoId);
   if (!perm.ok) return erro(perm.erro);

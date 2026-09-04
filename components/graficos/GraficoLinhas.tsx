@@ -32,6 +32,8 @@ interface GraficoLinhasProps {
   serie2?: string;
   titulo?: string;
   unidade?: string;
+  /** Valor de referência (ex.: média da época) desenhado como linha horizontal dashed. */
+  mediaReferencia?: number;
 }
 
 function formatarLabel(s: string): string {
@@ -44,6 +46,7 @@ export function GraficoLinhas({
   serie2,
   titulo,
   unidade = "",
+  mediaReferencia,
 }: GraficoLinhasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hovIdx, setHovIdx] = useState<number | null>(null);
@@ -172,6 +175,31 @@ export function GraficoLinhas({
             stroke={C_AXIS}
             strokeWidth={1}
           />
+
+          {/* Linha de referência (média) — dashed, opcional */}
+          {mediaReferencia != null && mediaReferencia > 0 && mediaReferencia <= yMax && (
+            <>
+              <line
+                x1={ML} y1={yOf(mediaReferencia)}
+                x2={ML + PW} y2={yOf(mediaReferencia)}
+                stroke={C_TEXTO_MUTED}
+                strokeWidth={1}
+                strokeDasharray="4 3"
+                pointerEvents="none"
+              />
+              <text
+                x={ML + PW}
+                y={yOf(mediaReferencia) - 3}
+                textAnchor="end"
+                fontSize={9}
+                fill={C_TEXTO_MUTED}
+                fontFamily="system-ui, sans-serif"
+                pointerEvents="none"
+              >
+                média {mediaReferencia.toFixed(1)}
+              </text>
+            </>
+          )}
 
           {/* Area fills (~10% opacity) */}
           {temS2 && (

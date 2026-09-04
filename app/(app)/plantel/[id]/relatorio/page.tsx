@@ -85,7 +85,14 @@ export default async function RelatorioAtletaPage({
             <Cartao valor={resStats.dados.jogosUtilizados} label="jogos" />
             <Cartao valor={resStats.dados.titularidades} label="titular" />
             <Cartao valor={`${Math.round(resStats.dados.taxaPresenca * 100)}%`} label="presenças" />
-            <Cartao valor={resStats.dados.totalMinutos ?? "—"} label="minutos" />
+            {/* Minutos: `totalMinutos` (registo minuto-a-minuto) tem prioridade;
+                quando o tempo é registado por blocos, `totalMinutos` é null e o
+                valor consolidado está em `tempoJogoAcumulado` (§10.1). Só "—"
+                quando nenhuma das duas formas foi registada. */}
+            <Cartao
+              valor={resStats.dados.totalMinutos ?? (resStats.dados.tempoJogoAcumulado || "—")}
+              label="minutos"
+            />
           </div>
         </div>
       )}

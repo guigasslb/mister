@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, ListChecks, RotateCcw } from "lucide-react";
+import { Check, ListChecks, Lock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { marcarPresencas } from "@/lib/actions/treinos";
 import { MOTIVOS_FALTA, LABEL_MOTIVO_FALTA } from "@/lib/schemas/treino";
+import { presencasAlteradas, type RegistoPresenca } from "@/lib/presencas";
 import type { EstadoPresenca, MotivoFalta } from "@prisma/client";
 
 type Atleta = { id: string; nome: string; numero: number | null };
@@ -17,17 +18,6 @@ type Atleta = { id: string; nome: string; numero: number | null };
  */
 export type PresencaInicial = {
   estado: EstadoPresenca;
-  motivo: MotivoFalta | null;
-  justificacao: string | null;
-};
-
-/**
- * Registo em edição no cliente. As presenças são por sessão e começam vazias:
- * um atleta sem registo gravado fica com `estado: null` (por marcar) até o
- * treinador escolher explicitamente um estado. Não confundir com "presente".
- */
-type RegistoPresenca = {
-  estado: EstadoPresenca | null;
   motivo: MotivoFalta | null;
   justificacao: string | null;
 };
@@ -52,10 +42,17 @@ export function MarcadorPresencas({
   sessaoId,
   atletas,
   presencasIniciais,
+  fechado = false,
 }: {
   sessaoId: string;
   atletas: Atleta[];
   presencasIniciais: Record<string, PresencaInicial>;
+  /**
+   * Sessão fechada pelo treinador (`Sessao.fechado`). Quando true, a marcação de
+   * presenças fica em modo só-leitura: inputs e botões desativados. Reabrir a
+   * sessão (botão dedicado no topo) volta a permitir editar.
+   */
+  fechado?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -78,7 +75,17 @@ export function MarcadorPresencas({
     return inicial;
   }, [atletas, presencasIniciais]);
 
+  // Estado inicial (referência) para detetar alterações pendentes. Recalcula só
+  // quando os dados do servidor mudam (ex.: após guardar + revalidate).
+  const inicial = useMemo(construirInicial, [construirInicial]);
+
   const [registos, setRegistos] = useState<Record<string, RegistoPresenca>>(construirInicial);
+
+  // Há alterações por guardar? Compara o estado atual com o inicial do servidor.
+  const alterado = presencasAlteradas(inicial, registos);
+
+  // Modo só-leitura: sessão fechada não permite alterar presenças.
+  const soLeitura = fechado;
 
   // Só contam atletas efetivamente marcados: os que estão por marcar (null) não
   // entram em "presentes" nem em "faltas".
@@ -87,6 +94,7 @@ export function MarcadorPresencas({
   const faltas = valores.filter((r) => r.estado != null && !PRESENTES.has(r.estado)).length;
 
   function mudarEstado(atletaId: string, estado: EstadoPresenca) {
+    if (soLeitura) return;
     setRegistos((prev) => ({
       ...prev,
       [atletaId]: {
@@ -99,6 +107,7 @@ export function MarcadorPresencas({
   }
 
   function mudarJustificacao(atletaId: string, valor: string) {
+    if (soLeitura) return;
     setRegistos((prev) => ({
       ...prev,
       [atletaId]: { ...prev[atletaId], justificacao: valor },
@@ -110,6 +119,7 @@ export function MarcadorPresencas({
    * O texto livre só faz sentido em "Outro" — noutros motivos limpa-se (UX-P3-02).
    */
   function mudarMotivo(atletaId: string, motivo: MotivoFalta) {
+    if (soLeitura) return;
     setRegistos((prev) => {
       const atual = prev[atletaId];
       const novoMotivo = atual.motivo === motivo ? null : motivo;
@@ -126,6 +136,7 @@ export function MarcadorPresencas({
 
   /** Marca todos os atletas como PRESENTE (limpa motivos/justificações). */
   function marcarTodosPresentes() {
+    if (soLeitura) return;
     setRegistos((prev) => {
       const proximo: Record<string, RegistoPresenca> = {};
       for (const id of Object.keys(prev))
@@ -140,6 +151,8 @@ export function MarcadorPresencas({
   }
 
   function guardar() {
+    // Guardas defensivas: nada a fazer se a sessão está fechada ou sem alterações.
+    if (soLeitura || !alterado) return;
     // Atletas por marcar (estado null) são ignorados: se o treinador não marcou,
     // não se grava nada para esse atleta.
     const payload = atletas
@@ -173,19 +186,36 @@ export function MarcadorPresencas({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-subtitulo text-cinza-900">Presenças</h2>
-
-      {/* Controlo rápido (P4.1) — atalhos client-side, não submetem o formulário. */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" onClick={marcarTodosPresentes}>
-          <ListChecks className="h-4 w-4" />
-          Marcar todos presentes
-        </Button>
-        <Button type="button" variant="ghost" onClick={repor}>
-          <RotateCcw className="h-4 w-4" />
-          Repor
-        </Button>
+        <h2 className="text-subtitulo text-cinza-900">Presenças</h2>
+        {soLeitura && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-cinza-100 px-2.5 py-0.5 text-legenda font-medium text-cinza-600">
+            <Lock className="h-3.5 w-3.5" />
+            Sessão concluída · só leitura
+          </span>
+        )}
       </div>
+
+      {soLeitura && (
+        <p className="text-corpo-sec text-cinza-500">
+          Esta sessão está fechada. Reabre a sessão para alterar as presenças.
+        </p>
+      )}
+
+      {/* Controlo rápido (P4.1) — atalhos client-side, não submetem o formulário.
+          Ocultos em modo só-leitura (sessão fechada). */}
+      {!soLeitura && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" onClick={marcarTodosPresentes}>
+            <ListChecks className="h-4 w-4" />
+            Marcar todos presentes
+          </Button>
+          <Button type="button" variant="ghost" onClick={repor} disabled={!alterado}>
+            <RotateCcw className="h-4 w-4" />
+            Repor
+          </Button>
+        </div>
+      )}
 
       <ul className="space-y-2">
         {atletas.map((a) => {
@@ -215,8 +245,9 @@ export function MarcadorPresencas({
                         key={seg.estado}
                         type="button"
                         aria-pressed={ativo}
+                        disabled={soLeitura}
                         onClick={() => mudarEstado(a.id, seg.estado)}
-                        className="flex h-11 items-center justify-center rounded-md border px-1 text-legenda font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 sm:w-20"
+                        className="flex h-11 items-center justify-center rounded-md border px-1 text-legenda font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60 sm:w-20"
                         style={
                           ativo
                             ? { background: seg.cor, borderColor: seg.cor, color: "#fff" }
@@ -250,6 +281,7 @@ export function MarcadorPresencas({
                           variant="outline"
                           size="sm"
                           aria-pressed={ativo}
+                          disabled={soLeitura}
                           onClick={() => mudarMotivo(a.id, m)}
                           className={
                             ativo ? "border-primary bg-primary/5 text-primary" : ""
@@ -274,6 +306,7 @@ export function MarcadorPresencas({
                         id={`motivo-${a.id}`}
                         value={registo.justificacao ?? ""}
                         onChange={(ev) => mudarJustificacao(a.id, ev.target.value)}
+                        disabled={soLeitura}
                         maxLength={300}
                         placeholder="Ex.: consulta médica, viagem…"
                         className="h-11"
@@ -286,20 +319,27 @@ export function MarcadorPresencas({
           );
         })}
       </ul>
-      {/* Barra de guardar fixa (P4.2) — sempre visível ao percorrer a lista. */}
-      <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 border-t border-cinza-200 bg-white px-1 py-3">
-        <p className="text-corpo-sec text-cinza-600">
-          {presentes} presentes · {faltas} faltas
-        </p>
-        <Button
-          onClick={guardar}
-          disabled={pending}
-          className="min-h-[44px] w-full sm:w-auto"
-        >
-          <Check className="h-4 w-4" />
-          {pending ? "A guardar…" : "Guardar presenças"}
-        </Button>
-      </div>
+      {/* Barra de guardar fixa (P4.2) — sempre visível ao percorrer a lista.
+          Oculta em modo só-leitura (sessão fechada): não há nada a guardar. */}
+      {!soLeitura && (
+        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 border-t border-cinza-200 bg-white px-1 py-3">
+          <p className="text-corpo-sec text-cinza-600">
+            {presentes} presentes · {faltas} faltas
+          </p>
+          <Button
+            onClick={guardar}
+            disabled={pending || !alterado}
+            className="min-h-[44px] w-full sm:w-auto"
+          >
+            <Check className="h-4 w-4" />
+            {pending
+              ? "A guardar…"
+              : alterado
+                ? "Guardar presenças"
+                : "Sem alterações"}
+          </Button>
+        </div>
+      )}
     </section>
   );
 }

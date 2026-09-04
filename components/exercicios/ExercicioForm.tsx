@@ -51,6 +51,8 @@ type ExercicioParaEdicao = Pick<
   | "subcategoriaId"
   | "parteTreino"
   | "escalaoAlvo"
+  | "numeroJogadores"
+  | "espaco"
 > & { diagrama?: unknown };
 
 function lerDiagrama(raw: unknown): DiagramaCampo {
@@ -121,6 +123,8 @@ export function ExercicioForm({ exercicio }: { exercicio?: ExercicioParaEdicao }
       parteTreino:
         parteTreino !== SENTINEL_NONE ? (parteTreino as ParteTreinoValor) : undefined,
       escalaoAlvo: String(fd.get("escalaoAlvo") ?? "").trim() || undefined,
+      numeroJogadores: String(fd.get("numeroJogadores") ?? "").trim() || undefined,
+      espaco: String(fd.get("espaco") ?? "").trim() || undefined,
       proprietario,
       diagrama,
     };
@@ -295,6 +299,36 @@ export function ExercicioForm({ exercicio }: { exercicio?: ExercicioParaEdicao }
           {erros.duracaoMin && (
             <p className="text-legenda text-vermelho-600">{erros.duracaoMin}</p>
           )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="numeroJogadores">Nº de jogadores</Label>
+            <Input
+              id="numeroJogadores"
+              name="numeroJogadores"
+              defaultValue={exercicio?.numeroJogadores ?? ""}
+              maxLength={40}
+              placeholder="ex: 4+GR, 3x3, Todos"
+            />
+            {erros.numeroJogadores && (
+              <p className="text-legenda text-vermelho-600">{erros.numeroJogadores}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="espaco">Espaço</Label>
+            <Input
+              id="espaco"
+              name="espaco"
+              defaultValue={exercicio?.espaco ?? ""}
+              maxLength={60}
+              placeholder="ex: campo inteiro, meio-campo, 20x20m"
+            />
+            {erros.espaco && (
+              <p className="text-legenda text-vermelho-600">{erros.espaco}</p>
+            )}
+          </div>
         </div>
 
         <div className="space-y-1.5">

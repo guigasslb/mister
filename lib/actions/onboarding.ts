@@ -95,9 +95,11 @@ export async function criarClube(dados: unknown): Promise<Resultado<{ clubeId: s
       },
     });
 
-    // 🔁 v7 (§8.1.1): secção inicial da modalidade escolhida. O escalão-semente
-    // liga-se a esta secção (a modalidade de tudo o resto deriva daí — §1.7.1).
-    const seccao = await tx.seccao.create({
+    // 🔁 v7 (§8.1.1): secção inicial da modalidade escolhida. A modalidade de
+    // tudo o resto deriva daqui (§1.7.1); o conteúdo curado é instalado nela
+    // após a transação e os escalões criados no wizard ligam-se a esta secção
+    // (resolvida por `garantirSeccaoParaModalidade`, idempotente).
+    await tx.seccao.create({
       data: {
         clubeId: clube.id,
         modalidade,
@@ -122,18 +124,11 @@ export async function criarClube(dados: unknown): Promise<Resultado<{ clubeId: s
       },
     });
 
-    // Escalão de arranque, customizável depois no onboarding. Fica visível a
-    // outros treinadores (default) e com ordem definida para listar em primeiro.
-    await tx.escalao.create({
-      data: {
-        clubeId: clube.id,
-        seccaoId: seccao.id,
-        nome: "Seniores",
-        ordem: 1,
-        visivelOutrosTreinadores: true,
-      },
-    });
-
+    // Nenhum escalão é semeado por defeito: o wizard de onboarding tem um passo
+    // dedicado (PassoEscaloes) onde o utilizador cria os seus escalões com o nome
+    // e modalidade corretos. Pré-criar um "Seniores" fixo dava um escalão errado
+    // a clubes de formação jovem ou de futebol sem sénior (e a deteção de formação
+    // jovem — eEscalaoFormacaoJovem — assenta no nome do escalão).
     let perfilAdminId = "";
     for (const p of PERFIS_ARRANQUE) {
       const perfil = await tx.perfil.create({

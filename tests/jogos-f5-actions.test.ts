@@ -26,12 +26,13 @@ vi.mock("@/lib/permissoes", () => ({
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    jogo: { findFirst: vi.fn() },
+    jogo: { findFirst: vi.fn(), update: vi.fn() },
     eventoJogo: {
       create: vi.fn(),
       delete: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
+      count: vi.fn(),
     },
     atletaEscalao: { count: vi.fn() },
     convocatoria: { upsert: vi.fn(), findFirst: vi.fn() },
@@ -82,6 +83,8 @@ beforeEach(() => {
   mocked(obterClubeIdAtual).mockResolvedValue(CLUBE);
   mocked(exigirCapacidade).mockResolvedValue(PERM_OK);
   mocked(podeLerEscalao).mockResolvedValue(true);
+  mocked(prisma.eventoJogo.count).mockResolvedValue(0);
+  mocked(prisma.jogo.update).mockResolvedValue({ id: JOGO });
   // $transaction: forma array [...] (usada no plano tático) e forma interativa (cb).
   mocked(prisma.$transaction).mockImplementation((arg: unknown) =>
     typeof arg === "function"

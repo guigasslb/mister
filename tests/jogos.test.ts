@@ -20,7 +20,7 @@ vi.mock("@/lib/db", () => ({
     competicao: { findFirst: vi.fn() },
     convocatoria: { findFirst: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn(), create: vi.fn() },
     atletaEscalao: { count: vi.fn() },
-    eventoJogo: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), delete: vi.fn() },
+    eventoJogo: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), delete: vi.fn(), count: vi.fn() },
     estatisticaAtleta: { deleteMany: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -75,6 +75,7 @@ beforeEach(() => {
   mocked(prisma.jogo.create).mockResolvedValue({ id: JOGO_ID });
   mocked(prisma.jogo.update).mockResolvedValue({ id: JOGO_ID });
   mocked(prisma.jogo.delete).mockResolvedValue({ id: JOGO_ID });
+  mocked(prisma.eventoJogo.count).mockResolvedValue(0);
   mocked(prisma.$transaction).mockImplementation((arg: unknown) =>
     typeof arg === "function"
       ? (arg as (tx: unknown) => unknown)(prisma)

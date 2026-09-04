@@ -16,7 +16,7 @@ import {
 import { registarEventoJogo, removerEventoJogo } from "@/lib/actions/jogos";
 import { LABEL_BLOCO_TEMPO, LABEL_TIPO_EVENTO } from "@/lib/schemas/jogo";
 import { EMOJI_EVENTO } from "@/components/jogos/TimelineEventos";
-import type { BlocoTempo, CasaFora, TipoEventoJogo } from "@prisma/client";
+import type { BlocoTempo, CasaFora, Modalidade, TipoEventoJogo } from "@prisma/client";
 
 type Evento = {
   id: string;
@@ -29,8 +29,12 @@ type Evento = {
 };
 type Atleta = { id: string; nome: string; numero: number | null };
 
-/** Botões de registo rápido (ordem à beira-campo). */
-const RAPIDOS: TipoEventoJogo[] = [
+// §10.8: as listas de tipos de evento dependem da modalidade do jogo. O futsal
+// tem timeout; o futebol acrescenta o seu núcleo específico (remate, canto,
+// fora-de-jogo, desarme) e não tem timeout.
+
+/** Botões de registo rápido (ordem à beira-campo) — futsal. */
+const RAPIDOS_FUTSAL: TipoEventoJogo[] = [
   "GOLO",
   "CARTAO_AMARELO",
   "CARTAO_VERMELHO",
@@ -38,12 +42,32 @@ const RAPIDOS: TipoEventoJogo[] = [
   "TIMEOUT",
 ];
 
-/** Tipos adicionais disponíveis no seletor completo. */
-const OUTROS: TipoEventoJogo[] = [
+/** Botões de registo rápido (ordem à beira-campo) — futebol (sem timeout). */
+const RAPIDOS_FUTEBOL: TipoEventoJogo[] = [
+  "GOLO",
+  "CARTAO_AMARELO",
+  "CARTAO_VERMELHO",
+  "SUBSTITUICAO",
+];
+
+/** Tipos adicionais disponíveis no seletor completo — futsal. */
+const OUTROS_FUTSAL: TipoEventoJogo[] = [
   "ASSISTENCIA",
   "DEFESA",
   "FALTA",
   "GOLO_SOFRIDO",
+];
+
+/** Tipos adicionais disponíveis no seletor completo — futebol (§3.7/§10.8). */
+const OUTROS_FUTEBOL: TipoEventoJogo[] = [
+  "ASSISTENCIA",
+  "DEFESA",
+  "FALTA",
+  "GOLO_SOFRIDO",
+  "REMATE",
+  "CANTO",
+  "FORA_DE_JOGO",
+  "DESARME",
 ];
 
 const BLOCOS: BlocoTempo[] = [
@@ -60,13 +84,20 @@ export function RegistoAoVivo({
   atletas,
   casaFora,
   adversario,
+  modalidade,
 }: {
   jogoId: string;
   eventos: Evento[];
   atletas: Atleta[];
   casaFora: CasaFora;
   adversario: string;
+  // §10.8: modalidade efetiva do jogo → decide os tipos de evento disponíveis.
+  modalidade: Modalidade;
 }) {
+  const eFutebol = modalidade === "FUTEBOL";
+  const RAPIDOS = eFutebol ? RAPIDOS_FUTEBOL : RAPIDOS_FUTSAL;
+  const OUTROS = eFutebol ? OUTROS_FUTEBOL : OUTROS_FUTSAL;
+
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [parte, setParte] = useState("1");

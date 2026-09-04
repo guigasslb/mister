@@ -15,14 +15,30 @@ import {
   Sparkles,
   Users2,
   Pin,
+  CircleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { obterEpocaAtiva, obterClubeIdAtual } from "@/lib/epoca-context";
-import { obterClubeAtivo, obterMembroAtual } from "@/lib/permissoes";
+import {
+  obterClubeAtivo,
+  obterMembroAtual,
+  escaloesLegiveis,
+  type ContextoMembro,
+} from "@/lib/permissoes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
 import { obterReunioesParaDashboard } from "@/lib/actions/reunioes";
+import {
+  obterAnaliticoClubeEpoca,
+  obterEvolucaoMultiepocaClube,
+  type AnaliticoClubeEpoca,
+  type LinhaEvolucaoEpoca,
+} from "@/lib/actions/analise";
+import { WidgetAtividadeEquipa } from "@/components/dashboard/WidgetAtividadeEquipa";
+import { TabelaEvolucaoEpocas } from "@/components/analiticos/TabelaEvolucaoEpocas";
+import { Kpi } from "@/components/analiticos/Kpi";
+import { pct } from "@/components/analiticos/Cartao";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { BadgeModalidade } from "@/components/plantel/BadgeModalidade";
 import { AniversariosWidget } from "@/components/plantel/AniversariosWidget";
@@ -81,6 +97,27 @@ function MotivoCampo() {
   );
 }
 
+type PapelDashboard = "DT_ADMIN" | "PRESIDENTE" | "TREINADOR";
+
+/**
+ * Deriva o "papel" do dashboard a partir do contexto do membro (§10 — dashboards
+ * por papel). Âmbito TODO_CLUBE sem capacidades de escrita de dados de equipa →
+ * Presidente (direção, só leitura); com capacidades de escrita → DT/Admin.
+ * Qualquer outro âmbito → Treinador (comportamento clássico do MVP).
+ */
+function derivarPapelDashboard(ctx: ContextoMembro | null): PapelDashboard {
+  if (!ctx) return "TREINADOR";
+  if (ctx.ambito === "TODO_CLUBE") {
+    const capacidadesEscrita = ctx.capacidades.filter((c) =>
+      ["ATLETAS_GERIR", "TREINOS_GERIR", "JOGOS_GERIR", "ESTATISTICAS_GERIR"].some(
+        (e) => c.startsWith(e),
+      ),
+    );
+    return capacidadesEscrita.length === 0 ? "PRESIDENTE" : "DT_ADMIN";
+  }
+  return "TREINADOR";
+}
+
 export const metadata: Metadata = { title: "Início" };
 
 export default async function DashboardPage() {
@@ -114,6 +151,16 @@ export default async function DashboardPage() {
   fimDia.setHours(23, 59, 59, 999);
   const janelaHoje = { gte: inicioDia, lte: fimDia };
 
+  // §6.4/§6.5: o dashboard mostra apenas dados dos escalões que o utilizador pode
+  // ler. Âmbito TODO_CLUBE (admin, DT) → "TODOS" (sem filtro); caso contrário,
+  // restringe sessões/jogos/atletas/contadores aos escalões legíveis. Lista vazia
+  // (treinador sem escalões atribuídos) → não mostra dados de nenhum escalão.
+  const legiveis = await escaloesLegiveis();
+  const filtroEscalaoId =
+    legiveis === "TODOS" ? {} : { escalaoId: { in: legiveis } };
+  const filtroEscalaoPorId =
+    legiveis === "TODOS" ? {} : { id: { in: legiveis } };
+
   const [
     clube,
     proximaSessao,
@@ -124,44 +171,45 @@ export default async function DashboardPage() {
     sessoesHoje,
     jogosHoje,
     escaloesContagem,
+    nSessoesPorFechar,
   ] = await Promise.all([
     obterClubeAtivo(),
     prisma.sessao.findFirst({
-      where: { epocaId: epoca.id, escalao: { clubeId }, data: { gte: agora } },
+      where: { epocaId: epoca.id, escalao: { clubeId }, data: { gte: agora }, ...filtroEscalaoId },
       include: { escalao: { select: { nome: true } } },
       orderBy: { data: "asc" },
     }),
     // Próximos jogos futuros (até 3) ordenados por data asc — para o dashboard.
     prisma.jogo.findMany({
-      where: { epocaId: epoca.id, escalao: { clubeId }, data: { gte: agora } },
+      where: { epocaId: epoca.id, escalao: { clubeId }, data: { gte: agora }, ...filtroEscalaoId },
       include: { escalao: { select: { nome: true } } },
       orderBy: { data: "asc" },
       take: 3,
     }),
-    // F1: atletas do clube com participação ativa na época.
+    // F1: atletas do clube com participação ativa na época (nos escalões legíveis).
     prisma.atleta.count({
       where: {
         clubeId,
         ativo: true,
-        participacoes: { some: { epocaId: epoca.id, estado: "ATIVO" } },
+        participacoes: { some: { epocaId: epoca.id, estado: "ATIVO", ...filtroEscalaoId } },
       },
     }),
     // Mini-resumo da época: apenas sessões/jogos JÁ REALIZADOS (data <= agora);
     // eventos futuros/previstos não contam para o "resumo da época".
     prisma.sessao.count({
-      where: { epocaId: epoca.id, escalao: { clubeId }, data: { lte: agora } },
+      where: { epocaId: epoca.id, escalao: { clubeId }, data: { lte: agora }, ...filtroEscalaoId },
     }),
     prisma.jogo.count({
-      where: { epocaId: epoca.id, escalao: { clubeId }, data: { lte: agora } },
+      where: { epocaId: epoca.id, escalao: { clubeId }, data: { lte: agora }, ...filtroEscalaoId },
     }),
     // Eventos de HOJE (para os lembretes) — sessões e jogos do clube na época.
     prisma.sessao.findMany({
-      where: { epocaId: epoca.id, escalao: { clubeId }, data: janelaHoje },
+      where: { epocaId: epoca.id, escalao: { clubeId }, data: janelaHoje, ...filtroEscalaoId },
       select: { id: true, data: true, local: true, escalao: { select: { nome: true } } },
       orderBy: { data: "asc" },
     }),
     prisma.jogo.findMany({
-      where: { epocaId: epoca.id, escalao: { clubeId }, data: janelaHoje },
+      where: { epocaId: epoca.id, escalao: { clubeId }, data: janelaHoje, ...filtroEscalaoId },
       select: {
         id: true,
         data: true,
@@ -171,9 +219,9 @@ export default async function DashboardPage() {
       },
       orderBy: { data: "asc" },
     }),
-    // Atletas ativos por escalão (contador — F14 / §8.16).
+    // Atletas ativos por escalão (contador — F14 / §8.16), restringido aos legíveis.
     prisma.escalao.findMany({
-      where: { clubeId },
+      where: { clubeId, ...filtroEscalaoPorId },
       select: {
         id: true,
         nome: true,
@@ -185,6 +233,17 @@ export default async function DashboardPage() {
         },
       },
       orderBy: { ordem: "asc" },
+    }),
+    // Sessões passadas ainda por fechar (data < hoje e `fechado = false`), para
+    // o aviso que incentiva o treinador a concluí-las antes de acumular (§8).
+    prisma.sessao.count({
+      where: {
+        epocaId: epoca.id,
+        escalao: { clubeId },
+        data: { lt: inicioDia },
+        fechado: false,
+        ...filtroEscalaoId,
+      },
     }),
   ]);
 
@@ -253,6 +312,22 @@ export default async function DashboardPage() {
 
   // Identidade: nome + papel (perfil) / clube · escalões · época.
   const membro = await obterMembroAtual();
+
+  // Papel do dashboard (§10): DT/Admin, Presidente (direção, só leitura) ou
+  // Treinador (comportamento clássico). Só o Presidente troca as ações rápidas
+  // de escrita por KPIs de clube + mini-evolução multi-época.
+  const papel = derivarPapelDashboard(membro);
+  let clubeKpis: AnaliticoClubeEpoca | null = null;
+  let ultimas3Epocas: LinhaEvolucaoEpoca[] = [];
+  if (papel === "PRESIDENTE") {
+    const [resKpis, resEvolucao] = await Promise.all([
+      obterAnaliticoClubeEpoca(),
+      obterEvolucaoMultiepocaClube(),
+    ]);
+    clubeKpis = resKpis.sucesso ? resKpis.dados : null;
+    ultimas3Epocas = resEvolucao.sucesso ? resEvolucao.dados.slice(-3) : [];
+  }
+
   const perfilNome = membro?.perfil.nome ?? "Treinador";
   const escaloesAtribuidos = membro?.escaloesAtribuidos ?? [];
   const escaloesNomes = escaloesAtribuidos.length
@@ -287,6 +362,9 @@ export default async function DashboardPage() {
 
       {/* Lembretes de hoje (treino/jogo) — F14 / §8.16 */}
       {lembretes.length > 0 && <LembretesBanner lembretes={lembretes} />}
+
+      {/* Sessões passadas por fechar — incentiva a concluir antes de acumular (§8) */}
+      {nSessoesPorFechar > 0 && <BannerSessoesPorFechar n={nSessoesPorFechar} />}
 
       {/* Plantel vazio → atalho para a vitória rápida (F10 / §8.1) */}
       {nAtletas === 0 && <BannerVitoriaRapida />}
@@ -519,19 +597,72 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Ações rápidas */}
-      <div className="space-y-3">
-        <p className="text-legenda font-semibold uppercase tracking-wide text-cinza-400">
-          Ações rápidas
-        </p>
-        <div className="animar-cascata grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <AcaoRapida href="/treinos/novo" icon={CalendarPlus} titulo="Nova sessão" desc="Planear um treino" />
-          <AcaoRapida href="/jogos/novo" icon={Trophy} titulo="Novo jogo" desc="Registar um jogo" />
-          <AcaoRapida href="/plantel/novo" icon={UserPlus} titulo="Novo atleta" desc="Adicionar ao plantel" />
-          <AcaoRapida href="/plantel" icon={Users} titulo="Ver plantel" desc="Consultar atletas" />
+      {/* Atividade da equipa (DT2 — §10): cronologia recente, só para DT/Admin. */}
+      {papel === "DT_ADMIN" && <WidgetAtividadeEquipa />}
+
+      {/* Ações rápidas (DT/Treinador) OU resumo de direção (Presidente — §10).
+          O Presidente não tem ações de escrita: em vez delas vê os grandes
+          números do clube e a evolução multi-época. */}
+      {papel === "PRESIDENTE" ? (
+        <ResumoPresidente clubeKpis={clubeKpis} ultimas3Epocas={ultimas3Epocas} />
+      ) : (
+        <div className="space-y-3">
+          <p className="text-legenda font-semibold uppercase tracking-wide text-cinza-400">
+            Ações rápidas
+          </p>
+          <div className="animar-cascata grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <AcaoRapida href="/treinos/novo" icon={CalendarPlus} titulo="Nova sessão" desc="Planear um treino" />
+            <AcaoRapida href="/jogos/novo" icon={Trophy} titulo="Novo jogo" desc="Registar um jogo" />
+            <AcaoRapida href="/plantel/novo" icon={UserPlus} titulo="Novo atleta" desc="Adicionar ao plantel" />
+            <AcaoRapida href="/plantel" icon={Users} titulo="Ver plantel" desc="Consultar atletas" />
+          </div>
         </div>
-      </div>
+      )}
     </div>
+  );
+}
+
+/** Resumo de direção (Presidente — §10): KPIs de clube + evolução multi-época. */
+function ResumoPresidente({
+  clubeKpis,
+  ultimas3Epocas,
+}: {
+  clubeKpis: AnaliticoClubeEpoca | null;
+  ultimas3Epocas: LinhaEvolucaoEpoca[];
+}) {
+  return (
+    <>
+      {clubeKpis && (
+        <div className="space-y-3">
+          <p className="text-legenda font-semibold uppercase tracking-wide text-cinza-400">
+            Clube · {clubeKpis.epoca.nome}
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Kpi valor={clubeKpis.totais.nAtletas} label="atletas" acento="primary" />
+            <Kpi valor={clubeKpis.totais.jogos} label="jogos" />
+            <Kpi
+              valor={clubeKpis.totais.golosMarcados}
+              label="golos marcados"
+              acento="verde"
+            />
+            <Kpi
+              valor={pct(clubeKpis.totais.taxaPresencaMediaGlobal)}
+              label="presença méd."
+              acento="primary"
+            />
+          </div>
+        </div>
+      )}
+
+      {ultimas3Epocas.length >= 2 && (
+        <div className="space-y-3">
+          <p className="text-legenda font-semibold uppercase tracking-wide text-cinza-400">
+            Evolução do clube
+          </p>
+          <TabelaEvolucaoEpocas linhas={ultimas3Epocas} />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -728,6 +859,35 @@ function LembretesBanner({ lembretes }: { lembretes: Lembrete[] }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * Aviso de sessões passadas por fechar (§8). Liga à lista de treinos já filtrada
+ * por "Por fechar" para o treinador as concluir de uma vez.
+ */
+function BannerSessoesPorFechar({ n }: { n: number }) {
+  return (
+    <Link
+      href="/treinos?vista=lista&estado=aberto"
+      className="animar-entrada group flex items-center gap-3 rounded-xl border border-ambar-500/40 bg-ambar-500/10 p-4 transition-colors hover:bg-ambar-500/15"
+      role="status"
+    >
+      <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-ambar-500/20 text-ambar-600">
+        <CircleAlert className="h-5 w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-corpo font-semibold text-cinza-900">
+          {n === 1
+            ? "Tens 1 sessão passada por fechar"
+            : `Tens ${n} sessões passadas por fechar`}
+        </p>
+        <p className="text-legenda text-cinza-500">
+          Fecha as sessões já realizadas para manteres os registos em dia.
+        </p>
+      </div>
+      <ChevronRight className="h-4 w-4 flex-shrink-0 text-cinza-400 transition-transform group-hover:translate-x-0.5" />
+    </Link>
   );
 }
 

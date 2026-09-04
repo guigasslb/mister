@@ -11,8 +11,10 @@ import {
   obterEvolucaoAtleta,
   obterPresencasMensal,
   obterAnaliticoAtleta,
+  obterEvolucaoMultiEpoca,
   exportarAnaliticoAtletaCsv,
 } from "@/lib/actions/analise";
+import { prisma } from "@/lib/db";
 import { listarParticipacoes } from "@/lib/actions/participacoes";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
@@ -64,6 +66,10 @@ export default async function PerfilAtletaPage({
   const a = res.dados;
   const eGR = a.posicoes.includes("GUARDA_REDES");
 
+  // Contexto de escalão/época para a comparação directa (M4). Só há colegas a
+  // comparar dentro de um escalão concreto da época atual do atleta.
+  const escalaoContextoId = a.participacaoContexto?.escalaoId;
+
   const [
     resStats,
     resCaderneta,
@@ -74,6 +80,8 @@ export default async function PerfilAtletaPage({
     resSeccoes,
     membro,
     resAnalitico,
+    colegasEscalao,
+    resEvolucaoEpocas,
   ] = await Promise.all([
     obterEstatisticasAtleta(id),
     obterCadernetaAtleta(id),
@@ -84,7 +92,31 @@ export default async function PerfilAtletaPage({
     obterSeccoes(),
     obterMembroAtual(),
     obterAnaliticoAtleta(id, a.participacaoContexto?.escalaoId),
+    // M4 — colegas do mesmo escalão/época (para o seletor de comparação).
+    escalaoContextoId
+      ? prisma.atletaEscalao.findMany({
+          where: {
+            escalaoId: escalaoContextoId,
+            epocaId: a.epocaId,
+            estado: "ATIVO",
+          },
+          select: { atletaId: true, atleta: { select: { nome: true } } },
+          orderBy: { atleta: { nome: "asc" } },
+        })
+      : Promise.resolve(
+          [] as { atletaId: string; atleta: { nome: string } }[],
+        ),
+    // M5 — evolução do atleta ao longo das épocas.
+    obterEvolucaoMultiEpoca(id),
   ]);
+
+  // Exclui o próprio atleta da lista de comparação (M4).
+  const atletasEscalao = colegasEscalao
+    .filter((c) => c.atletaId !== a.id)
+    .map((c) => ({ id: c.atletaId, nome: c.atleta.nome }));
+  const evolucaoEpocas = resEvolucaoEpocas.sucesso
+    ? resEvolucaoEpocas.dados
+    : undefined;
 
   // Modalidades em que o atleta participa (§3.2/§9): derivadas das secções dos
   // escalões das suas participações. Usadas para segmentar a caderneta por
@@ -223,7 +255,11 @@ export default async function PerfilAtletaPage({
                   />
                 </div>
               )}
-              <PainelAtleta dados={resAnalitico.dados} />
+              <PainelAtleta
+                dados={resAnalitico.dados}
+                atletasEscalao={atletasEscalao}
+                evolucaoEpocas={evolucaoEpocas}
+              />
             </>
           ) : resAnalitico.erro === "Sem permissão" ? (
             <EstadoVazio

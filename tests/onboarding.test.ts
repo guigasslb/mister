@@ -75,7 +75,7 @@ beforeEach(() => {
   );
 });
 
-describe("criarClube — semeia época ativa + escalão (P1.6)", () => {
+describe("criarClube — semeia época ativa + secção inicial (P1.6)", () => {
   it("cria uma época ativa para o novo clube", async () => {
     const r = await criarClube({ nome: "Juventude SC", tier: "PEQUENO" });
 
@@ -100,35 +100,24 @@ describe("criarClube — semeia época ativa + escalão (P1.6)", () => {
     expect(arg.data.dataInicio.getTime()).toBeLessThan(arg.data.dataFim.getTime());
   });
 
-  it("cria o escalão-semente 'Seniores' editável e visível", async () => {
+  it("NÃO semeia nenhum escalão por defeito (o wizard trata disso)", async () => {
     const r = await criarClube({ nome: "Juventude SC", tier: "PEQUENO" });
 
     expect(r.sucesso).toBe(true);
-    expect(prisma.escalao.create).toHaveBeenCalledOnce();
-
-    const arg = calls(prisma.escalao.create)[0][0] as {
-      data: {
-        clubeId: string;
-        nome: string;
-        ordem: number;
-        visivelOutrosTreinadores: boolean;
-      };
-    };
-    expect(arg.data).toMatchObject({
-      clubeId: "clube1",
-      nome: "Seniores",
-      ordem: 1,
-      visivelOutrosTreinadores: true,
-    });
+    // Pré-criar um "Seniores" fixo dava um escalão errado a clubes de formação
+    // jovem ou de futebol; o passo de escalões do wizard cria-os com o nome certo.
+    expect(prisma.escalao.create).not.toHaveBeenCalled();
   });
 
-  it("semeia época e escalão dentro da mesma transação do clube", async () => {
+  it("semeia época e secção dentro da mesma transação do clube", async () => {
     await criarClube({ nome: "Juventude SC", tier: "PEQUENO" });
 
     expect(prisma.$transaction).toHaveBeenCalledOnce();
     expect(prisma.clube.create).toHaveBeenCalledOnce();
     expect(prisma.epoca.create).toHaveBeenCalledOnce();
-    expect(prisma.escalao.create).toHaveBeenCalledOnce();
+    expect(prisma.seccao.create).toHaveBeenCalledOnce();
+    // Sem escalão-semente: o utilizador cria os escalões no wizard.
+    expect(prisma.escalao.create).not.toHaveBeenCalled();
     // O membro administrador continua a ser criado (regressão do fluxo base).
     expect(prisma.membroClube.create).toHaveBeenCalledOnce();
   });
@@ -183,7 +172,7 @@ describe("criarClube — semeia época ativa + escalão (P1.6)", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it("cria a secção inicial da modalidade e liga-lhe o escalão-semente (§8.1.1)", async () => {
+  it("cria a secção inicial da modalidade escolhida (§8.1.1)", async () => {
     const r = await criarClube({ nome: "Juventude SC", modalidade: "FUTEBOL", tier: "MEDIO" });
     expect(r.sucesso).toBe(true);
 
@@ -192,10 +181,6 @@ describe("criarClube — semeia época ativa + escalão (P1.6)", () => {
       data: { clubeId: string; modalidade: string; nome: string };
     };
     expect(secArg.data).toMatchObject({ clubeId: "clube1", modalidade: "FUTEBOL", nome: "Futebol" });
-
-    // O escalão-semente liga-se à secção criada.
-    const escArg = calls(prisma.escalao.create)[0][0] as { data: { seccaoId: string } };
-    expect(escArg.data.seccaoId).toBe("seccao1");
   });
 
   it("por defeito (sem modalidade) cria secção FUTSAL", async () => {

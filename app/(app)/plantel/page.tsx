@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
-import { escaloesLegiveis, obterEscalaoDoUtilizador } from "@/lib/permissoes";
+import { escaloesLegiveis, obterEscalaoDoUtilizador, obterMembroAtual } from "@/lib/permissoes";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { CampoPesquisa } from "@/components/layout/CampoPesquisa";
 import { AvatarAtleta } from "@/components/plantel/AvatarAtleta";
@@ -74,15 +74,19 @@ export default async function PlantelPage({
   // saíram ou estão em período experimental (secção 8 — plantel).
   const incluirInativos = incluirInativosRaw === "1";
 
-  const [resEscaloes, resSeccoes, resAtletas, legiveis] = await Promise.all([
+  const [resEscaloes, resSeccoes, resAtletas, legiveis, membro] = await Promise.all([
     listarEscaloes(),
     obterSeccoes(),
     listarAtletas(escalaoId, undefined, undefined, incluirInativos),
     escaloesLegiveis(),
+    obterMembroAtual(),
   ]);
 
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
   if (!resAtletas.sucesso) return <EstadoErro mensagem={resAtletas.erro} />;
+
+  // Gating de capacidade (§6): só quem gere o plantel vê as ações de criação.
+  const podeGerirPlantel = membro?.capacidades.includes("PLANTEL_GERIR") ?? false;
 
   // Tabs de escalão: mostrar só os escalões que o utilizador pode ler (§6.4).
   // Âmbito TODO_CLUBE → "TODOS" (sem filtro); caso contrário, limita à lista
@@ -169,12 +173,14 @@ export default async function PlantelPage({
               Relatórios
             </Link>
           </Button>
-          <Button asChild>
-            <Link href="/plantel/novo">
-              <Plus className="h-4 w-4" />
-              Novo atleta
-            </Link>
-          </Button>
+          {podeGerirPlantel && (
+            <Button asChild>
+              <Link href="/plantel/novo">
+                <Plus className="h-4 w-4" />
+                Novo atleta
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -262,12 +268,14 @@ export default async function PlantelPage({
           }
           descricao="Adiciona o primeiro atleta ao plantel."
           acao={
-            <Button asChild>
-              <Link href="/plantel/novo">
-                <Plus className="h-4 w-4" />
-                Adicionar atleta
-              </Link>
-            </Button>
+            podeGerirPlantel ? (
+              <Button asChild>
+                <Link href="/plantel/novo">
+                  <Plus className="h-4 w-4" />
+                  Adicionar atleta
+                </Link>
+              </Button>
+            ) : undefined
           }
         />
       ) : (

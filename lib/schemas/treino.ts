@@ -127,6 +127,9 @@ export const sessaoExercicioOverrideSchema = z.object({
   series:            z.number().int().min(1).max(99).nullable().optional(),
   descricaoOverride: z.string().max(2000).nullable().optional(),
   notas:             z.string().max(2000).nullable().optional(),
+  // Plano de treino imprimível (§4.2.1) — override por sessão do nº de jogadores/espaço.
+  numeroJogadoresOverride: z.string().max(40).nullish(),
+  espacoOverride:          z.string().max(60).nullish(),
   // Fase do treino (§3.5) — override por sessão; reutiliza o enum ParteTreino.
   parteTreino:       z.enum(PARTES_TREINO).nullable().optional(),
 });

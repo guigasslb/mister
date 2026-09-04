@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { listarJogos } from "@/lib/actions/jogos";
 import { listarEscaloes } from "@/lib/actions/escaloes";
-import { filtrarEscaloesLegiveis } from "@/lib/permissoes";
+import { filtrarEscaloesLegiveis, obterMembroAtual } from "@/lib/permissoes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
 import { mapaModalidadePorEscalao } from "@/lib/modalidade-escalao";
 import { BadgeModalidade } from "@/components/plantel/BadgeModalidade";
@@ -86,14 +86,18 @@ export default async function JogosPage({
   const estado: "aberto" | "fechado" | undefined =
     estadoRaw === "aberto" || estadoRaw === "fechado" ? estadoRaw : undefined;
 
-  const [resEscaloes, resSeccoes, resJogos] = await Promise.all([
+  const [resEscaloes, resSeccoes, resJogos, membro] = await Promise.all([
     listarEscaloes(),
     obterSeccoes(),
     listarJogos(escalaoId, modalidade, estado),
+    obterMembroAtual(),
   ]);
 
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
   if (!resJogos.sucesso) return <EstadoErro mensagem={resJogos.erro} />;
+
+  // Gating de capacidade (§6): só quem gere jogos vê as ações de criação.
+  const podeGerirJogos = membro?.capacidades.includes("JOGOS_GERIR") ?? false;
 
   // Tabs de escalão/modalidade: só os escalões legíveis (§6.4/§6.5), alinhado com
   // o filtro server-side de `listarJogos` — um treinador nunca vê escalões alheios.
@@ -145,12 +149,14 @@ export default async function JogosPage({
               Modelo de jogo
             </Link>
           </Button>
-          <Button asChild>
-            <Link href="/jogos/novo">
-              <Plus className="h-4 w-4" />
-              Novo jogo
-            </Link>
-          </Button>
+          {podeGerirJogos && (
+            <Button asChild>
+              <Link href="/jogos/novo">
+                <Plus className="h-4 w-4" />
+                Novo jogo
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -228,12 +234,14 @@ export default async function JogosPage({
           titulo="Sem jogos nesta época"
           descricao="Regista o primeiro jogo."
           acao={
-            <Button asChild>
-              <Link href="/jogos/novo">
-                <Plus className="h-4 w-4" />
-                Registar jogo
-              </Link>
-            </Button>
+            podeGerirJogos ? (
+              <Button asChild>
+                <Link href="/jogos/novo">
+                  <Plus className="h-4 w-4" />
+                  Registar jogo
+                </Link>
+              </Button>
+            ) : undefined
           }
         />
       ) : (

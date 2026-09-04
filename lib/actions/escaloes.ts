@@ -7,6 +7,7 @@ import { obterClubeIdAtual } from "@/lib/epoca-context";
 import {
   exigirCapacidade,
   obterMembroAtual,
+  filtrarEscaloesLegiveis,
   type ResultadoPermissao,
 } from "@/lib/permissoes";
 import { garantirSeccaoParaModalidade } from "@/lib/actions/seccoes";
@@ -46,6 +47,25 @@ export async function listarEscaloes(): Promise<Resultado<Escalao[]>> {
     orderBy: { ordem: "asc" },
   });
   return ok(escaloes);
+}
+
+/**
+ * Como `listarEscaloes`, mas filtrada ao ÂMBITO do utilizador autenticado (§6.4/§6.5):
+ * um treinador de âmbito próprio só vê os seus escalões, um coordenador os da(s)
+ * sua(s) secção(ões) + visíveis, e um perfil TODO_CLUBE vê todos. Deve ser usada
+ * nos formulários de criação/edição (treinos, jogos, atletas, …) para não expor
+ * escalões fora do alcance do membro; `listarEscaloes` mantém-se para os fluxos
+ * que precisam legitimamente de todos os escalões do clube (ex.: definições).
+ */
+export async function listarEscaloesLegiveis(): Promise<Resultado<Escalao[]>> {
+  const ctx = await obterMembroAtual();
+  if (!ctx) return erro("Não autenticado");
+
+  const escaloes = await prisma.escalao.findMany({
+    where: { clubeId: ctx.clube.id },
+    orderBy: { ordem: "asc" },
+  });
+  return ok(await filtrarEscaloesLegiveis(escaloes));
 }
 
 export async function criarEscalao(dados: unknown): Promise<Resultado<Escalao>> {

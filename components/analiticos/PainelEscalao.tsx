@@ -5,8 +5,12 @@
 // com destaques na cor do clube. Sem alterações à lógica de dados.
 "use client";
 
-import type { TipoSessao } from "@prisma/client";
-import type { AnaliticoEscalao, CompeticaoOpcao } from "@/lib/actions/analise";
+import type { CasaFora, TipoSessao, TipoEventoJogo } from "@prisma/client";
+import type {
+  AnaliticoEscalao,
+  CompeticaoOpcao,
+  RecordCasaFora,
+} from "@/lib/actions/analise";
 import dynamic from "next/dynamic";
 
 const GraficoBarrasH = dynamic(
@@ -25,6 +29,18 @@ const LABEL_TIPO_SESSAO: Record<TipoSessao, string> = {
   CAPTACAO: "Captação",
   EVENTO: "Evento",
 };
+
+// Análise por período (M6, §8.15): tipos de evento relevantes para a leitura
+// 1ª vs 2ª parte, com rótulos no plural para os cabeçalhos da tabela. Remates e
+// Cantos só surgem no futebol — a filtragem por valor>0 garante que só aparecem
+// as colunas com registos.
+const EVENTOS_POR_PERIODO: { tipo: TipoEventoJogo; label: string }[] = [
+  { tipo: "GOLO", label: "Golos" },
+  { tipo: "ASSISTENCIA", label: "Assistências" },
+  { tipo: "FALTA", label: "Faltas" },
+  { tipo: "REMATE", label: "Remates" },
+  { tipo: "CANTO", label: "Cantos" },
+];
 
 /** Percentagem inteira de `parte` sobre `total` (ex.: 6/10 → "60%"). */
 function pctDe(parte: number, total: number): string {
@@ -83,7 +99,24 @@ export function PainelEscalao({
   const temDisciplina =
     cartoes.amarelos > 0 || cartoes.vermelhos > 0 || rankingDisciplina.length > 0;
 
+  // Rendimento casa/fora (§10.2). Snapshots de relatórios antigos não têm os
+  // campos — os defaults garantem zero regressão na vista pública.
+  const recordCasa = dados.recordCasa ?? RECORD_VAZIO;
+  const recordFora = dados.recordFora ?? RECORD_VAZIO;
+  const temRendimentoLocal = recordCasa.jogos > 0 || recordFora.jogos > 0;
+
   const semJogos = dados.jogos === 0;
+
+  // Análise por período (M6, §8.15): só há dados quando o treinador usa o registo
+  // ao vivo (EventoJogo). Jogos sem registo — ou snapshots antigos — têm as partes
+  // vazias, pelo que a secção fica oculta. A condição usa a 2ª parte como sinal de
+  // que houve registo temporal (jogos só com 1ª parte são residuais/incompletos).
+  const eventosParte1 = dados.eventosPorParte?.parte1 ?? {};
+  const eventosParte2 = dados.eventosPorParte?.parte2 ?? {};
+  const temDadosPorParte = Object.values(eventosParte2).some((v) => v > 0);
+  const colunasPorParte = EVENTOS_POR_PERIODO.filter(
+    ({ tipo }) => (eventosParte1[tipo] ?? 0) > 0 || (eventosParte2[tipo] ?? 0) > 0,
+  );
 
   // Sessões executadas (§10.2): já realizadas (`data < agora`), subconjunto das
   // programadas. Snapshots antigos não têm o campo — o default (= total) garante
@@ -225,6 +258,45 @@ export function PainelEscalao({
         </div>
       </SecaoAnalitico>
 
+      {/* Análise por período (M6, §8.15) — 1ª vs 2ª parte, só com registo ao vivo.
+          Colunas restritas aos eventos com pelo menos um registo nalguma parte. */}
+      {temDadosPorParte && colunasPorParte.length > 0 && (
+        <SecaoAnalitico titulo="Análise por período">
+          <div className="overflow-x-auto rounded-lg border border-cinza-200 bg-white">
+            <table className="w-full text-corpo-sec">
+              <thead>
+                <tr className="border-b border-cinza-200 text-left text-legenda uppercase tracking-wide text-cinza-500">
+                  <th className="px-5 py-3 font-medium">Período</th>
+                  {colunasPorParte.map(({ tipo, label }) => (
+                    <th key={tipo} className="px-3 py-3 text-right font-medium">
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cinza-100">
+                <tr className="text-cinza-900 transition-colors hover:bg-cinza-50">
+                  <td className="px-5 py-3 font-medium">1ª Parte</td>
+                  {colunasPorParte.map(({ tipo }) => (
+                    <td key={tipo} className="px-3 py-3 text-right tabular-nums">
+                      {eventosParte1[tipo] ?? 0}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="text-cinza-900 transition-colors hover:bg-cinza-50">
+                  <td className="px-5 py-3 font-medium">2ª Parte</td>
+                  {colunasPorParte.map(({ tipo }) => (
+                    <td key={tipo} className="px-3 py-3 text-right tabular-nums">
+                      {eventosParte2[tipo] ?? 0}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </SecaoAnalitico>
+      )}
+
       {/* Utilização e assiduidade por atleta */}
       {(pontosUtilizados.length > 0 || assiduidade.length > 0) && (
         <SecaoAnalitico titulo="Utilização e assiduidade">
@@ -289,6 +361,17 @@ export function PainelEscalao({
         </SecaoAnalitico>
       )}
 
+      {/* Rendimento casa/fora (§10.2) — mini-cards V-E-D por local; cada card só
+          aparece se houver pelo menos um jogo com resultado nesse local. */}
+      {temRendimentoLocal && (
+        <SecaoAnalitico titulo="Rendimento casa/fora">
+          <div className="grid grid-cols-1 gap-3 sm:max-w-xl sm:grid-cols-2">
+            {recordCasa.jogos > 0 && <CartaoLocal titulo="Casa" record={recordCasa} />}
+            {recordFora.jogos > 0 && <CartaoLocal titulo="Fora" record={recordFora} />}
+          </div>
+        </SecaoAnalitico>
+      )}
+
       {/* Resultados jogo a jogo */}
       <SecaoAnalitico titulo="Resultados">
         <div className="rounded-lg border border-cinza-200 bg-white p-5">
@@ -302,7 +385,10 @@ export function PainelEscalao({
                   className="flex items-center justify-between gap-3 py-2.5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-corpo text-cinza-900">{r.adversario}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-corpo text-cinza-900">{r.adversario}</p>
+                      <LocalBadge casaFora={r.casaFora} />
+                    </div>
                     <p className="text-legenda text-cinza-500">{formatarData(r.data)}</p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -317,6 +403,59 @@ export function PainelEscalao({
           )}
         </div>
       </SecaoAnalitico>
+    </div>
+  );
+}
+
+const RECORD_VAZIO: RecordCasaFora = { vitorias: 0, empates: 0, derrotas: 0, jogos: 0 };
+
+/** Etiqueta discreta do local do jogo (Casa/Fora). Nada quando desconhecido. */
+function LocalBadge({ casaFora }: { casaFora: CasaFora | null }) {
+  if (!casaFora) return null;
+  const emCasa = casaFora === "CASA";
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-legenda font-medium ${
+        emCasa
+          ? "border-primary/30 bg-primary/10 text-primary"
+          : "border-cinza-200 bg-cinza-50 text-cinza-600"
+      }`}
+    >
+      {emCasa ? "Casa" : "Fora"}
+    </span>
+  );
+}
+
+/** Mini-card de balanço V-E-D para um local (casa ou fora). */
+function CartaoLocal({ titulo, record }: { titulo: string; record: RecordCasaFora }) {
+  return (
+    <div className="rounded-lg border border-cinza-200 bg-white p-5">
+      <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
+        {titulo}
+        <span className="ml-1.5 normal-case tracking-normal text-cinza-500">
+          · {record.jogos} {record.jogos === 1 ? "jogo" : "jogos"}
+        </span>
+      </p>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <p className="text-2xl font-bold leading-none tabular-nums text-verde-600">
+            {record.vitorias}
+          </p>
+          <p className="mt-1.5 text-legenda uppercase tracking-wide text-cinza-500">V</p>
+        </div>
+        <div>
+          <p className="text-2xl font-bold leading-none tabular-nums text-ambar-600">
+            {record.empates}
+          </p>
+          <p className="mt-1.5 text-legenda uppercase tracking-wide text-cinza-500">E</p>
+        </div>
+        <div>
+          <p className="text-2xl font-bold leading-none tabular-nums text-vermelho-600">
+            {record.derrotas}
+          </p>
+          <p className="mt-1.5 text-legenda uppercase tracking-wide text-cinza-500">D</p>
+        </div>
+      </div>
     </div>
   );
 }
