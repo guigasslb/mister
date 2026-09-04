@@ -267,65 +267,70 @@ export function GestorExercicios({
                 Adicionar
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
+            <DialogContent className="flex max-h-[85vh] flex-col p-0 sm:max-w-xl">
+              <DialogHeader className="border-b border-cinza-200 px-6 pb-4 pt-6">
                 <DialogTitle>Adicionar exercício da biblioteca</DialogTitle>
               </DialogHeader>
 
-              {/* §3.5: escolher a fase do treino a que o exercício será adicionado. */}
-              <div className="space-y-1.5">
-                <Label htmlFor="fase-adicionar">Fase do treino</Label>
-                <Select
-                  value={faseAdicionar}
-                  onValueChange={(v) => setFaseAdicionar(v as ParteTreinoValor)}
-                >
-                  <SelectTrigger id="fase-adicionar">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PARTES_TREINO.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {LABEL_PARTE_TREINO[p]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Filtros fixos — não scrollam com a lista. */}
+              <div className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-end">
+                {/* §3.5: escolher a fase do treino a que o exercício será adicionado. */}
+                <div className="flex-1 space-y-1.5">
+                  <Label htmlFor="fase-adicionar">Adicionar à fase</Label>
+                  <Select
+                    value={faseAdicionar}
+                    onValueChange={(v) => setFaseAdicionar(v as ParteTreinoValor)}
+                  >
+                    <SelectTrigger id="fase-adicionar">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PARTES_TREINO.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {LABEL_PARTE_TREINO[p]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Bug 2: filtro por fase — restringe a biblioteca à fase sugerida. */}
+                <div className="flex-1 space-y-1.5">
+                  <Label htmlFor="filtro-fase">Filtrar por fase</Label>
+                  <Select
+                    value={filtroFase}
+                    onValueChange={(v) => {
+                      setFiltroFase(v as FiltroFaseValor);
+                      setBibExpandido(null);
+                    }}
+                  >
+                    <SelectTrigger id="filtro-fase">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={TODAS_FASES}>Todas as fases</SelectItem>
+                      {PARTES_TREINO.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {LABEL_PARTE_TREINO[p]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              {/* Bug 2: filtro por fase — restringe a biblioteca à fase sugerida. */}
-              <div className="space-y-1.5">
-                <Label htmlFor="filtro-fase">Filtrar por fase</Label>
-                <Select
-                  value={filtroFase}
-                  onValueChange={(v) => {
-                    setFiltroFase(v as FiltroFaseValor);
-                    setBibExpandido(null);
-                  }}
-                >
-                  <SelectTrigger id="filtro-fase">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={TODAS_FASES}>Todas as fases</SelectItem>
-                    {PARTES_TREINO.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {LABEL_PARTE_TREINO[p]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {biblioteca.length === 0 ? (
-                <p className="text-corpo-sec text-cinza-600">
-                  A biblioteca está vazia. Cria exercícios primeiro.
-                </p>
-              ) : bibliotecaFiltrada.length === 0 ? (
-                <p className="text-corpo-sec text-cinza-600">
-                  Nenhum exercício na fase &ldquo;{LABEL_PARTE_TREINO[filtroFase as ParteTreinoValor]}&rdquo;.
-                </p>
-              ) : (
-                <ul className="space-y-2">
+              {/* Lista scrollable — só a lista scrolla, os filtros ficam fixos. */}
+              <div className="flex-1 overflow-y-auto px-6 pb-6">
+                {biblioteca.length === 0 ? (
+                  <p className="text-corpo-sec text-cinza-600">
+                    A biblioteca está vazia. Cria exercícios primeiro.
+                  </p>
+                ) : bibliotecaFiltrada.length === 0 ? (
+                  <p className="text-corpo-sec text-cinza-600">
+                    Nenhum exercício na fase &ldquo;{LABEL_PARTE_TREINO[filtroFase as ParteTreinoValor]}&rdquo;.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
                   {bibliotecaFiltrada.map((ex) => {
                     // Bug 1: clicar no exercício expande (campo maior + descrição).
                     const aberto = bibExpandido === ex.id;
@@ -371,6 +376,7 @@ export function GestorExercicios({
                             variant={jaAdicionados.has(ex.id) ? "ghost" : "outline"}
                             disabled={pending}
                             onClick={() => adicionar(ex.id)}
+                            className="flex-shrink-0 whitespace-nowrap"
                           >
                             {jaAdicionados.has(ex.id) ? "Adicionar +1" : "Adicionar"}
                           </Button>
@@ -417,8 +423,9 @@ export function GestorExercicios({
                       </li>
                     );
                   })}
-                </ul>
-              )}
+                  </ul>
+                )}
+              </div>
             </DialogContent>
           </Dialog>
         </div>
