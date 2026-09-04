@@ -3,6 +3,7 @@
 // vista pública de relatórios. Substitui os quadrados uniformes por cartões com
 // hierarquia visual (ícone colorido + valor + rótulo).
 
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 export type CorKpi = "primary" | "verde" | "ambar" | "vermelho" | "laranja" | "cinza";
@@ -22,7 +23,7 @@ export function CartaoKpi({
   icon: Icon,
   cor = "primary",
 }: {
-  valor: string | number;
+  valor: ReactNode;
   label: string;
   icon: LucideIcon;
   cor?: CorKpi;

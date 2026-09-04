@@ -1070,7 +1070,16 @@ export async function obterAnaliticoEscalao(
   // Só afeta jogos e o que deles deriva (estatísticas, eventos, métricas);
   // treinos e presenças são transversais à competição, logo mantêm-se globais.
   const filtroCompeticao = competicaoId ? { competicaoId } : {};
-  const filtroJogo = { epocaId: epoca.id, escalaoId, ...filtroCompeticao };
+  // §10.2: só jogos JÁ REALIZADOS (data <= agora) entram no balanço da época e em
+  // tudo o que dele deriva (jogos, V/E/D, golos, rankings, eventos, métricas).
+  // Jogos futuros estão agendados mas por disputar, pelo que não devem contar
+  // (BUG: KPI "JOGOS" incluía jogos futuros). Simetria com sessões executadas.
+  const filtroJogo = {
+    epocaId: epoca.id,
+    escalaoId,
+    ...filtroCompeticao,
+    data: { lte: new Date() },
+  };
 
   const [jogos, sessoes, nAtletas, estatisticas, eventos, presencas, valoresMetricas] =
     await Promise.all([
@@ -1536,8 +1545,12 @@ export async function obterAnaliticoClubeEpoca(
   const filtroEpocaEscaloes = { epocaId: epoca.id, escalaoId: { in: escalaoIds } };
 
   const [jogos, sessoes, sessoesExecutadas, participacoes, presencas] = await Promise.all([
+    // §10.2: só jogos JÁ REALIZADOS (data <= agora) entram no balanço por escalão
+    // do painel do clube. Jogos futuros estão agendados mas por disputar, pelo que
+    // não contam para "jogos"/V/E/D/golos. Simetria com `sessoesExecutadas` (abaixo,
+    // `data < agora`), que já filtrava — aqui corrige-se a mesma assimetria nos jogos.
     prisma.jogo.findMany({
-      where: filtroEpocaEscaloes,
+      where: { ...filtroEpocaEscaloes, data: { lte: new Date() } },
       select: { escalaoId: true, golosMarcados: true, golosSofridos: true },
     }),
     prisma.sessao.groupBy({

@@ -268,7 +268,14 @@ export function PainelAtleta({
         <CartaoKpi valor={agregado.jogosUtilizados} label="jogos" icon={Swords} cor="primary" />
         <CartaoKpi valor={agregado.titularidades} label="titular" icon={Star} cor="ambar" />
         <CartaoKpi
-          valor={pct(agregado.taxaPresenca)}
+          valor={
+            <>
+              {pct(agregado.taxaPresenca)}{" "}
+              <span className="text-base font-semibold text-cinza-400">
+                ({agregado.presencas}/{agregado.sessoesTotais})
+              </span>
+            </>
+          }
           label="presenças"
           icon={Percent}
           cor={corTaxa(agregado.taxaPresenca)}

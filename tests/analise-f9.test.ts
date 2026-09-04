@@ -564,20 +564,40 @@ describe("obterAnaliticoEscalao", () => {
     const r = await obterAnaliticoEscalao(ESCALAO, undefined, COMPETICAO);
     expect(r.sucesso).toBe(true);
 
-    // Jogos e derivados filtram por competicaoId; treinos/presenças ficam globais.
+    // Jogos e derivados filtram por competicaoId e só contam jogos já realizados
+    // (data <= agora); treinos/presenças ficam globais.
     expect(p.jogo.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { epocaId: EPOCA, escalaoId: ESCALAO, competicaoId: COMPETICAO },
+        where: {
+          epocaId: EPOCA,
+          escalaoId: ESCALAO,
+          competicaoId: COMPETICAO,
+          data: { lte: expect.any(Date) },
+        },
       }),
     );
     expect(p.estatisticaAtleta.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { jogo: { epocaId: EPOCA, escalaoId: ESCALAO, competicaoId: COMPETICAO } },
+        where: {
+          jogo: {
+            epocaId: EPOCA,
+            escalaoId: ESCALAO,
+            competicaoId: COMPETICAO,
+            data: { lte: expect.any(Date) },
+          },
+        },
       }),
     );
     expect(p.eventoJogo.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { jogo: { epocaId: EPOCA, escalaoId: ESCALAO, competicaoId: COMPETICAO } },
+        where: {
+          jogo: {
+            epocaId: EPOCA,
+            escalaoId: ESCALAO,
+            competicaoId: COMPETICAO,
+            data: { lte: expect.any(Date) },
+          },
+        },
       }),
     );
     // Presenças não são filtradas por competição (treinos são transversais).
@@ -602,7 +622,9 @@ describe("obterAnaliticoEscalao", () => {
     const r = await obterAnaliticoEscalao(ESCALAO);
     expect(r.sucesso).toBe(true);
     expect(p.jogo.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { epocaId: EPOCA, escalaoId: ESCALAO } }),
+      expect.objectContaining({
+        where: { epocaId: EPOCA, escalaoId: ESCALAO, data: { lte: expect.any(Date) } },
+      }),
     );
   });
 

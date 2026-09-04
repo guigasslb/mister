@@ -1,7 +1,8 @@
 // Secção de treino dos analíticos do atleta (bíblia §8.15 / §10.1).
 // Presentacional: recebe o AnaliticoTreinoAtleta já calculado (Server Action) e
-// desenha os KPIs de assiduidade/RPE e os gráficos de presença mensal, evolução
-// de RPE por sessão e exposição a exercícios por categoria.
+// desenha os KPIs de assiduidade/RPE e os gráficos de evolução de RPE por sessão
+// e exposição a exercícios por categoria. A presença mensal é apresentada no
+// painel principal do atleta (PainelAtleta), não aqui, para evitar duplicação.
 //
 // Nota de arquitectura: é renderizado dentro do `PainelAtleta` (Client Component,
 // que faz o fetch da Server Action). Como usa `next/dynamic({ ssr:false })` para
@@ -16,10 +17,6 @@ import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { Kpi, type AcentoKpi } from "./Kpi";
 import { pct } from "./Cartao";
 
-const GraficoBarrasV = dynamic(
-  () => import("@/components/graficos/GraficoBarrasV").then((m) => ({ default: m.GraficoBarrasV })),
-  { ssr: false },
-);
 const GraficoLinhas = dynamic(
   () => import("@/components/graficos/GraficoLinhas").then((m) => ({ default: m.GraficoLinhas })),
   { ssr: false },
@@ -62,10 +59,6 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
     return <EstadoVazio titulo="Sem dados de treino para este atleta." />;
   }
 
-  const pontosPresenca = dados.presencasMensais.map((p) => ({
-    label: p.mes,
-    valor: p.taxa,
-  }));
   const pontosRpe = dados.rpeEvolucao.map((r) => ({
     label: dataAbrev(r.dataHora),
     valor1: r.rpe,
@@ -75,7 +68,6 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
     valor: e.totalExercicios,
   }));
 
-  const temPresencaMensal = pontosPresenca.length >= 2;
   const temRpe = pontosRpe.length >= 3;
   const temCategorias = pontosCategoria.length > 0;
 
@@ -97,32 +89,35 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
         />
       </div>
 
-      {/* Presença mensal — mesmo padrão da presença mensal já existente */}
-      {temPresencaMensal && (
-        <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-          <GraficoBarrasV dados={pontosPresenca} titulo="Taxa de presença por mês" />
-        </div>
-      )}
+      {/* Gráficos de treino em duas colunas no desktop: RPE por sessão e
+          exposição a exercícios por categoria. Manter o gráfico de categorias
+          a meia largura evita que as barras horizontais fiquem
+          desproporcionadas — à mesma escala dos rankings dos outros painéis.
+          A presença mensal não é repetida aqui: já é apresentada no painel
+          principal do atleta (evita duplicação). */}
+      {(temRpe || temCategorias) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* RPE por sessão — só com ≥3 registos para uma tendência legível */}
+          {temRpe && (
+            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+              <GraficoLinhas
+                pontos={pontosRpe}
+                serie1="RPE (1–10)"
+                titulo="RPE por sessão"
+              />
+            </div>
+          )}
 
-      {/* RPE por sessão — só com ≥3 registos para uma tendência legível */}
-      {temRpe && (
-        <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-          <GraficoLinhas
-            pontos={pontosRpe}
-            serie1="RPE (1–10)"
-            titulo="RPE por sessão"
-          />
-        </div>
-      )}
-
-      {/* Exercícios por categoria — exposição a cada área de treino */}
-      {temCategorias && (
-        <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-          <GraficoBarrasH
-            dados={pontosCategoria}
-            titulo="Exercícios por categoria"
-            unidade="exercícios"
-          />
+          {/* Exercícios por categoria — exposição a cada área de treino */}
+          {temCategorias && (
+            <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+              <GraficoBarrasH
+                dados={pontosCategoria}
+                titulo="Exercícios por categoria"
+                unidade="exercícios"
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
