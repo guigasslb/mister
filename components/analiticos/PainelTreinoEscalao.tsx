@@ -11,15 +11,11 @@ import type { AnaliticoTreinoEscalao } from "@/lib/actions/analise";
 import dynamic from "next/dynamic";
 import { LABEL_CATEGORIA_PRINCIPAL } from "@/lib/schemas/subcategoria";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
-import { SecaoAnalitico, Kpi, type AcentoKpi } from "./Kpi";
+import { SecaoAnalitico, Kpi, GrelhaMeses, type AcentoKpi } from "./Kpi";
 import { pct, n1 } from "./Cartao";
 
 const GraficoBarrasH = dynamic(
   () => import("@/components/graficos/GraficoBarrasH").then((m) => ({ default: m.GraficoBarrasH })),
-  { ssr: false },
-);
-const GraficoBarrasV = dynamic(
-  () => import("@/components/graficos/GraficoBarrasV").then((m) => ({ default: m.GraficoBarrasV })),
   { ssr: false },
 );
 
@@ -76,19 +72,19 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
     valor: c.totalUsos,
   }));
 
-  // Evolução mensal (nº de sessões). O GraficoBarrasV escala 0–1, por isso
-  // normalizamos pelo máximo e mostramos o valor real (contagem) via `format`.
-  const maxSessoesMes = Math.max(...dados.evolucaoMensal.map((m) => m.totalSessoes), 1);
-  const barrasEvolucao = dados.evolucaoMensal.map((m) => ({
-    label: m.mes,
-    valor: maxSessoesMes > 0 ? m.totalSessoes / maxSessoesMes : 0,
-    format: () => String(m.totalSessoes),
+  // Evolução mensal (nº de sessões) — grelha mensal de contagens reais, tal como
+  // o `PainelEscalao` (secção "Treinos"). Sem normalização: o valor é a contagem.
+  const sessoesPorMes = dados.evolucaoMensal.map((m) => ({
+    mes: m.mes,
+    valor: m.totalSessoes,
   }));
 
-  // Assiduidade mensal (taxa 0–1 — formato % por defeito no GraficoBarrasV).
-  const barrasPresenca = dados.presencasMensais.map((p) => ({
-    label: p.mes,
-    valor: p.taxa,
+  // Assiduidade mensal — grelha de percentagens (destaque abaixo do alvo), tal
+  // como o `PainelEscalao` (secção "Assiduidade mensal").
+  const presencaPorMes = dados.presencasMensais.map((p) => ({
+    mes: p.mes,
+    valor: pct(p.taxa),
+    destaque: p.taxa < 0.6,
   }));
 
   return (
@@ -158,21 +154,17 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
         </SecaoAnalitico>
       )}
 
-      {/* Evolução mensal (nº de sessões) e assiduidade mensal (taxa %) */}
-      {(barrasEvolucao.length > 0 || barrasPresenca.length > 0) && (
-        <SecaoAnalitico titulo="Evolução mensal">
-          <div className="grid gap-6 lg:grid-cols-2">
-            {barrasEvolucao.length > 0 && (
-              <CartaoGrafico>
-                <GraficoBarrasV dados={barrasEvolucao} titulo="Sessões por mês" />
-              </CartaoGrafico>
-            )}
-            {barrasPresenca.length > 0 && (
-              <CartaoGrafico>
-                <GraficoBarrasV dados={barrasPresenca} titulo="Assiduidade por mês" />
-              </CartaoGrafico>
-            )}
-          </div>
+      {/* Sessões por mês — grelha mensal de contagens reais (estilo dossier). */}
+      {sessoesPorMes.length > 0 && (
+        <SecaoAnalitico titulo="Sessões por mês">
+          <GrelhaMeses meses={sessoesPorMes} />
+        </SecaoAnalitico>
+      )}
+
+      {/* Assiduidade mensal — grelha de percentagens (destaque abaixo do alvo). */}
+      {presencaPorMes.length > 0 && (
+        <SecaoAnalitico titulo="Assiduidade mensal">
+          <GrelhaMeses meses={presencaPorMes} />
         </SecaoAnalitico>
       )}
     </div>
