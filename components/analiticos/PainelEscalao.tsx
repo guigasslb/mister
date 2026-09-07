@@ -240,7 +240,7 @@ export function PainelEscalao({
       {/* Rankings de golos e assistências */}
       <SecaoAnalitico titulo="Rankings ofensivos">
         <div className="grid gap-6 sm:grid-cols-2">
-          <div className="rounded-lg border border-cinza-200 bg-white p-5">
+          <div className="card-grafico">
             {pontosMarcadores.length === 0 ? (
               <>
                 <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
@@ -258,7 +258,7 @@ export function PainelEscalao({
             )}
           </div>
 
-          <div className="rounded-lg border border-cinza-200 bg-white p-5">
+          <div className="card-grafico">
             {pontosAssistentes.length === 0 ? (
               <>
                 <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
@@ -323,7 +323,7 @@ export function PainelEscalao({
         <SecaoAnalitico titulo="Utilização e assiduidade">
           <div className="grid gap-6 lg:grid-cols-2">
             {pontosUtilizados.length > 0 && (
-              <div className="rounded-lg border border-cinza-200 bg-white p-5">
+              <div className="card-grafico">
                 <GraficoBarrasH
                   dados={pontosUtilizados}
                   titulo="Jogadores mais utilizados"

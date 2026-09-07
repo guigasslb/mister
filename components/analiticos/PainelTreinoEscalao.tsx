@@ -37,11 +37,11 @@ function acentoTaxa(taxa: number): AcentoKpi {
   return "vermelho";
 }
 
-/** Cartão que envolve um gráfico (borda subtil + fundo branco). */
+/** Cartão que envolve um gráfico. Usa a superfície `.card-grafico` (branca em
+    tema claro, elevada #2a2933 em tema escuro) para o SVG — de fundo transparente
+    — ficar visível e distinto do fundo em vez de herdar o cartão base #1c1b22. */
 function CartaoGrafico({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-cinza-200 bg-white p-5">{children}</div>
-  );
+  return <div className="card-grafico">{children}</div>;
 }
 
 export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }) {
