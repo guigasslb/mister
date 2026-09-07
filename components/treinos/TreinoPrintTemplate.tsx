@@ -1,6 +1,11 @@
 import { Logo } from "@/components/layout/Logo";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
-import { diagramaSchema, LABEL_PARTE_TREINO } from "@/lib/schemas/exercicio";
+import {
+  diagramaSchema,
+  LABEL_PARTE_TREINO,
+  PARTES_TREINO,
+  type ParteTreinoValor,
+} from "@/lib/schemas/exercicio";
 import { LABEL_CATEGORIA_PRINCIPAL } from "@/lib/schemas/subcategoria";
 import { LABEL_TIPO_SESSAO, LABEL_MOMENTO_SEMANA, type MomentoSemana } from "@/lib/schemas/treino";
 import { LABEL_PERIODO } from "@/lib/schemas/planeamento";
@@ -14,6 +19,18 @@ import type {
 
 /** Laranja da marca Mister (§12 / docs/BRAND.md) — acento dos cabeçalhos de secção. */
 const MISTER_LARANJA = "#F0531E";
+
+// §3.5: ordem canónica das fases + bucket para exercícios sem fase (rows legadas).
+// Idêntico ao ecrã (GestorExercicios): a impressão agrupa e numera os exercícios
+// pela MESMA sequência de fases (Aquecimento → Parte principal → Jogo → Retorno à
+// calma → Sem fase) e, dentro de cada fase, pela `ordem` da tabela de junção.
+const SEM_FASE = "SEM_FASE" as const;
+type FaseKey = ParteTreinoValor | typeof SEM_FASE;
+const ORDEM_FASES: FaseKey[] = [...PARTES_TREINO, SEM_FASE];
+const LABEL_FASE: Record<FaseKey, string> = {
+  ...LABEL_PARTE_TREINO,
+  [SEM_FASE]: "Sem fase",
+};
 
 /** Exercício da sessão já resolvido (base + snapshot + overrides) para impressão. */
 export type ExercicioImpressao = {
@@ -123,6 +140,93 @@ function MetaCabecalho({ rotulo, valor }: { rotulo: string; valor: string }) {
 }
 
 /**
+ * Cartão de um exercício na impressão. O `numero` é a posição GLOBAL do
+ * exercício na sequência do treino (corre fase a fase — igual ao ecrã). A fase
+ * não aparece como chip por já ser o cabeçalho do grupo onde o cartão vive.
+ */
+function ItemExercicioImpressao({
+  ex,
+  numero,
+}: {
+  ex: ExercicioImpressao;
+  numero: number;
+}) {
+  return (
+    <li className="flex break-inside-avoid gap-4 rounded-lg border border-cinza-200 p-4">
+      {/* Número de ordem (global, fase a fase) */}
+      <div
+        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-corpo font-bold text-white"
+        style={{ backgroundColor: MISTER_LARANJA }}
+        aria-hidden
+      >
+        {numero}
+      </div>
+
+      {/* Conteúdo do exercício */}
+      <div className="min-w-0 flex-1">
+        <h3 className="font-display text-subtitulo font-semibold text-cinza-900">
+          {ex.nome}
+        </h3>
+
+        {/* Metadados */}
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {ex.duracaoMin != null && (
+            <MetaExercicio rotulo="Duração" valor={`${ex.duracaoMin} min`} />
+          )}
+          {ex.categoriaPrincipal && (
+            <MetaExercicio
+              rotulo="Categoria"
+              valor={LABEL_CATEGORIA_PRINCIPAL[ex.categoriaPrincipal]}
+            />
+          )}
+          {ex.series != null && (
+            <MetaExercicio rotulo="Séries" valor={String(ex.series)} />
+          )}
+          {ex.numeroJogadores && (
+            <MetaExercicio rotulo="Nº jogadores" valor={ex.numeroJogadores} />
+          )}
+          {ex.espaco && <MetaExercicio rotulo="Espaço" valor={ex.espaco} />}
+        </div>
+
+        {/* Corpo: diagrama + texto lado a lado */}
+        <div className="mt-3 flex flex-col gap-4 sm:flex-row">
+          <DiagramaImpressao diagrama={ex.diagrama} nome={ex.nome} />
+          <div className="min-w-0 flex-1 space-y-2">
+            {ex.objetivo && (
+              <div>
+                <p className="text-legenda font-semibold text-cinza-700">Objetivo</p>
+                <p className="whitespace-pre-line text-corpo-sec text-cinza-900">
+                  {ex.objetivo}
+                </p>
+              </div>
+            )}
+            {ex.descricao && (
+              <div>
+                <p className="text-legenda font-semibold text-cinza-700">Descrição</p>
+                <p className="whitespace-pre-line text-corpo-sec text-cinza-900">
+                  {ex.descricao}
+                </p>
+              </div>
+            )}
+            {ex.notas && (
+              <div>
+                <p className="text-legenda font-semibold text-cinza-700">Notas</p>
+                <p className="whitespace-pre-line text-corpo-sec text-cinza-900">
+                  {ex.notas}
+                </p>
+              </div>
+            )}
+            {!ex.objetivo && !ex.descricao && !ex.notas && (
+              <p className="text-corpo-sec italic text-cinza-500">Sem descrição.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/**
  * Template imprimível de uma sessão de treino completa (§ produto — "levar
  * impresso quando não há tablet"). Puro (server component): renderiza o
  * diagrama SVG sem depender de JavaScript no cliente, para sair fiel na
@@ -157,6 +261,27 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
     periodo != null ||
     momentoSemana != null ||
     temPresencas;
+
+  // §3.5: agrupamento por fase — MESMA lógica do ecrã (GestorExercicios). Cada
+  // fase preserva a `ordem` da tabela de junção; a numeração é global e corre
+  // fase a fase, pela sequência canónica das fases. Só se renderizam grupos com
+  // exercícios.
+  const grupos: Record<FaseKey, ExercicioImpressao[]> = {
+    AQUECIMENTO: [],
+    PRINCIPAL: [],
+    JOGO_REDUZIDO: [],
+    RETORNO_CALMA: [],
+    [SEM_FASE]: [],
+  };
+  for (const ex of exercicios) grupos[ex.parteTreino ?? SEM_FASE].push(ex);
+  for (const fase of ORDEM_FASES) grupos[fase].sort((a, b) => a.ordem - b.ordem);
+
+  const numeroDe: Record<string, number> = {};
+  let contador = 0;
+  for (const fase of ORDEM_FASES)
+    for (const ex of grupos[fase]) numeroDe[ex.id] = ++contador;
+
+  const fasesComExercicios = ORDEM_FASES.filter((fase) => grupos[fase].length > 0);
 
   return (
     <article className="mx-auto max-w-[820px] bg-white px-8 py-8 text-cinza-900 print:px-0 print:py-0">
@@ -278,7 +403,9 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
         )}
       </section>
 
-      {/* Lista de exercícios (sequência numerada) */}
+      {/* Exercícios agrupados por fase (§3.5) — MESMA sequência/agrupamento do
+          ecrã do treino (GestorExercicios): Aquecimento → Parte principal → Jogo
+          → Retorno à calma → Sem fase; dentro de cada fase, por `ordem`. */}
       <section>
         <h2
           data-brand
@@ -293,100 +420,32 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
             Esta sessão ainda não tem exercícios.
           </p>
         ) : (
-          <ol className="space-y-5">
-            {exercicios.map((ex, indice) => (
-              <li
-                key={ex.id}
-                className="flex break-inside-avoid gap-4 rounded-lg border border-cinza-200 p-4"
-              >
-                {/* Número de ordem */}
-                <div
-                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-corpo font-bold text-white"
-                  style={{ backgroundColor: MISTER_LARANJA }}
-                  aria-hidden
-                >
-                  {indice + 1}
-                </div>
-
-                {/* Conteúdo do exercício */}
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-display text-subtitulo font-semibold text-cinza-900">
-                    {ex.nome}
+          <div className="space-y-6">
+            {fasesComExercicios.map((fase) => (
+              <div key={fase} className="space-y-3">
+                {/* Cabeçalho da fase — evita ficar órfão no fim da página. */}
+                <div className="flex items-center gap-2 [break-after:avoid]">
+                  <h3 className="text-legenda font-bold uppercase tracking-wide text-cinza-700">
+                    {LABEL_FASE[fase]}
                   </h3>
-
-                  {/* Metadados */}
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {ex.duracaoMin != null && (
-                      <MetaExercicio rotulo="Duração" valor={`${ex.duracaoMin} min`} />
-                    )}
-                    {ex.parteTreino && (
-                      <MetaExercicio
-                        rotulo="Fase"
-                        valor={LABEL_PARTE_TREINO[ex.parteTreino]}
-                      />
-                    )}
-                    {ex.categoriaPrincipal && (
-                      <MetaExercicio
-                        rotulo="Categoria"
-                        valor={LABEL_CATEGORIA_PRINCIPAL[ex.categoriaPrincipal]}
-                      />
-                    )}
-                    {ex.series != null && (
-                      <MetaExercicio rotulo="Séries" valor={String(ex.series)} />
-                    )}
-                    {ex.numeroJogadores && (
-                      <MetaExercicio rotulo="Nº jogadores" valor={ex.numeroJogadores} />
-                    )}
-                    {ex.espaco && (
-                      <MetaExercicio rotulo="Espaço" valor={ex.espaco} />
-                    )}
-                  </div>
-
-                  {/* Corpo: diagrama + texto lado a lado */}
-                  <div className="mt-3 flex flex-col gap-4 sm:flex-row">
-                    <DiagramaImpressao diagrama={ex.diagrama} nome={ex.nome} />
-                    <div className="min-w-0 flex-1 space-y-2">
-                      {ex.objetivo && (
-                        <div>
-                          <p className="text-legenda font-semibold text-cinza-700">
-                            Objetivo
-                          </p>
-                          <p className="whitespace-pre-line text-corpo-sec text-cinza-900">
-                            {ex.objetivo}
-                          </p>
-                        </div>
-                      )}
-                      {ex.descricao && (
-                        <div>
-                          <p className="text-legenda font-semibold text-cinza-700">
-                            Descrição
-                          </p>
-                          <p className="whitespace-pre-line text-corpo-sec text-cinza-900">
-                            {ex.descricao}
-                          </p>
-                        </div>
-                      )}
-                      {ex.notas && (
-                        <div>
-                          <p className="text-legenda font-semibold text-cinza-700">
-                            Notas
-                          </p>
-                          <p className="whitespace-pre-line text-corpo-sec text-cinza-900">
-                            {ex.notas}
-                          </p>
-                        </div>
-                      )}
-                      {!ex.objetivo && !ex.descricao && !ex.notas && (
-                        <p className="text-corpo-sec italic text-cinza-500">
-                          Sem descrição.
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  <span className="rounded-full border border-cinza-300 px-2 py-0.5 text-legenda text-cinza-500">
+                    {grupos[fase].length}
+                  </span>
+                  <span className="h-px flex-1 bg-cinza-200" aria-hidden />
                 </div>
-              </li>
+
+                <ol className="space-y-5">
+                  {grupos[fase].map((ex) => (
+                    <ItemExercicioImpressao
+                      key={ex.id}
+                      ex={ex}
+                      numero={numeroDe[ex.id]}
+                    />
+                  ))}
+                </ol>
+              </div>
             ))}
-          </ol>
+          </div>
         )}
       </section>
 

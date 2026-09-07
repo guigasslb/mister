@@ -11,6 +11,7 @@ import { PARTES_TREINO } from "@/lib/schemas/exercicio";
 import { BotaoImprimir } from "@/components/relatorios/BotaoImprimir";
 import { AutoImprimir } from "@/components/treinos/AutoImprimir";
 import { ForcarModoClaroImpressao } from "@/components/treinos/ForcarModoClaroImpressao";
+import { TemaClubeGlobal } from "@/components/layout/TemaClubeGlobal";
 import {
   TreinoPrintTemplate,
   type DadosImpressaoTreino,
@@ -115,12 +116,29 @@ export default async function ImprimirTreinoPage({
   // vive FORA do grupo (app), logo não herda o `--cor-primaria` do layout da
   // app — sem isto, os campos SVG caíam no laranja da marca (fallback). Alimenta
   // `var(--cor-primaria)` usado por `CampoDesenho`/`MiniaturaCampo`.
+  //
+  // O fundo dos campos usa `fill="var(--cor-primaria, #F0531E)"` como atributo de
+  // apresentação do SVG; na prática esse `var()` só é resolvido de forma fiável
+  // quando a variável está no elemento raiz (`<html>`) — é exatamente por isto
+  // que `TemaClubeGlobal` existe no layout da app (portais do Radix). Definir a
+  // variável apenas num `<div>` interno (tentativa anterior) NÃO chegava ao fill
+  // do SVG, mantendo o laranja. Por isso propagamos ao `<html>` com o mesmo
+  // componente, além do `<div>` (que serve os restantes acentos por herança).
   const estiloClube = membro?.clube.corPrimaria
     ? ({ "--cor-primaria": membro.clube.corPrimaria } as CSSProperties)
     : undefined;
 
   return (
     <div className="bg-white text-cinza-900" style={estiloClube}>
+      {/* Propaga a cor do clube ao `:root` (`<html>`) para que o fill dos campos
+          SVG (`var(--cor-primaria)`) siga o clube em vez do laranja da marca. */}
+      {membro?.clube.corPrimaria && (
+        <TemaClubeGlobal
+          corPrimaria={membro.clube.corPrimaria}
+          corSecundaria={membro.clube.corSecundaria}
+        />
+      )}
+
       {/* Modo claro forçado no ecrã (a impressão já é clara via @media print). */}
       <ForcarModoClaroImpressao />
 
