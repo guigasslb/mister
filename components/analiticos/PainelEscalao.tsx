@@ -20,6 +20,7 @@ const GraficoBarrasH = dynamic(
 import { FiltroCompeticao } from "./FiltroCompeticao";
 import { RankingsMetricas } from "./RankingsMetricas";
 import { RankingAssiduidade } from "./RankingAssiduidade";
+import { TabelaAtletas } from "./TabelaAtletas";
 import { Kpi, SecaoAnalitico, GrelhaMeses, type AcentoKpi } from "./Kpi";
 import { pct, n1 } from "./Cartao";
 
@@ -174,7 +175,16 @@ export function PainelEscalao({
       {/* Plantel e médias — KPIs */}
       <SecaoAnalitico titulo="Plantel e médias">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <Kpi valor={dados.nAtletas} label="atletas" acento="primary" />
+          <Kpi
+            valor={dados.nAtletasAtivos ?? dados.nAtletas}
+            label="atletas ativos"
+            acento="primary"
+            nota={
+              (dados.nAtletasInativos ?? 0) > 0
+                ? `${dados.nAtletasInativos} inativo${dados.nAtletasInativos === 1 ? "" : "s"}`
+                : undefined
+            }
+          />
           <Kpi
             valor={`${sessoesExecutadas}/${dados.sessoes}`}
             label="sessões"
@@ -188,6 +198,16 @@ export function PainelEscalao({
           <Kpi valor={n1(dados.golosMarcadosMedia)} label="golos M/jogo" acento="verde" />
           <Kpi valor={n1(dados.golosSofridosMedia)} label="golos S/jogo" acento="vermelho" />
         </div>
+      </SecaoAnalitico>
+
+      {/* Plantel — tabela detalhada de TODOS os participantes (§10.2), com filtros
+          por estado/posição e ordenação. Sempre visível: mostra estado vazio
+          ("Sem atletas") quando a lista está vazia, em vez de omitir a secção. */}
+      <SecaoAnalitico titulo="Plantel">
+        <TabelaAtletas
+          atletas={dados.tabelaAtletas ?? []}
+          sessoesExecutadas={sessoesExecutadas}
+        />
       </SecaoAnalitico>
 
       {/* Treinos — grelha mensal de sessões + tipos de treino */}
