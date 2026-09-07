@@ -91,8 +91,26 @@ function mimePorExtensao(url: string): string | null {
 async function carregarLogo(url: string | null): Promise<string | null> {
   if (!url) return null;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (!res.ok) return null;
+    // Cabeçalhos tipo-browser: o `logoUrl` é um URL externo arbitrário (§8.4) e
+    // muitos hosts de imagens (CDNs, object storages, Wikipedia, etc.) devolvem
+    // 403/406 a pedidos sem User-Agent de browser ou sem `Accept: image/*`. Na
+    // app o logótipo carrega porque é o BROWSER a pedir (next/image `unoptimized`
+    // em BarraTopo/MarcaAgua); aqui é o servidor (Node/undici) a fazer o fetch,
+    // por isso replica-se o pedido de um browser para não ser recusado. Segue
+    // redirects (default) — comum em storages/CDNs que reencaminham para a CDN.
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(6000),
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; MisterBot/1.0; +https://mister.app)",
+        Accept: "image/avif,image/webp,image/png,image/svg+xml,image/*,*/*;q=0.8",
+      },
+    });
+    if (!res.ok) {
+      console.warn(`[pdf] logótipo: fetch falhou (${res.status}) para ${url}`);
+      return null;
+    }
     const cabecalho = (res.headers.get("content-type") ?? "")
       .split(";")[0]
       .trim()
@@ -100,11 +118,26 @@ async function carregarLogo(url: string | null): Promise<string | null> {
     // Usa o content-type quando é uma imagem suportada; caso contrário infere
     // pela extensão do URL (servidores que devolvem octet-stream/sem tipo).
     const tipo = MIME_LOGO.test(cabecalho) ? cabecalho : mimePorExtensao(url);
-    if (!tipo) return null;
+    if (!tipo) {
+      console.warn(
+        `[pdf] logótipo: tipo não reconhecido (content-type="${cabecalho}") para ${url}`,
+      );
+      return null;
+    }
     const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.byteLength === 0 || buf.byteLength > 2 * 1024 * 1024) return null;
+    if (buf.byteLength === 0 || buf.byteLength > 2 * 1024 * 1024) {
+      console.warn(
+        `[pdf] logótipo: tamanho inválido (${buf.byteLength} bytes) para ${url}`,
+      );
+      return null;
+    }
     return `data:${tipo};base64,${buf.toString("base64")}`;
-  } catch {
+  } catch (e) {
+    console.warn(
+      `[pdf] logótipo: erro ao carregar ${url}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
     return null;
   }
 }
