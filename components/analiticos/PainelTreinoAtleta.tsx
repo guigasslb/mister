@@ -65,9 +65,16 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
     label: LABEL_CATEGORIA[e.categoria],
     valor: e.totalExercicios,
   }));
+  // Exposição por subcategoria (customizável por clube — §8.23.2). Rótulo = nome da
+  // subcategoria (já com fallback "Sem subcategoria" do servidor).
+  const pontosSubcategoria = dados.exerciciosPorSubcategoria.map((e) => ({
+    label: e.subcategoria,
+    valor: e.totalExercicios,
+  }));
 
   const temRpe = pontosRpe.length >= 3;
   const temCategorias = pontosCategoria.length > 0;
+  const temSubcategorias = pontosSubcategoria.length > 0;
 
   return (
     <div className="space-y-6">
@@ -99,7 +106,7 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
           desproporcionadas — à mesma escala dos rankings dos outros painéis.
           A presença mensal não é repetida aqui: já é apresentada no painel
           principal do atleta (evita duplicação). */}
-      {(temRpe || temCategorias) && (
+      {(temRpe || temCategorias || temSubcategorias) && (
         <div className="grid gap-6 lg:grid-cols-2">
           {/* RPE por sessão — só com ≥3 registos para uma tendência legível */}
           {temRpe && (
@@ -121,6 +128,19 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
                 titulo="Exercícios por categoria"
                 unidade="exercícios"
                 unidadeSingular="exercício"
+              />
+            </div>
+          )}
+
+          {/* Exercícios por subcategoria — exposição fina por conteúdo do clube */}
+          {temSubcategorias && (
+            <div className="rounded-lg border border-cinza-200 bg-white p-5">
+              <GraficoBarrasH
+                dados={pontosSubcategoria}
+                titulo="Exercícios por subcategoria"
+                unidade="exercícios"
+                unidadeSingular="exercício"
+                maxRows={Math.min(pontosSubcategoria.length, 10)}
               />
             </div>
           )}

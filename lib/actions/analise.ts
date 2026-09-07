@@ -2635,6 +2635,25 @@ export async function obterEvolucaoMultiepocaClube(): Promise<
 /** Fallback de categoria para exercícios sem `categoriaPrincipal` definida (nullable em BD). */
 const CATEGORIA_FALLBACK: CategoriaExercicioPrincipal = "OUTRO";
 
+/** Rótulo para o grupo de exercícios sem subcategoria (`subcategoriaId` null em BD). */
+const SUBCATEGORIA_FALLBACK_NOME = "Sem subcategoria";
+
+/**
+ * Chave de semana ISO-8601 (`YYYY-Www`) de uma data, usada para contar semanas
+ * distintas com treino (frequência semanal — §8.23). A semana começa à segunda e
+ * a numeração segue a quinta-feira dessa semana (ISO). Construída em UTC a partir
+ * dos componentes locais da data, em coerência com o resto do ficheiro (que usa
+ * `getMonth`/`getFullYear` locais para agrupar por mês).
+ */
+function chaveSemanaIso(d: Date): string {
+  const data = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const diaSemana = data.getUTCDay() || 7; // 1=segunda … 7=domingo
+  data.setUTCDate(data.getUTCDate() + 4 - diaSemana); // quinta-feira da semana
+  const inicioAno = new Date(Date.UTC(data.getUTCFullYear(), 0, 1));
+  const semana = Math.ceil(((data.getTime() - inicioAno.getTime()) / 86_400_000 + 1) / 7);
+  return `${data.getUTCFullYear()}-W${String(semana).padStart(2, "0")}`;
+}
+
 /**
  * Assiduidade mensal AGREGADA de uma equipa (não individual): `presentes` = total de
  * presenças do mês; `total` = nAtletas × sessões do mês. Só meses com sessões JÁ
@@ -2689,6 +2708,21 @@ export interface UsoExercicio {
   escaloes: Array<{ id: string; nome: string; totalUsos: number }>;
 }
 
+/**
+ * Distribuição de utilizações de exercícios por subcategoria (customizável por
+ * clube — §8.23). `subcategoria` é o rótulo (nome livre da `SubcategoriaExercicio`,
+ * ou `SUBCATEGORIA_FALLBACK_NOME` para exercícios sem subcategoria). `subcategoriaId`
+ * null agrupa os sem subcategoria e serve de chave estável no cliente (nomes podem
+ * repetir-se entre categorias). `categoria` é a categoria principal a que a
+ * subcategoria pertence (útil para agrupar/colorir).
+ */
+export interface DistribuicaoSubcategoria {
+  subcategoriaId: string | null;
+  subcategoria: string;
+  categoria: CategoriaExercicioPrincipal;
+  totalUsos: number;
+}
+
 /** Linha do ranking de uso da biblioteca de exercícios. */
 export interface RankingUsoExercicio {
   exercicioId: string;
@@ -2704,6 +2738,25 @@ export interface AnaliticoTreinoEscalao {
   sessoesExecutadas: number;
   totalHoras: number;
   duracaoMedia: number | null;
+  /** Total de utilizações de exercícios (linhas `SessaoExercicio`) em sessões executadas. */
+  totalExercicios: number;
+  /**
+   * Média de exercícios por sessão. Denominador = sessões executadas COM pelo menos
+   * um exercício (§8.23 — "volume de exercícios conta todas as sessões com
+   * exercícios"). `null` quando nenhuma sessão executada tem exercícios.
+   */
+  mediaExerciciosPorSessao: number | null;
+  /**
+   * Frequência semanal média de treino = sessões executadas / nº de semanas ISO
+   * distintas com ≥1 sessão executada. Representa a cadência típica nas semanas
+   * ativas (não dilui com semanas de pausa). `null` sem sessões executadas.
+   */
+  frequenciaSemanalMedia: number | null;
+  /**
+   * Frequência mensal média de treino = sessões executadas / nº de meses distintos
+   * com ≥1 sessão executada. `null` sem sessões executadas.
+   */
+  frequenciaMensalMedia: number | null;
   distribuicaoTipoSessao: Record<TipoSessao, number>;
   topExercicios: Array<{
     exercicioId: string;
@@ -2712,6 +2765,8 @@ export interface AnaliticoTreinoEscalao {
     categoriaPrincipal: CategoriaExercicioPrincipal;
   }>;
   distribuicaoCategoria: Array<{ categoria: CategoriaExercicioPrincipal; totalUsos: number }>;
+  /** Distribuição por subcategoria (customizável por clube — §8.23; ordenada desc). */
+  distribuicaoSubcategoria: DistribuicaoSubcategoria[];
   distribuicaoParteTreino: Array<{ parte: ParteTreino; totalUsos: number }>;
   evolucaoMensal: Array<{ mes: string; totalSessoes: number; totalHoras: number }>;
   taxaPresencaMedia: number;
@@ -2727,6 +2782,17 @@ export interface AnaliticoTreinoAtleta {
   totalSessoesComRpe: number;
   rpeEvolucao: Array<{ sessaoId: string; dataHora: Date; rpe: number }>;
   exerciciosPorCategoria: Array<{
+    categoria: CategoriaExercicioPrincipal;
+    totalExercicios: number;
+  }>;
+  /**
+   * Exposição por subcategoria (customizável por clube — §8.23): exercícios de
+   * sessões onde o atleta esteve presente, agrupados por subcategoria. `null`
+   * agrupa os sem subcategoria (rótulo `SUBCATEGORIA_FALLBACK_NOME`). Ordenada desc.
+   */
+  exerciciosPorSubcategoria: Array<{
+    subcategoriaId: string | null;
+    subcategoria: string;
     categoria: CategoriaExercicioPrincipal;
     totalExercicios: number;
   }>;
@@ -2944,7 +3010,14 @@ export async function obterAnaliticoTreinoEscalao(
             exercicioId: true,
             parteTreino: true, // override por sessão (fallback = parte do exercício)
             exercicio: {
-              select: { nome: true, categoriaPrincipal: true, parteTreino: true },
+              select: {
+                nome: true,
+                categoriaPrincipal: true,
+                parteTreino: true,
+                // §8.23: subcategoria (customizável por clube) para a distribuição.
+                subcategoriaId: true,
+                subcategoria: { select: { nome: true } },
+              },
             },
           },
         },
@@ -2995,8 +3068,21 @@ export async function obterAnaliticoTreinoEscalao(
   >();
   const categoriaUsos = new Map<CategoriaExercicioPrincipal, number>();
   const parteUsos = new Map<ParteTreino, number>();
+  // §8.23: distribuição por subcategoria. Chave = subcategoriaId ou sentinela
+  // "__SEM__" para os exercícios sem subcategoria (agrupados sob null na saída).
+  const SUBCAT_SEM = "__SEM__";
+  const subcategoriaUsos = new Map<
+    string,
+    { subcategoriaId: string | null; subcategoria: string; categoria: CategoriaExercicioPrincipal; total: number }
+  >();
+  // Volume de exercícios por sessão: total de utilizações e nº de sessões (executadas)
+  // COM pelo menos um exercício (denominador da média — §8.23).
+  let totalExercicios = 0;
+  let sessoesComExercicios = 0;
   for (const s of executadas) {
+    if (s.exercicios.length > 0) sessoesComExercicios++;
     for (const se of s.exercicios) {
+      totalExercicios++;
       const categoria = se.exercicio.categoriaPrincipal ?? CATEGORIA_FALLBACK;
       const ex =
         exercicioUsos.get(se.exercicioId) ??
@@ -3006,6 +3092,18 @@ export async function obterAnaliticoTreinoEscalao(
       categoriaUsos.set(categoria, (categoriaUsos.get(categoria) ?? 0) + 1);
       const parte = se.parteTreino ?? se.exercicio.parteTreino;
       if (parte) parteUsos.set(parte, (parteUsos.get(parte) ?? 0) + 1);
+      const subId = se.exercicio.subcategoriaId ?? null;
+      const chaveSub = subId ?? SUBCAT_SEM;
+      const sub =
+        subcategoriaUsos.get(chaveSub) ??
+        {
+          subcategoriaId: subId,
+          subcategoria: se.exercicio.subcategoria?.nome ?? SUBCATEGORIA_FALLBACK_NOME,
+          categoria,
+          total: 0,
+        };
+      sub.total++;
+      subcategoriaUsos.set(chaveSub, sub);
     }
   }
   const topExercicios = [...exercicioUsos.entries()]
@@ -3020,9 +3118,27 @@ export async function obterAnaliticoTreinoEscalao(
   const distribuicaoCategoria = [...categoriaUsos.entries()]
     .map(([categoria, totalUsos]) => ({ categoria, totalUsos }))
     .sort((a, b) => b.totalUsos - a.totalUsos);
+  const distribuicaoSubcategoria: DistribuicaoSubcategoria[] = [...subcategoriaUsos.values()]
+    .map((v) => ({
+      subcategoriaId: v.subcategoriaId,
+      subcategoria: v.subcategoria,
+      categoria: v.categoria,
+      totalUsos: v.total,
+    }))
+    .sort(
+      (a, b) => b.totalUsos - a.totalUsos || a.subcategoria.localeCompare(b.subcategoria, "pt"),
+    );
   const distribuicaoParteTreino = [...parteUsos.entries()]
     .map(([parte, totalUsos]) => ({ parte, totalUsos }))
     .sort((a, b) => b.totalUsos - a.totalUsos);
+  const mediaExerciciosPorSessao =
+    sessoesComExercicios > 0 ? arredondar2(totalExercicios / sessoesComExercicios) : null;
+
+  // Frequência de treino: sessões executadas por semana ISO e por mês distintos
+  // com treino (§8.23). Semanas distintas com ≥1 sessão executada.
+  const semanasComTreino = new Set(executadas.map((s) => chaveSemanaIso(s.data)));
+  const frequenciaSemanalMedia =
+    semanasComTreino.size > 0 ? arredondar2(executadas.length / semanasComTreino.size) : null;
 
   // Evolução mensal (janela dos últimos 12 meses, só sessões executadas).
   const evolMap = new Map<string, { totalSessoes: number; totalMin: number }>();
@@ -3033,6 +3149,9 @@ export async function obterAnaliticoTreinoEscalao(
     if (s.duracaoMin != null) acc.totalMin += s.duracaoMin;
     evolMap.set(key, acc);
   }
+  // Meses distintos com ≥1 sessão executada = tamanho do mapa de evolução.
+  const frequenciaMensalMedia =
+    evolMap.size > 0 ? arredondar2(executadas.length / evolMap.size) : null;
   const hoje = new Date();
   const evolucaoMensal: AnaliticoTreinoEscalao["evolucaoMensal"] = [];
   for (let i = 11; i >= 0; i--) {
@@ -3065,9 +3184,14 @@ export async function obterAnaliticoTreinoEscalao(
     sessoesExecutadas: executadas.length,
     totalHoras,
     duracaoMedia,
+    totalExercicios,
+    mediaExerciciosPorSessao,
+    frequenciaSemanalMedia,
+    frequenciaMensalMedia,
     distribuicaoTipoSessao,
     topExercicios,
     distribuicaoCategoria,
+    distribuicaoSubcategoria,
     distribuicaoParteTreino,
     evolucaoMensal,
     taxaPresencaMedia,
@@ -3173,7 +3297,16 @@ export async function obterAnaliticoTreinoAtleta(
           },
         },
       },
-      select: { exercicio: { select: { categoriaPrincipal: true } } },
+      select: {
+        exercicio: {
+          select: {
+            categoriaPrincipal: true,
+            // §8.23: subcategoria (customizável por clube) para a exposição do atleta.
+            subcategoriaId: true,
+            subcategoria: { select: { nome: true } },
+          },
+        },
+      },
     }),
   ]);
 
@@ -3194,13 +3327,43 @@ export async function obterAnaliticoTreinoAtleta(
   }));
 
   const categoriaMap = new Map<CategoriaExercicioPrincipal, number>();
+  // §8.23: exposição por subcategoria (chave = subcategoriaId ou sentinela).
+  const SUBCAT_SEM = "__SEM__";
+  const subcategoriaMap = new Map<
+    string,
+    { subcategoriaId: string | null; subcategoria: string; categoria: CategoriaExercicioPrincipal; total: number }
+  >();
   for (const se of exerciciosPresente) {
     const categoria = se.exercicio.categoriaPrincipal ?? CATEGORIA_FALLBACK;
     categoriaMap.set(categoria, (categoriaMap.get(categoria) ?? 0) + 1);
+    const subId = se.exercicio.subcategoriaId ?? null;
+    const chaveSub = subId ?? SUBCAT_SEM;
+    const sub =
+      subcategoriaMap.get(chaveSub) ??
+      {
+        subcategoriaId: subId,
+        subcategoria: se.exercicio.subcategoria?.nome ?? SUBCATEGORIA_FALLBACK_NOME,
+        categoria,
+        total: 0,
+      };
+    sub.total++;
+    subcategoriaMap.set(chaveSub, sub);
   }
   const exerciciosPorCategoria = [...categoriaMap.entries()]
     .map(([categoria, totalExercicios]) => ({ categoria, totalExercicios }))
     .sort((a, b) => b.totalExercicios - a.totalExercicios);
+  const exerciciosPorSubcategoria = [...subcategoriaMap.values()]
+    .map((v) => ({
+      subcategoriaId: v.subcategoriaId,
+      subcategoria: v.subcategoria,
+      categoria: v.categoria,
+      totalExercicios: v.total,
+    }))
+    .sort(
+      (a, b) =>
+        b.totalExercicios - a.totalExercicios ||
+        a.subcategoria.localeCompare(b.subcategoria, "pt"),
+    );
 
   const presencasSet = new Set(presencas.map((p) => p.sessaoId));
 
@@ -3212,6 +3375,7 @@ export async function obterAnaliticoTreinoAtleta(
     totalSessoesComRpe: rpes.length,
     rpeEvolucao,
     exerciciosPorCategoria,
+    exerciciosPorSubcategoria,
     presencasMensais: montarPresencasMensais(sessoes, presencasSet),
   });
 }

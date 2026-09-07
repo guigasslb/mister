@@ -24,6 +24,9 @@ const jogadorSchema = z.object({
   x: z.number().min(0).max(400),
   y: z.number().min(0).max(200),
   numero: z.number().int().optional(),
+  // Rótulo personalizado (ex.: "Ala", "Pivot", "Fixo"). Ausente → usa o número
+  // (ou "A" para adversário). Retrocompatível: diagramas antigos não o têm.
+  rotulo: z.string().max(6).optional(),
   cor: corJogadorSchema,
   posicao: z.enum(["GR", "fixo", "ala", "pivo"]).optional(),
   // Equipa a que o jogador pertence (opcional; convenção da secção 11.3).

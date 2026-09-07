@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   LABEL_CATEGORIA,
+  LABEL_PARTE_TREINO,
   diagramaSchema,
   type ParteTreinoValor,
 } from "@/lib/schemas/exercicio";
@@ -21,6 +22,12 @@ import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
 import { CampoAnimado } from "@/components/campo/CampoAnimado";
 import { AdaptarExercicioDialog } from "@/components/treinos/AdaptarExercicioDialog";
 import { guardarTreinoSuspenso, limparTreinoSuspenso } from "@/lib/treino-suspenso";
+import {
+  SEM_FASE,
+  fasesComExercicios,
+  ordenarExerciciosPorFase,
+  type FaseKey,
+} from "@/lib/treino-fases";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
 
 export type ExercicioModo = {
@@ -37,6 +44,13 @@ export type ExercicioModo = {
   notas: string | null;
   // §3.5: fase do treino deste exercício nesta sessão (null = sem fase).
   parteTreino: ParteTreinoValor | null;
+};
+
+// Rótulos das fases na barra de navegação — reusa os rótulos da biblioteca e
+// acrescenta o do bucket "sem fase" (a ordenação vive em `lib/treino-fases`).
+const LABEL_FASE: Record<FaseKey, string> = {
+  ...LABEL_PARTE_TREINO,
+  [SEM_FASE]: "Sem fase",
 };
 
 function formatarTempo(segundos: number): string {
@@ -142,6 +156,20 @@ export function ModoTreino({
   const [pausado, setPausado] = useState(false);
   const [adaptarAberto, setAdaptarAberto] = useState(false);
 
+  // §3.5: ordena pela ordem canónica das fases, preservando a posição original
+  // (`ordem`) dentro de cada fase — ver `lib/treino-fases`.
+  const exerciciosOrdenados = useMemo(
+    () => ordenarExerciciosPorFase(exercicios),
+    [exercicios],
+  );
+
+  // Fases com exercícios, na ordem canónica, com o índice do 1.º exercício de cada
+  // uma — alimenta a barra de navegação por fase (salto direto).
+  const fasesPresentes = useMemo(
+    () => fasesComExercicios(exerciciosOrdenados),
+    [exerciciosOrdenados],
+  );
+
   // Cronómetro ascendente (tempo total decorrido na sessão). Não incrementa
   // enquanto estiver em pausa.
   useEffect(() => {
@@ -173,13 +201,21 @@ export function ModoTreino({
     return () => window.removeEventListener("keydown", onKey);
   }, [onFinish, adaptarAberto, sessaoId]);
 
-  const total = exercicios.length;
-  const atual = exercicios[indice];
+  const total = exerciciosOrdenados.length;
+  const atual = exerciciosOrdenados[indice];
   const ultimo = indice >= total - 1;
+  const faseAtual: FaseKey | null = atual ? atual.parteTreino ?? SEM_FASE : null;
 
   function terminarDefinitivo() {
     limparTreinoSuspenso(sessaoId);
     onFinish();
+  }
+
+  // Salto direto para o 1.º exercício de uma fase (barra de fases). Reinicia o
+  // cronómetro, tal como a navegação exercício-a-exercício.
+  function irParaFase(indiceDestino: number) {
+    setIndice(indiceDestino);
+    setSegundos(0);
   }
 
   function suspender() {
@@ -266,6 +302,35 @@ export function ModoTreino({
           style={{ width: `${total > 0 ? ((indice + 1) / total) * 100 : 0}%` }}
         />
       </div>
+
+      {/* Navegação por fase (§3.5) — salto direto para o 1.º exercício de cada
+          fase presente no treino. A fase atual fica destacada. Só aparece quando
+          há mais do que uma fase (com uma só, não há para onde saltar). */}
+      {fasesPresentes.length > 1 && (
+        <nav
+          aria-label="Fases do treino"
+          className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-cinza-200 px-4 py-2"
+        >
+          {fasesPresentes.map(({ fase, indice: indiceFase }) => {
+            const ativa = fase === faseAtual;
+            return (
+              <button
+                key={fase}
+                type="button"
+                onClick={() => irParaFase(indiceFase)}
+                aria-current={ativa ? "step" : undefined}
+                className={`flex h-11 shrink-0 items-center whitespace-nowrap rounded-md px-3 text-corpo-sec font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                  ativa
+                    ? "bg-primary text-white"
+                    : "border border-cinza-200 text-cinza-700 hover:bg-primary/5 hover:text-primary"
+                }`}
+              >
+                {LABEL_FASE[fase]}
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Corpo: exercício atual (zona scrollável — min-h-0 é essencial para o
           overflow funcionar dentro do flex-col e não empurrar o footer; o pb-24

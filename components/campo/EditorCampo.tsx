@@ -18,8 +18,10 @@ import {
   Film,
   Plus,
   RotateCw,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -711,6 +713,24 @@ export function EditorCampo({
     anunciar(`Tamanho da escadinha alterado para ${tamanho}`);
   }
 
+  // Muda o rótulo personalizado de um jogador já colocado (via selecção). Um
+  // rótulo vazio remove o campo (volta a mostrar o número/"A" no render).
+  function mudarRotuloJogador(id: string, rotulo: string) {
+    registarHistorico();
+    const limpo = rotulo.slice(0, 6);
+    aplicarElementos(
+      elementos.map((el) => {
+        if (el.id !== id || el.tipo !== "jogador") return el;
+        if (limpo === "") {
+          const { rotulo: _rotulo, ...resto } = el;
+          return resto;
+        }
+        return { ...el, rotulo: limpo };
+      }),
+    );
+    anunciar(limpo === "" ? "Rótulo removido" : `Rótulo alterado para ${limpo}`);
+  }
+
   function alternarModoAnimacao() {
     setModoAnimacao((v) => {
       const proximo = !v;
@@ -776,6 +796,8 @@ export function EditorCampo({
     elementoSelecionado?.tipo === "barras" ? elementoSelecionado : null;
   const arcoSelecionado =
     elementoSelecionado?.tipo === "arco" ? elementoSelecionado : null;
+  const jogadorSelecionado =
+    elementoSelecionado?.tipo === "jogador" ? elementoSelecionado : null;
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
@@ -1184,6 +1206,41 @@ export function EditorCampo({
                     Cancelar
                   </Button>
                 )}
+              </div>
+            )}
+
+            {ferramenta === "selecionar" && jogadorSelecionado && (
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="rotulo-jogador"
+                  className="text-cinza-600"
+                >
+                  Rótulo:
+                </label>
+                <Input
+                  id="rotulo-jogador"
+                  maxLength={6}
+                  placeholder="ex: Ala"
+                  value={jogadorSelecionado.rotulo ?? ""}
+                  onChange={(e) =>
+                    mudarRotuloJogador(jogadorSelecionado.id, e.target.value)
+                  }
+                  className="h-11 w-28"
+                />
+                {jogadorSelecionado.rotulo != null &&
+                  jogadorSelecionado.rotulo !== "" && (
+                    <button
+                      type="button"
+                      aria-label="Limpar rótulo (voltar ao número)"
+                      title="Limpar rótulo"
+                      onClick={() =>
+                        mudarRotuloJogador(jogadorSelecionado.id, "")
+                      }
+                      className="flex h-11 w-11 items-center justify-center rounded border border-cinza-300 text-cinza-600 hover:bg-cinza-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
               </div>
             )}
 

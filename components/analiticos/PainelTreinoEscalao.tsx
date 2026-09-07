@@ -11,6 +11,7 @@ import type { AnaliticoTreinoEscalao } from "@/lib/actions/analise";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { LABEL_CATEGORIA_PRINCIPAL } from "@/lib/schemas/subcategoria";
+import { LABEL_PARTE_TREINO } from "@/lib/schemas/exercicio";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { SecaoAnalitico, Kpi, GrelhaMeses, type AcentoKpi } from "./Kpi";
 import { pct, n1 } from "./Cartao";
@@ -73,6 +74,19 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
     valor: c.totalUsos,
   }));
 
+  // Distribuição por parte do treino (§8.23.1 — dimensão E). Já vem ordenada desc.
+  const barrasParteTreino = dados.distribuicaoParteTreino.map((p) => ({
+    label: LABEL_PARTE_TREINO[p.parte],
+    valor: p.totalUsos,
+  }));
+
+  // Distribuição por subcategoria (customizável por clube — §8.23.1). O rótulo é o
+  // nome da subcategoria, já com fallback "Sem subcategoria" do servidor.
+  const barrasSubcategoria = dados.distribuicaoSubcategoria.map((s) => ({
+    label: s.subcategoria,
+    valor: s.totalUsos,
+  }));
+
   // Evolução mensal (nº de sessões) — grelha mensal de contagens reais, tal como
   // o `PainelEscalao` (secção "Treinos"). Sem normalização: o valor é a contagem.
   const sessoesPorMes = dados.evolucaoMensal.map((m) => ({
@@ -90,7 +104,8 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
 
   return (
     <div className="space-y-10">
-      {/* Volume e presença — KPIs */}
+      {/* Volume e presença — KPIs. Primeira linha: sessões/horas/duração/presença;
+          segunda linha (§8.23.1): volume de exercícios e cadência de treino. */}
       <SecaoAnalitico titulo="Volume de treino">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi
@@ -110,12 +125,43 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
             label="presença média"
             acento={acentoTaxa(dados.taxaPresencaMedia)}
           />
+          <Kpi valor={dados.totalExercicios} label="exercícios dados" />
+          <Kpi
+            valor={
+              dados.mediaExerciciosPorSessao === null
+                ? "—"
+                : n1(dados.mediaExerciciosPorSessao)
+            }
+            label="exercícios/sessão"
+          />
+          <Kpi
+            valor={
+              dados.frequenciaSemanalMedia === null
+                ? "—"
+                : n1(dados.frequenciaSemanalMedia)
+            }
+            label="treinos/semana"
+            nota="média (semanas ativas)"
+          />
+          <Kpi
+            valor={
+              dados.frequenciaMensalMedia === null
+                ? "—"
+                : n1(dados.frequenciaMensalMedia)
+            }
+            label="treinos/mês"
+            nota="média (meses ativos)"
+          />
         </div>
       </SecaoAnalitico>
 
-      {/* Composição dos treinos — tipos de sessão + categorias lado a lado, na
-          mesma densidade 2-up do PainelEscalao ("Rankings ofensivos"). */}
-      {(barrasTipoSessao.length > 0 || barrasCategoria.length > 0) && (
+      {/* Composição dos treinos — tipos de sessão, categoria, parte do treino e
+          subcategoria em grelha 2-up (mesma densidade do PainelEscalao —
+          "Rankings ofensivos"). Cada gráfico só aparece se tiver dados. */}
+      {(barrasTipoSessao.length > 0 ||
+        barrasCategoria.length > 0 ||
+        barrasParteTreino.length > 0 ||
+        barrasSubcategoria.length > 0) && (
         <SecaoAnalitico titulo="Composição dos treinos">
           <div className="grid gap-6 sm:grid-cols-2">
             {barrasTipoSessao.length > 0 && (
@@ -137,6 +183,28 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
                   unidade="utilizações"
                   unidadeSingular="utilização"
                   maxRows={barrasCategoria.length}
+                />
+              </CartaoGrafico>
+            )}
+            {barrasParteTreino.length > 0 && (
+              <CartaoGrafico>
+                <GraficoBarrasH
+                  dados={barrasParteTreino}
+                  titulo="Por parte do treino"
+                  unidade="utilizações"
+                  unidadeSingular="utilização"
+                  maxRows={barrasParteTreino.length}
+                />
+              </CartaoGrafico>
+            )}
+            {barrasSubcategoria.length > 0 && (
+              <CartaoGrafico>
+                <GraficoBarrasH
+                  dados={barrasSubcategoria}
+                  titulo="Por subcategoria"
+                  unidade="utilizações"
+                  unidadeSingular="utilização"
+                  maxRows={Math.min(barrasSubcategoria.length, 10)}
                 />
               </CartaoGrafico>
             )}

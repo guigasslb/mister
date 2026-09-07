@@ -552,7 +552,17 @@ export function ElementoSVG({
       const eAdversario = elemento.equipa === "adversario";
       const preenchimento = eAdversario ? ADVERSARIO_COR : corParaHex(elemento.cor);
       const etiqueta =
-        elemento.numero != null ? String(elemento.numero) : eAdversario ? "A" : null;
+        elemento.rotulo != null && elemento.rotulo !== ""
+          ? elemento.rotulo
+          : elemento.numero != null
+            ? String(elemento.numero)
+            : eAdversario
+              ? "A"
+              : null;
+      // Rótulos longos (ex.: "Pivot", "Ala") reduzem o tamanho do texto para
+      // caber dentro do círculo do jogador (r=8). Números/rótulos curtos mantêm 8.
+      const tamanhoEtiqueta =
+        etiqueta != null && etiqueta.length > 3 ? 5 : etiqueta != null && etiqueta.length > 2 ? 6 : 8;
       return (
         <g>
           {decoracoes}
@@ -571,7 +581,7 @@ export function ElementoSVG({
               y={elemento.y}
               textAnchor="middle"
               dominantBaseline="central"
-              fontSize={8}
+              fontSize={tamanhoEtiqueta}
               fontWeight={700}
               fill="#FFFFFF"
             >
