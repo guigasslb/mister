@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // `server-only` lança fora de um contexto de servidor (ex.: em testes) — neutralizado.
 vi.mock("server-only", () => ({}));
@@ -185,5 +185,74 @@ describe("gerarPdfAnalitico", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.status).toBe(401);
+  });
+});
+
+describe("gerarPdfAnalitico · logótipo do clube", () => {
+  const fetchOriginal = globalThis.fetch;
+
+  /** Contexto de clube com um logótipo por URL (formato configurável). */
+  function ctxClubeComLogo(logoUrl: string) {
+    const base = ctxClube();
+    return { ...base, clube: { ...base.clube, logoUrl } };
+  }
+
+  /** Simula a resposta HTTP do fetch do logótipo. */
+  function mockFetchLogo(contentType: string | null, bytes = new Uint8Array([1, 2, 3, 4])) {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: (h: string) => (h.toLowerCase() === "content-type" ? contentType : null) },
+      arrayBuffer: async () => bytes.buffer,
+    }) as unknown as typeof fetch;
+  }
+
+  beforeEach(() => {
+    m(obterAnaliticoClubeEpoca).mockResolvedValue(analiticoClube());
+  });
+
+  afterEach(() => {
+    globalThis.fetch = fetchOriginal;
+  });
+
+  it("embute o logótipo PNG como data URI no relatório", async () => {
+    m(obterMembroAtual).mockResolvedValue(ctxClubeComLogo("https://cdn.exemplo.pt/escudo.png"));
+    mockFetchLogo("image/png");
+
+    const r = await gerarPdfAnalitico({ tipo: "clube" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.html).toContain("data:image/png;base64,");
+    expect(r.html).not.toContain('class="marca-logo-ph"'); // sem placeholder quando há logo
+  });
+
+  it("embute logótipos WebP/SVG (antes descartados) via content-type", async () => {
+    m(obterMembroAtual).mockResolvedValue(ctxClubeComLogo("https://cdn.exemplo.pt/escudo.webp"));
+    mockFetchLogo("image/webp");
+
+    const r = await gerarPdfAnalitico({ tipo: "clube" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.html).toContain("data:image/webp;base64,");
+  });
+
+  it("infere o MIME pela extensão quando o servidor devolve octet-stream", async () => {
+    m(obterMembroAtual).mockResolvedValue(ctxClubeComLogo("https://cdn.exemplo.pt/escudo.svg"));
+    mockFetchLogo("application/octet-stream");
+
+    const r = await gerarPdfAnalitico({ tipo: "clube" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.html).toContain("data:image/svg+xml;base64,");
+  });
+
+  it("cai no placeholder (fallback gracioso) quando o logótipo não é reconhecível", async () => {
+    m(obterMembroAtual).mockResolvedValue(ctxClubeComLogo("https://cdn.exemplo.pt/escudo.bin"));
+    mockFetchLogo("application/octet-stream");
+
+    const r = await gerarPdfAnalitico({ tipo: "clube" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.html).not.toContain("data:image");
+    expect(r.html).toContain('class="marca-logo-ph"'); // inicial do clube
   });
 });

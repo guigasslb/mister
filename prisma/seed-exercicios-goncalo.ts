@@ -2,7 +2,7 @@ import { PrismaClient, Prisma } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const EMAIL_ALVO = "goncalo.a.pereira@avanade.com";
+const EMAIL_ALVO = "goncalo.pereira.1992@gmail.com";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Diagramas (secção 11 da bíblia): campo 400×200, x→direita, y→baixo, centro (200,100).
@@ -132,6 +132,72 @@ const diagrama2: Prisma.InputJsonValue = {
   ],
 };
 
+// Exercício 3 — Saída de GR pelas alas (4Ax0D+GR): movimentação de bola e
+// trocas de posição. Ataque da esquerda (GR) para a direita (finalização).
+const diagrama3: Prisma.InputJsonValue = {
+  versao: 2,
+  campo: "FUTSAL_5",
+  elementos: [
+    // GR e balizas
+    { id: "e3-gr", tipo: "jogador", x: 18, y: 100, cor: "azul", posicao: "GR", equipa: "propria" },
+    { id: "e3-baliza-propria", tipo: "baliza", x: 5, y: 100, orientacao: "vertical" },
+    { id: "e3-baliza-adv", tipo: "baliza", x: 390, y: 100, orientacao: "vertical" },
+    // Jogadores de campo (posições iniciais)
+    { id: "e3-fixo", tipo: "jogador", x: 95, y: 100, numero: 5, cor: "azul", posicao: "fixo", equipa: "propria" },
+    { id: "e3-ala-dir", tipo: "jogador", x: 150, y: 40, numero: 7, cor: "azul", posicao: "ala", equipa: "propria" },
+    { id: "e3-ala-esq", tipo: "jogador", x: 150, y: 160, numero: 11, cor: "azul", posicao: "ala", equipa: "propria" },
+    { id: "e3-pivo", tipo: "jogador", x: 270, y: 55, numero: 9, cor: "azul", posicao: "pivo", equipa: "propria" },
+    // Bola no GR
+    { id: "e3-bola", tipo: "bola", x: 28, y: 100 },
+    // Setas — trajeto completo da jogada
+    // 1) GR passa para o fixo, que troca com a ala e desce à ala para receber
+    { id: "e3-s-gr-fixo", tipo: "seta", estilo: "passe", cor: "#1A1D29", pontos: [{ x: 34, y: 100 }, { x: 150, y: 52 }] },
+    // 2) Fixo procura o pivot na ala
+    { id: "e3-s-fixo-pivo", tipo: "seta", estilo: "passe", cor: "#1A1D29", pontos: [{ x: 150, y: 52 }, { x: 268, y: 57 }] },
+    // 3) Pivot devolve para a ala contrária que já vem a entrar (com curva)
+    { id: "e3-s-pivo-ala", tipo: "seta", estilo: "passe", cor: "#1A1D29", pontos: [{ x: 270, y: 60 }, { x: 305, y: 110 }, { x: 315, y: 140 }] },
+    // 4) Movimento: fixo troca com a ala (sai para a ala direita)
+    { id: "e3-s-mov-fixo", tipo: "seta", estilo: "movimento", cor: "#1A1D29", pontos: [{ x: 95, y: 100 }, { x: 148, y: 55 }] },
+    // 5) Movimento: ala contrária entra para a finalização
+    { id: "e3-s-mov-ala", tipo: "seta", estilo: "movimento", cor: "#1A1D29", pontos: [{ x: 150, y: 160 }, { x: 315, y: 143 }] },
+  ],
+  passos: [
+    // Passo 0: fixo troca para a ala e recebe do GR; ala direita entra por dentro
+    {
+      id: "e3-p0",
+      ordem: 0,
+      duracaoMs: 1400,
+      posicoes: [
+        { elementoId: "e3-fixo", x: 150, y: 52 },
+        { elementoId: "e3-ala-dir", x: 110, y: 95 },
+        { elementoId: "e3-bola", x: 150, y: 54 },
+      ],
+    },
+    // Passo 1: fixo procura pivot na ala; ala ocupa o lugar do pivot; ala contrária começa a entrar
+    {
+      id: "e3-p1",
+      ordem: 1,
+      duracaoMs: 1200,
+      posicoes: [
+        { elementoId: "e3-bola", x: 268, y: 57 },
+        { elementoId: "e3-ala-dir", x: 250, y: 78 },
+        { elementoId: "e3-ala-esq", x: 240, y: 150 },
+      ],
+    },
+    // Passo 2: pivot devolve para a ala contrária a entrar; pivot dá apoio na finalização
+    {
+      id: "e3-p2",
+      ordem: 2,
+      duracaoMs: 1400,
+      posicoes: [
+        { elementoId: "e3-bola", x: 315, y: 140 },
+        { elementoId: "e3-ala-esq", x: 315, y: 142 },
+        { elementoId: "e3-pivo", x: 330, y: 108 },
+      ],
+    },
+  ],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Definição dos exercícios a inserir.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,6 +211,7 @@ const EXERCICIOS = [
     parteTreino: "AQUECIMENTO" as const,
     categoriaPrincipal: "FISICO" as const,
     modalidade: "FUTSAL" as const,
+    emailAlvo: EMAIL_ALVO,
     objetivo: ["1º 3 voltas ao campo", "2º jogo lúdico 5m", "3º controlo de bola 7m"].join("\n"),
     descricao: [
       "1º - 3 voltas ao campo",
@@ -163,6 +230,7 @@ const EXERCICIOS = [
     parteTreino: "PRINCIPAL" as const,
     categoriaPrincipal: "ATAQUE" as const,
     modalidade: "FUTSAL" as const,
+    emailAlvo: EMAIL_ALVO,
     objetivo: "Procurar pivô, jogar com alas e finalização.",
     descricao: [
       "4Ax0D+GR",
@@ -171,31 +239,70 @@ const EXERCICIOS = [
     ].join("\n"),
     diagrama: diagrama2,
   },
+  {
+    nome: "Saída de GR pelas alas",
+    duracaoMin: 12,
+    numeroJogadores: "4+GR",
+    espaco: "3/4 campo",
+    parteTreino: "PRINCIPAL" as const,
+    categoriaPrincipal: "ATAQUE" as const,
+    modalidade: "FUTSAL" as const,
+    emailAlvo: "goncalo.pereira.1992@gmail.com",
+    objetivo: "Movimentação de bola e trocas de posição.",
+    descricao: [
+      "4Ax0D+GR",
+      "",
+      "GR com bola, fixo troca rapidamente com ala para receber bola de GR.",
+      "Fixo procura pivot na ala e o ala ocupa o lugar do pivot.",
+      "Pivot recebe na ala e devolve para o ala contrário que já vem a entrar.",
+      "Pivot, se possível, a dar apoio na finalização.",
+      "Executar para os dois lados.",
+      "Todos os atletas a passar pelas posições.",
+    ].join("\n"),
+    diagrama: diagrama3,
+  },
 ];
 
-async function main() {
-  // 1. Utilizador alvo
+interface AlvoClube {
+  utilizadorId: string;
+  clubeId: string;
+  nome: string;
+}
+
+/** Resolve utilizador (por email) → clube da adesão ATIVA. */
+async function resolverAlvo(email: string): Promise<AlvoClube> {
   const utilizador = await prisma.utilizador.findUnique({
-    where: { email: EMAIL_ALVO },
+    where: { email },
   });
   if (!utilizador) {
-    throw new Error(`Utilizador não encontrado: ${EMAIL_ALVO}`);
+    throw new Error(`Utilizador não encontrado: ${email}`);
   }
 
-  // 2. Membro ativo → clube
   const membro = await prisma.membroClube.findFirst({
     where: { utilizadorId: utilizador.id, estado: "ATIVO" },
   });
   if (!membro) {
-    throw new Error(`Sem adesão ATIVA a nenhum clube para ${EMAIL_ALVO}`);
+    throw new Error(`Sem adesão ATIVA a nenhum clube para ${email}`);
   }
-  const clubeId = membro.clubeId;
-  console.log(`Utilizador ${utilizador.nome} (${EMAIL_ALVO}) → clube ${clubeId}`);
 
-  // 3. Inserir cada exercício de forma idempotente (dual-write clubeId/criadorId/autorId)
+  return { utilizadorId: utilizador.id, clubeId: membro.clubeId, nome: utilizador.nome };
+}
+
+async function main() {
+  // Cache de resolução por email (cada exercício define o seu `emailAlvo`).
+  const cache = new Map<string, AlvoClube>();
+
+  // Inserir cada exercício de forma idempotente (dual-write clubeId/criadorId/autorId)
   for (const ex of EXERCICIOS) {
+    let alvo = cache.get(ex.emailAlvo);
+    if (!alvo) {
+      alvo = await resolverAlvo(ex.emailAlvo);
+      cache.set(ex.emailAlvo, alvo);
+      console.log(`Utilizador ${alvo.nome} (${ex.emailAlvo}) → clube ${alvo.clubeId}`);
+    }
+
     const jaExiste = await prisma.exercicio.findFirst({
-      where: { nome: ex.nome, clubeId },
+      where: { nome: ex.nome, clubeId: alvo.clubeId },
     });
     if (jaExiste) {
       console.log(`↷ Já existe, ignorado: "${ex.nome}" (id ${jaExiste.id})`);
@@ -215,9 +322,9 @@ async function main() {
         modalidade: ex.modalidade,
         diagrama: ex.diagrama,
         // Dual-write: legado (clubeId/criadorId) + semântico (autorId).
-        clubeId,
-        criadorId: utilizador.id,
-        autorId: utilizador.id,
+        clubeId: alvo.clubeId,
+        criadorId: alvo.utilizadorId,
+        autorId: alvo.utilizadorId,
         proprietario: "TREINADOR",
       },
     });

@@ -124,6 +124,7 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
                   dados={barrasTipoSessao}
                   titulo="Por tipo de sessão"
                   unidade="sessões"
+                  unidadeSingular="sessão"
                   maxRows={barrasTipoSessao.length}
                 />
               </CartaoGrafico>
@@ -134,6 +135,7 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
                   dados={barrasCategoria}
                   titulo="Por categoria"
                   unidade="utilizações"
+                  unidadeSingular="utilização"
                   maxRows={barrasCategoria.length}
                 />
               </CartaoGrafico>
@@ -150,6 +152,7 @@ export function PainelTreinoEscalao({ dados }: { dados: AnaliticoTreinoEscalao }
               dados={barrasExercicios}
               titulo="Top 10 exercícios"
               unidade="utilizações"
+              unidadeSingular="utilização"
               maxRows={10}
             />
           </CartaoGrafico>

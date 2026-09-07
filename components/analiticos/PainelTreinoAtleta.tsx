@@ -120,6 +120,7 @@ export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) 
                 dados={pontosCategoria}
                 titulo="Exercícios por categoria"
                 unidade="exercícios"
+                unidadeSingular="exercício"
               />
             </div>
           )}

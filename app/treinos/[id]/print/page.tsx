@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
+import type { ParteTreino } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { obterSessao } from "@/lib/actions/treinos";
 import { obterEpocaAtiva } from "@/lib/epoca-context";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { resolverExercicioSessao } from "@/lib/snapshot-exercicio";
+import { PARTES_TREINO } from "@/lib/schemas/exercicio";
 import { BotaoImprimir } from "@/components/relatorios/BotaoImprimir";
 import { AutoImprimir } from "@/components/treinos/AutoImprimir";
+import { ForcarModoClaroImpressao } from "@/components/treinos/ForcarModoClaroImpressao";
 import {
   TreinoPrintTemplate,
   type DadosImpressaoTreino,
@@ -61,6 +65,21 @@ export default async function ImprimirTreinoPage({
     };
   });
 
+  // Ordem de impressão (§3.5): por fase do treino — Aquecimento → Parte
+  // principal → Jogo → Retorno à calma (exercícios sem fase no fim) — e, dentro
+  // de cada fase, pela `ordem` da tabela de junção. Espelha o agrupamento da
+  // visualização no ecrã (GestorExercicios); os dados já vêm ordenados por
+  // `ordem` (obterSessao), garantindo estabilidade dentro de cada fase.
+  const indiceFase = (p: ParteTreino | null): number => {
+    if (!p) return PARTES_TREINO.length;
+    const i = (PARTES_TREINO as readonly string[]).indexOf(p);
+    return i === -1 ? PARTES_TREINO.length : i;
+  };
+  exercicios.sort(
+    (a, b) =>
+      indiceFase(a.parteTreino) - indiceFase(b.parteTreino) || a.ordem - b.ordem,
+  );
+
   // Duração total: a planeada na sessão, ou o somatório dos exercícios.
   const somaExercicios = exercicios.reduce((tot, e) => tot + (e.duracaoMin ?? 0), 0);
   const duracaoTotalMin = s.duracaoMin ?? (somaExercicios > 0 ? somaExercicios : null);
@@ -92,8 +111,19 @@ export default async function ImprimirTreinoPage({
     exercicios,
   };
 
+  // Cor do clube para os diagramas de campo (§11.5 / docs/BRAND.md): esta rota
+  // vive FORA do grupo (app), logo não herda o `--cor-primaria` do layout da
+  // app — sem isto, os campos SVG caíam no laranja da marca (fallback). Alimenta
+  // `var(--cor-primaria)` usado por `CampoDesenho`/`MiniaturaCampo`.
+  const estiloClube = membro?.clube.corPrimaria
+    ? ({ "--cor-primaria": membro.clube.corPrimaria } as CSSProperties)
+    : undefined;
+
   return (
-    <div className="bg-white text-cinza-900">
+    <div className="bg-white text-cinza-900" style={estiloClube}>
+      {/* Modo claro forçado no ecrã (a impressão já é clara via @media print). */}
+      <ForcarModoClaroImpressao />
+
       {/* Barra de ações — escondida na impressão. */}
       <div
         data-print-hidden

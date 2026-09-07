@@ -253,6 +253,7 @@ export function PainelEscalao({
                 dados={pontosMarcadores}
                 titulo="Melhores marcadores"
                 unidade="golos"
+                unidadeSingular="golo"
               />
             )}
           </div>

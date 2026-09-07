@@ -96,6 +96,7 @@ export default async function RelatoriosPage({
                   dados={resRel.dados.marcadores.map((m) => ({ label: m.nome, valor: m.golos }))}
                   titulo="Melhores marcadores"
                   unidade="golos"
+                  unidadeSingular="golo"
                 />
               )}
             </div>

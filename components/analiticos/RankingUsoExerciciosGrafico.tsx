@@ -22,6 +22,7 @@ export function RankingUsoExerciciosGrafico({
       dados={dados}
       titulo="Exercícios mais usados"
       unidade="utilizações"
+      unidadeSingular="utilização"
       maxRows={dados.length}
     />
   );

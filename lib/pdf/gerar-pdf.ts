@@ -43,19 +43,64 @@ function estadoDoErro(erro: string): number {
 }
 
 /**
- * Carrega o logótipo do clube como data URI (best-effort). Só aceita PNG/JPEG e
- * limita o tamanho — qualquer falha (URL inválida, timeout, tipo não suportado)
- * devolve null e o template cai no placeholder com a inicial do clube. Embutir o
- * logótipo (em vez de referenciar a URL) garante que a imagem está pronta antes
- * de o browser abrir o diálogo de impressão.
+ * Formatos de imagem aceites no logótipo do relatório. Alinhado com o resto da
+ * app: o `logoUrl` é um URL http(s) livre inserido pelo clube (§8.4) e o
+ * `LogoClube`/`next.config` já aceitam qualquer imagem (incl. WebP/SVG). Todos
+ * são renderizados dentro de um `<img>` (sem execução de scripts em SVG).
+ */
+const MIME_LOGO = /^image\/(png|jpe?g|webp|gif|svg\+xml)$/;
+
+/**
+ * Infere o MIME pela extensão do URL quando o servidor não devolve um
+ * content-type de imagem utilizável (ex.: `application/octet-stream` ou vazio,
+ * comuns em alguns storages). Devolve null quando não é reconhecível.
+ */
+function mimePorExtensao(url: string): string | null {
+  let ext: string | undefined;
+  try {
+    ext = new URL(url).pathname.split(".").pop()?.toLowerCase();
+  } catch {
+    return null;
+  }
+  switch (ext) {
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    case "svg":
+      return "image/svg+xml";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Carrega o logótipo do clube como data URI (best-effort). Aceita os formatos de
+ * imagem suportados pela app (PNG/JPEG/WebP/GIF/SVG) e limita o tamanho — quando
+ * o servidor não indica um content-type de imagem utilizável, o MIME é inferido
+ * pela extensão do URL. Qualquer falha (URL inválida, timeout, tipo não
+ * reconhecível) devolve null e o template cai no placeholder com a inicial do
+ * clube. Embutir o logótipo (em vez de referenciar a URL) garante que a imagem
+ * está pronta antes de o browser abrir o diálogo de impressão.
  */
 async function carregarLogo(url: string | null): Promise<string | null> {
   if (!url) return null;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
     if (!res.ok) return null;
-    const tipo = (res.headers.get("content-type") ?? "").split(";")[0].trim();
-    if (!/^image\/(png|jpe?g)$/.test(tipo)) return null;
+    const cabecalho = (res.headers.get("content-type") ?? "")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
+    // Usa o content-type quando é uma imagem suportada; caso contrário infere
+    // pela extensão do URL (servidores que devolvem octet-stream/sem tipo).
+    const tipo = MIME_LOGO.test(cabecalho) ? cabecalho : mimePorExtensao(url);
+    if (!tipo) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength === 0 || buf.byteLength > 2 * 1024 * 1024) return null;
     return `data:${tipo};base64,${buf.toString("base64")}`;
