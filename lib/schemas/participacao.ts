@@ -97,6 +97,28 @@ export const editarTipoParticipacaoSchema = z.object({
   tipo: z.enum(TIPOS_PARTICIPACAO),
 });
 
+/**
+ * Atualizar campos de uma participação ativa (secção 8.5): número de camisola
+ * e/ou tipo de participação, na época ativa. Ambos opcionais, mas pelo menos um
+ * tem de estar presente. Passar `tipoParticipacao` a PRINCIPAL despromove o
+ * principal anterior da mesma modalidade (invariante da secção 9, imposto na
+ * action). `numero` aceita `null` para limpar o número.
+ */
+export const atualizarParticipacaoAtletaSchema = z
+  .object({
+    atletaId: z.string().cuid("Atleta inválido"),
+    escalaoId: z.string().cuid("Escalão inválido"),
+    numero: numeroCamisola.nullable().optional(),
+    tipoParticipacao: z.enum(TIPOS_PARTICIPACAO).optional(),
+  })
+  .refine(
+    (d) => d.numero !== undefined || d.tipoParticipacao !== undefined,
+    {
+      message: "Indica o número ou o tipo de participação a atualizar",
+      path: ["numero"],
+    },
+  );
+
 /** Participação ativa reduzida ao necessário para validar o invariante. */
 export interface ParticipacaoAtivaResumo {
   escalaoId: string;
@@ -174,3 +196,6 @@ export type AssociarAEscalaoInput = z.infer<typeof associarAEscalaoSchema>;
 export type TransferirEscalaoInput = z.infer<typeof transferirEscalaoSchema>;
 export type TerminarParticipacaoInput = z.infer<typeof terminarParticipacaoSchema>;
 export type EditarTipoParticipacaoInput = z.infer<typeof editarTipoParticipacaoSchema>;
+export type AtualizarParticipacaoAtletaInput = z.infer<
+  typeof atualizarParticipacaoAtletaSchema
+>;

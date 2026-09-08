@@ -22,8 +22,11 @@ import {
 import { agregarEstatisticas, type EstatisticasAgregadas } from "@/lib/estatisticas";
 import type {
   Atleta,
+  DocTipo,
   EstadoParticipacao,
+  EstatutoFPF,
   Modalidade,
+  PeDominante,
   Posicao,
   TipoParticipacao,
 } from "@prisma/client";
@@ -69,9 +72,26 @@ export interface AtletaPessoal {
   /** Atleta que pratica também futebol (dupla modalidade). */
   praticaDuplaModalidade: boolean;
   dataIngresso: Date | null;
+  // Contactos e dados pessoais adicionais.
+  email: string | null;
+  telefone: string | null;
+  peDominante: PeDominante | null;
+  paisNascimento: string | null;
+  nacionalidade: string | null;
+  // Documento de identificação do atleta.
+  docTipo: DocTipo | null;
+  docNumero: string | null;
+  docValidade: Date | null;
+  // FPF.
+  estatutoFPF: EstatutoFPF | null;
+  numeroLicencaFPF: string | null;
   encarregadoNome: string | null;
   encarregadoContacto: string | null;
   encarregadoEmail: string | null;
+  // Documento de identificação do encarregado de educação.
+  encarregadoDocTipo: DocTipo | null;
+  encarregadoDocNumero: string | null;
+  encarregadoDocValidade: Date | null;
   clubeId: string | null;
   criadoEm: Date;
   atualizadoEm: Date;
@@ -103,9 +123,22 @@ const SELECT_PESSOAL = {
   inscrito: true,
   praticaDuplaModalidade: true,
   dataIngresso: true,
+  email: true,
+  telefone: true,
+  peDominante: true,
+  paisNascimento: true,
+  nacionalidade: true,
+  docTipo: true,
+  docNumero: true,
+  docValidade: true,
+  estatutoFPF: true,
+  numeroLicencaFPF: true,
   encarregadoNome: true,
   encarregadoContacto: true,
   encarregadoEmail: true,
+  encarregadoDocTipo: true,
+  encarregadoDocNumero: true,
+  encarregadoDocValidade: true,
   clubeId: true,
   criadoEm: true,
   atualizadoEm: true,
@@ -383,9 +416,23 @@ export async function criarAtleta(dados: unknown): Promise<Resultado<Atleta>> {
         dataIngresso: pessoal.dataIngresso ?? null,
         observacoes: pessoal.observacoes ?? null,
         fotoUrl: pessoal.fotoUrl ? pessoal.fotoUrl : null,
+        // Dados pessoais adicionais (todos opcionais).
+        email: pessoal.email ? pessoal.email : null,
+        telefone: pessoal.telefone ?? null,
+        peDominante: pessoal.peDominante ?? null,
+        paisNascimento: pessoal.paisNascimento ?? null,
+        nacionalidade: pessoal.nacionalidade ?? null,
+        docTipo: pessoal.docTipo ?? null,
+        docNumero: pessoal.docNumero ?? null,
+        docValidade: pessoal.docValidade ?? null,
+        estatutoFPF: pessoal.estatutoFPF ?? null,
+        numeroLicencaFPF: pessoal.numeroLicencaFPF ?? null,
         encarregadoNome: pessoal.encarregadoNome ?? null,
         encarregadoContacto: pessoal.encarregadoContacto ?? null,
         encarregadoEmail: pessoal.encarregadoEmail ? pessoal.encarregadoEmail : null,
+        encarregadoDocTipo: pessoal.encarregadoDocTipo ?? null,
+        encarregadoDocNumero: pessoal.encarregadoDocNumero ?? null,
+        encarregadoDocValidade: pessoal.encarregadoDocValidade ?? null,
         // Default explícito: um atleta nasce ativo salvo indicação em contrário
         // (ex.: criado logo como experimental/inativo).
         ativo: pessoal.ativo ?? true,
@@ -473,9 +520,23 @@ export async function atualizarAtleta(
       dataIngresso: parsed.data.dataIngresso ?? null,
       observacoes: parsed.data.observacoes ?? null,
       fotoUrl: parsed.data.fotoUrl ? parsed.data.fotoUrl : null,
+      // Dados pessoais adicionais (todos opcionais; ausente → limpa o valor).
+      email: parsed.data.email ? parsed.data.email : null,
+      telefone: parsed.data.telefone ?? null,
+      peDominante: parsed.data.peDominante ?? null,
+      paisNascimento: parsed.data.paisNascimento ?? null,
+      nacionalidade: parsed.data.nacionalidade ?? null,
+      docTipo: parsed.data.docTipo ?? null,
+      docNumero: parsed.data.docNumero ?? null,
+      docValidade: parsed.data.docValidade ?? null,
+      estatutoFPF: parsed.data.estatutoFPF ?? null,
+      numeroLicencaFPF: parsed.data.numeroLicencaFPF ?? null,
       encarregadoNome: parsed.data.encarregadoNome ?? null,
       encarregadoContacto: parsed.data.encarregadoContacto ?? null,
       encarregadoEmail: parsed.data.encarregadoEmail ? parsed.data.encarregadoEmail : null,
+      encarregadoDocTipo: parsed.data.encarregadoDocTipo ?? null,
+      encarregadoDocNumero: parsed.data.encarregadoDocNumero ?? null,
+      encarregadoDocValidade: parsed.data.encarregadoDocValidade ?? null,
       // Só escreve `ativo` quando explicitamente fornecido: a edição dos dados
       // pessoais não deve reativar/desativar um atleta de forma implícita
       // (o estado é gerido por `toggleAtivoAtleta`/`apagarAtleta`).

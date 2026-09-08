@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { Posicao, type Modalidade } from "@prisma/client";
+import {
+  Posicao,
+  PeDominante,
+  DocTipo,
+  EstatutoFPF,
+  type Modalidade,
+} from "@prisma/client";
 import { TIPOS_PARTICIPACAO } from "@/lib/schemas/participacao";
 
 // 🔁 v7 (§3.2): o enum de posições cobre FUTSAL + FUTEBOL. Deriva do enum do
@@ -8,6 +14,22 @@ import { TIPOS_PARTICIPACAO } from "@/lib/schemas/participacao";
 // guarda todas as posições (um atleta multi-desporto pode ter posições de ambas
 // as modalidades — §3.2).
 const posicaoEnum = z.nativeEnum(Posicao);
+
+// Um <select> vazio envia "" — tratado como «não preenchido» (→ undefined; a
+// action persiste como null). Deixa os enums novos serem verdadeiramente
+// opcionais a partir de formulários, sem quebrar atletas existentes.
+function enumOpcional<T extends { [k: string]: string }>(prismaEnum: T) {
+  return z.preprocess(
+    (v) => (v === "" || v === null ? undefined : v),
+    z.nativeEnum(prismaEnum).optional(),
+  );
+}
+
+// Data opcional vinda de <input type="date">: "" → undefined (campo por preencher).
+const dataOpcional = z.preprocess(
+  (v) => (v === "" || v === null ? undefined : v),
+  z.coerce.date().optional(),
+);
 
 /**
  * Dados PESSOAIS do atleta (F1 — o atleta pertence ao clube, não ao escalão).
@@ -44,9 +66,27 @@ export const atletaPessoalSchema = z.object({
   // Atleta que pratica também futebol (dupla modalidade). Opcional; quando
   // ausente, a action assume `false`.
   praticaDuplaModalidade: z.boolean().optional(),
+  // Contactos do próprio atleta (§ dados pessoais).
+  email: z.string().email("Email inválido").max(200).optional().or(z.literal("")),
+  telefone: z.string().max(40).optional(),
+  // Pé dominante (DIREITO/ESQUERDO/AMBIDEXTRO).
+  peDominante: enumOpcional(PeDominante),
+  paisNascimento: z.string().max(100).optional(),
+  nacionalidade: z.string().max(100).optional(),
+  // Documento de identificação do atleta.
+  docTipo: enumOpcional(DocTipo),
+  docNumero: z.string().max(50).optional(),
+  docValidade: dataOpcional,
+  // FPF (Federação Portuguesa de Futebol).
+  estatutoFPF: enumOpcional(EstatutoFPF),
+  numeroLicencaFPF: z.string().max(50).optional(),
   encarregadoNome: z.string().max(100).optional(),
   encarregadoContacto: z.string().max(40).optional(),
   encarregadoEmail: z.string().email("Email inválido").optional().or(z.literal("")),
+  // Documento de identificação do encarregado de educação.
+  encarregadoDocTipo: enumOpcional(DocTipo),
+  encarregadoDocNumero: z.string().max(50).optional(),
+  encarregadoDocValidade: dataOpcional,
 });
 
 /** Edição de atleta: só dados pessoais. */
@@ -160,3 +200,46 @@ export const ABREV_POSICAO: Record<Posicao, string> = {
   EXTREMO_ESQUERDO: "EE",
   AVANCADO: "AV",
 };
+
+// ─── Dados pessoais adicionais: enums para os seletores do formulário ─────────
+// Re-exporta os enums do Prisma como tipos, para o frontend não importar
+// diretamente de @prisma/client em código partilhado.
+export type { PeDominante, DocTipo, EstatutoFPF };
+
+export const LABEL_PE_DOMINANTE: Record<PeDominante, string> = {
+  DIREITO: "Direito",
+  ESQUERDO: "Esquerdo",
+  AMBIDEXTRO: "Ambidextro",
+};
+
+export const PES_DOMINANTES: PeDominante[] = [
+  "DIREITO",
+  "ESQUERDO",
+  "AMBIDEXTRO",
+];
+
+// NIC = Cartão de Cidadão · AR = Autorização de Residência ·
+// CR = Certidão de Registo (cidadão UE) · TR = Título de Residência.
+export const LABEL_DOC_TIPO: Record<DocTipo, string> = {
+  NIC: "Cartão de Cidadão",
+  PASSAPORTE: "Passaporte",
+  AR: "Autorização de Residência",
+  CR: "Certidão de Registo (UE)",
+  TR: "Título de Residência",
+};
+
+export const TIPOS_DOC: DocTipo[] = ["NIC", "PASSAPORTE", "AR", "CR", "TR"];
+
+export const LABEL_ESTATUTO_FPF: Record<EstatutoFPF, string> = {
+  PORTUGUES: "Português",
+  ESTRANGEIRO: "Estrangeiro",
+  UNIAO_EUROPEIA: "União Europeia",
+  IGUALDADE: "Igualdade",
+};
+
+export const ESTATUTOS_FPF: EstatutoFPF[] = [
+  "PORTUGUES",
+  "ESTRANGEIRO",
+  "UNIAO_EUROPEIA",
+  "IGUALDADE",
+];

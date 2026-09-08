@@ -510,10 +510,30 @@ model Atleta {
   praticaDuplaModalidade Boolean @default(false)
   dataIngresso   DateTime? // para a taxa de presença (secção 10); fallback = criadoEm
 
+  // Dados pessoais adicionais.
+  email          String?
+  telefone       String?
+  peDominante    PeDominante?
+  paisNascimento String?
+  nacionalidade  String?
+
+  // Documento de identificação.
+  docTipo     DocTipo?
+  docNumero   String?
+  docValidade DateTime?
+
+  // FPF (Federação Portuguesa de Futebol).
+  estatutoFPF      EstatutoFPF?
+  numeroLicencaFPF String?
+
   // Dados do encarregado de educação (RGPD — minimização).
   encarregadoNome     String?
   encarregadoContacto String?
   encarregadoEmail    String?
+  // Documento de identificação do encarregado de educação.
+  encarregadoDocTipo     DocTipo?
+  encarregadoDocNumero   String?
+  encarregadoDocValidade DateTime?
 
   // Clube do atleta (contract v6 — §3.2): o atleta pertence ao clube, transversal
   // às épocas e às modalidades. As participações vivem em AtletaEscalao.
@@ -557,6 +577,32 @@ model Consentimento {
 enum TipoConsentimento {
   DADOS
   IMAGEM
+}
+
+// Pé dominante do atleta (dados pessoais).
+enum PeDominante {
+  DIREITO
+  ESQUERDO
+  AMBIDEXTRO
+}
+
+// Tipo de documento de identificação (atleta e encarregado de educação).
+// NIC = Cartão de Cidadão · AR = Autorização de Residência ·
+// CR = Certidão de Registo (cidadão UE) · TR = Título de Residência.
+enum DocTipo {
+  NIC
+  PASSAPORTE
+  AR
+  CR
+  TR
+}
+
+// Estatuto do atleta perante a FPF (Federação Portuguesa de Futebol).
+enum EstatutoFPF {
+  PORTUGUES
+  ESTRANGEIRO
+  UNIAO_EUROPEIA
+  IGUALDADE
 }
 
 // 🔁 v7 (§3.2): posições de FUTSAL + FUTEBOL num único enum.

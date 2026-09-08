@@ -6,6 +6,7 @@ import { obterAtleta } from "@/lib/actions/atletas";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterSeccoes } from "@/lib/actions/seccoes";
 import { AtletaForm } from "@/components/plantel/AtletaForm";
+import { ParticipacaoAtletaItem } from "@/components/plantel/ParticipacaoAtletaItem";
 import { ApagarAtletaButton } from "@/components/plantel/ApagarAtletaButton";
 import { ApagarAtletaDefinitivamenteButton } from "@/components/plantel/ApagarAtletaDefinitivamenteButton";
 import { ToggleAtivoAtleta } from "@/components/plantel/ToggleAtivoAtleta";
@@ -55,6 +56,33 @@ export default async function EditarAtletaPage({
       <h1>Editar atleta</h1>
 
       <AtletaForm escaloes={escaloes} atleta={atleta} />
+
+      {/* Participações na época ativa (secção 8.5): editar número de camisola e tipo
+          por escalão. Só para quem gere o plantel — a action é a autoridade final. */}
+      {podeGerirPlantel && atleta.participacoes.length > 0 && (
+        <section className="space-y-3 border-t border-cinza-200 pt-6">
+          <div>
+            <h2 className="text-corpo font-semibold text-cinza-900">
+              Participações · {atleta.epocaNome}
+            </h2>
+            <p className="text-corpo-sec text-cinza-600">
+              Número de camisola e tipo de participação por escalão nesta época.
+            </p>
+          </div>
+          <ul className="space-y-2 max-w-lg">
+            {atleta.participacoes.map((p) => (
+              <ParticipacaoAtletaItem
+                key={p.id}
+                atletaId={atleta.id}
+                escalaoId={p.escalaoId}
+                escalaoNome={p.escalaoNome}
+                numeroInicial={p.numero}
+                tipoInicial={p.tipo}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Estado do atleta no plantel (secção 8). Gerível por quem gere o plantel. */}
       {podeGerirPlantel && (

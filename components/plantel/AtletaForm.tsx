@@ -17,14 +17,78 @@ import {
 } from "@/components/ui/select";
 import { criarAtleta, atualizarAtleta } from "@/lib/actions/atletas";
 import { mostrarEncarregadoEducacao } from "@/lib/utils";
-import { LABEL_POSICAO, posicoesPorModalidade } from "@/lib/schemas/atleta";
+import {
+  LABEL_POSICAO,
+  posicoesPorModalidade,
+  PES_DOMINANTES,
+  LABEL_PE_DOMINANTE,
+  TIPOS_DOC,
+  LABEL_DOC_TIPO,
+  ESTATUTOS_FPF,
+  LABEL_ESTATUTO_FPF,
+} from "@/lib/schemas/atleta";
 import { LABEL_TIPO_PARTICIPACAO, TIPOS_PARTICIPACAO } from "@/lib/schemas/participacao";
-import type { Escalao, Modalidade, Posicao, TipoParticipacao } from "@prisma/client";
+import type {
+  DocTipo,
+  Escalao,
+  EstatutoFPF,
+  Modalidade,
+  PeDominante,
+  Posicao,
+  TipoParticipacao,
+} from "@prisma/client";
 
 function formatDateForInput(date: Date | null | undefined): string {
   if (!date) return "";
   const d = new Date(date);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Sentinela para o valor «sem indicação» dos seletores opcionais: os enums são
+// opcionais no schema (§ dados pessoais), mas o Select do shadcn/ui não aceita
+// SelectItem com value="". Enviamos "" no submit — o schema (`enumOpcional`)
+// converte "" → undefined → null persistido.
+const SEM_VALOR = "__sem_valor__";
+
+/**
+ * Seletor de um enum opcional (pé dominante, tipo de documento, estatuto FPF).
+ * Inclui sempre a opção «Sem indicação» para permitir limpar o campo.
+ */
+function SeletorOpcional<T extends string>({
+  id,
+  label,
+  valor,
+  aoAlterar,
+  opcoes,
+  labels,
+  placeholder = "Sem indicação",
+}: {
+  id: string;
+  label: string;
+  valor: string;
+  aoAlterar: (v: string) => void;
+  opcoes: readonly T[];
+  labels: Record<T, string>;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Select value={valor} onValueChange={aoAlterar}>
+        <SelectTrigger id={id} className="h-11">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={SEM_VALOR}>{placeholder}</SelectItem>
+          {opcoes.map((o) => (
+            <SelectItem key={o} value={o}>
+              {labels[o]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }
 
 // 🔁 v7 (§3.2): o escalão traz a modalidade da sua secção, para o seletor de
@@ -48,9 +112,26 @@ export type AtletaParaEdicao = {
   fotoUrl: string | null;
   inscrito: boolean;
   praticaDuplaModalidade: boolean;
+  // Contactos e dados pessoais adicionais (§ dados pessoais).
+  email: string | null;
+  telefone: string | null;
+  peDominante: PeDominante | null;
+  paisNascimento: string | null;
+  nacionalidade: string | null;
+  // Documento de identificação do atleta.
+  docTipo: DocTipo | null;
+  docNumero: string | null;
+  docValidade: Date | null;
+  // FPF (Federação Portuguesa de Futebol).
+  estatutoFPF: EstatutoFPF | null;
+  numeroLicencaFPF: string | null;
+  // Encarregado de educação.
   encarregadoNome: string | null;
   encarregadoContacto: string | null;
   encarregadoEmail: string | null;
+  encarregadoDocTipo: DocTipo | null;
+  encarregadoDocNumero: string | null;
+  encarregadoDocValidade: Date | null;
   // Participações ativas na época (para derivar o escalão em contexto na edição —
   // decide a abertura automática do bloco de encarregado de educação, UX-P3-08).
   participacoes?: { escalaoNome: string }[];
@@ -80,6 +161,19 @@ export function AtletaForm({
   // local (o Switch não é input nativo) e enviado no objeto `pessoal`.
   const [praticaDuplaModalidade, setPraticaDuplaModalidade] = useState(
     atleta?.praticaDuplaModalidade ?? false,
+  );
+
+  // Enums opcionais: geridos em estado local porque o Select do shadcn/ui não é um
+  // input nativo (não aparece no FormData). Inicializam do atleta ou «sem valor».
+  const [peDominante, setPeDominante] = useState<string>(
+    atleta?.peDominante ?? SEM_VALOR,
+  );
+  const [docTipo, setDocTipo] = useState<string>(atleta?.docTipo ?? SEM_VALOR);
+  const [estatutoFPF, setEstatutoFPF] = useState<string>(
+    atleta?.estatutoFPF ?? SEM_VALOR,
+  );
+  const [encarregadoDocTipo, setEncarregadoDocTipo] = useState<string>(
+    atleta?.encarregadoDocTipo ?? SEM_VALOR,
   );
 
   // Modalidade em contexto para o seletor de posições (§3.2): na criação deriva do
@@ -119,6 +213,9 @@ export function AtletaForm({
     });
   }
 
+  // "" quando a sentinela «sem valor» está selecionada; o schema converte "" → null.
+  const valorEnum = (v: string) => (v === SEM_VALOR ? "" : v);
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -139,9 +236,26 @@ export function AtletaForm({
       fotoUrl: val("fotoUrl"),
       inscrito,
       praticaDuplaModalidade,
+      // Contactos e dados pessoais adicionais.
+      email: val("email"),
+      telefone: val("telefone") || undefined,
+      peDominante: valorEnum(peDominante),
+      paisNascimento: val("paisNascimento") || undefined,
+      nacionalidade: val("nacionalidade") || undefined,
+      // Documento de identificação do atleta.
+      docTipo: valorEnum(docTipo),
+      docNumero: val("docNumero") || undefined,
+      docValidade: val("docValidade") || undefined,
+      // FPF.
+      estatutoFPF: valorEnum(estatutoFPF),
+      numeroLicencaFPF: val("numeroLicencaFPF") || undefined,
+      // Encarregado de educação.
       encarregadoNome: val("encarregadoNome") || undefined,
       encarregadoContacto: val("encarregadoContacto") || undefined,
       encarregadoEmail: val("encarregadoEmail"),
+      encarregadoDocTipo: valorEnum(encarregadoDocTipo),
+      encarregadoDocNumero: val("encarregadoDocNumero") || undefined,
+      encarregadoDocValidade: val("encarregadoDocValidade") || undefined,
     };
 
     // O escalão da participação inicial é obrigatório na criação (secção 8.5).
@@ -179,26 +293,29 @@ export function AtletaForm({
         <p className="text-corpo-sec text-vermelho-600">{erroGeral}</p>
       )}
 
-      {/* Identidade */}
+      {/* Dados pessoais (sempre visível — campos core) */}
       <div className="space-y-4">
+        <p className="text-corpo font-semibold text-cinza-900">Dados pessoais</p>
+
         <div className="space-y-1.5">
           <Label htmlFor="nome">Nome *</Label>
           <Input id="nome" name="nome" defaultValue={atleta?.nome ?? ""} required minLength={2} maxLength={100} placeholder="Nome completo" />
           {erros.nome && <p className="text-legenda text-vermelho-600">{erros.nome}</p>}
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="dataNascimento">Data de nascimento</Label>
-          <Input id="dataNascimento" name="dataNascimento" type="date" defaultValue={formatDateForInput(atleta?.dataNascimento)} />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="dataNascimento">Data de nascimento</Label>
+            <Input id="dataNascimento" name="dataNascimento" type="date" defaultValue={formatDateForInput(atleta?.dataNascimento)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="dataIngresso">Data de ingresso</Label>
+            <Input id="dataIngresso" name="dataIngresso" type="date" defaultValue={formatDateForInput(atleta?.dataIngresso)} />
+          </div>
         </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="dataIngresso">Data de ingresso</Label>
-          <Input id="dataIngresso" name="dataIngresso" type="date" defaultValue={formatDateForInput(atleta?.dataIngresso)} />
-          <p className="text-legenda text-cinza-400">
-            Se o atleta entrou a meio da época, a taxa de presença conta a partir desta data.
-          </p>
-        </div>
+        <p className="text-legenda text-cinza-400">
+          Se o atleta entrou a meio da época, a taxa de presença conta a partir da data de ingresso.
+        </p>
 
         <div className="space-y-1.5">
           <Label>Posições</Label>
@@ -227,6 +344,27 @@ export function AtletaForm({
               ? " Escolhe o escalão para filtrar as posições por modalidade."
               : ""}
           </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <SeletorOpcional
+            id="peDominante"
+            label="Pé dominante"
+            valor={peDominante}
+            aoAlterar={setPeDominante}
+            opcoes={PES_DOMINANTES}
+            labels={LABEL_PE_DOMINANTE}
+          />
+          <div className="space-y-1.5">
+            <Label htmlFor="telefone">Telefone</Label>
+            <Input id="telefone" name="telefone" type="tel" defaultValue={atleta?.telefone ?? ""} maxLength={40} placeholder="Telemóvel" />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" defaultValue={atleta?.email ?? ""} maxLength={200} />
+          {erros.email && <p className="text-legenda text-vermelho-600">{erros.email}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -334,9 +472,63 @@ export function AtletaForm({
         </div>
       )}
 
+      {/* Identificação (colapsável; fechada por omissão) */}
+      <details className="group space-y-4 border-t border-cinza-200 pt-5">
+        <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between text-corpo font-semibold text-cinza-900">
+          <span>Identificação</span>
+          <span className="text-legenda font-normal text-cinza-400 group-open:hidden">
+            Mostrar
+          </span>
+        </summary>
+        <div className="space-y-4 pt-4">
+          <div className="grid grid-cols-2 gap-4">
+            <SeletorOpcional
+              id="docTipo"
+              label="Documento"
+              valor={docTipo}
+              aoAlterar={setDocTipo}
+              opcoes={TIPOS_DOC}
+              labels={LABEL_DOC_TIPO}
+            />
+            <div className="space-y-1.5">
+              <Label htmlFor="docNumero">Nº do documento</Label>
+              <Input id="docNumero" name="docNumero" defaultValue={atleta?.docNumero ?? ""} maxLength={50} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="docValidade">Validade do documento</Label>
+            <Input id="docValidade" name="docValidade" type="date" defaultValue={formatDateForInput(atleta?.docValidade)} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="paisNascimento">País de nascimento</Label>
+              <Input id="paisNascimento" name="paisNascimento" defaultValue={atleta?.paisNascimento ?? ""} maxLength={100} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="nacionalidade">Nacionalidade</Label>
+              <Input id="nacionalidade" name="nacionalidade" defaultValue={atleta?.nacionalidade ?? ""} maxLength={100} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <SeletorOpcional
+              id="estatutoFPF"
+              label="Estatuto FPF"
+              valor={estatutoFPF}
+              aoAlterar={setEstatutoFPF}
+              opcoes={ESTATUTOS_FPF}
+              labels={LABEL_ESTATUTO_FPF}
+            />
+            <div className="space-y-1.5">
+              <Label htmlFor="numeroLicencaFPF">Nº de licença FPF</Label>
+              <Input id="numeroLicencaFPF" name="numeroLicencaFPF" defaultValue={atleta?.numeroLicencaFPF ?? ""} maxLength={50} />
+            </div>
+          </div>
+        </div>
+      </details>
+
       {/* Encarregado de educação (UX-P3-08: colapsável; aberto só na formação jovem) */}
       <details open={abrirEncarregado} className="group space-y-4 border-t border-cinza-200 pt-5">
-        <summary className="flex cursor-pointer list-none items-center justify-between text-corpo font-semibold text-cinza-900">
+        <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between text-corpo font-semibold text-cinza-900">
           <span>Encarregado de educação</span>
           <span className="text-legenda font-normal text-cinza-400 group-open:hidden">
             Mostrar
@@ -358,14 +550,42 @@ export function AtletaForm({
             <Input id="encarregadoEmail" name="encarregadoEmail" type="email" defaultValue={atleta?.encarregadoEmail ?? ""} />
             {erros.encarregadoEmail && <p className="text-legenda text-vermelho-600">{erros.encarregadoEmail}</p>}
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <SeletorOpcional
+              id="encarregadoDocTipo"
+              label="Documento"
+              valor={encarregadoDocTipo}
+              aoAlterar={setEncarregadoDocTipo}
+              opcoes={TIPOS_DOC}
+              labels={LABEL_DOC_TIPO}
+            />
+            <div className="space-y-1.5">
+              <Label htmlFor="encarregadoDocNumero">Nº do documento</Label>
+              <Input id="encarregadoDocNumero" name="encarregadoDocNumero" defaultValue={atleta?.encarregadoDocNumero ?? ""} maxLength={50} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="encarregadoDocValidade">Validade do documento</Label>
+            <Input id="encarregadoDocValidade" name="encarregadoDocValidade" type="date" defaultValue={formatDateForInput(atleta?.encarregadoDocValidade)} />
+          </div>
         </div>
       </details>
 
-      {/* Observações */}
-      <div className="space-y-1.5">
-        <Label htmlFor="observacoes">Observações</Label>
-        <Textarea id="observacoes" name="observacoes" defaultValue={atleta?.observacoes ?? ""} maxLength={1000} rows={3} placeholder="Notas sobre o atleta…" />
-      </div>
+      {/* Observações (colapsável) */}
+      <details className="group space-y-4 border-t border-cinza-200 pt-5">
+        <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between text-corpo font-semibold text-cinza-900">
+          <span>Observações</span>
+          <span className="text-legenda font-normal text-cinza-400 group-open:hidden">
+            Mostrar
+          </span>
+        </summary>
+        <div className="pt-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="observacoes">Notas</Label>
+            <Textarea id="observacoes" name="observacoes" defaultValue={atleta?.observacoes ?? ""} maxLength={1000} rows={3} placeholder="Notas sobre o atleta…" />
+          </div>
+        </div>
+      </details>
 
       <div className="flex gap-3 pt-2">
         <Button type="submit" disabled={pending}>

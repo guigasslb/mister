@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, type AtletaEscalao } from "@prisma/client";
+import { Prisma, type AtletaEscalao, type TipoParticipacao } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { obterEpocaAtiva, obterClubeIdAtual } from "@/lib/epoca-context";
 import { exigirCapacidade, podeLerAlgumEscalao } from "@/lib/permissoes";
@@ -11,6 +11,7 @@ import {
   transferirEscalaoSchema,
   terminarParticipacaoSchema,
   editarTipoParticipacaoSchema,
+  atualizarParticipacaoAtletaSchema,
   ficariaSemPrincipal,
   principaisADespromover,
 } from "@/lib/schemas/participacao";
@@ -430,6 +431,123 @@ export async function editarTipoParticipacao(
       const atualizada = await tx.atletaEscalao.update({
         where: { id: alvo.id },
         data: { tipo: parsed.data.tipo },
+      });
+      return { atualizada };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+
+  if ("erro" in resultado) return erro(resultado.erro);
+
+  revalidarParticipacao(atleta.id);
+  return ok(resultado.atualizada);
+}
+
+// ─── Atualizar participação (número e/ou tipo) ───────────────────────────────
+
+/**
+ * Atualiza uma participação ativa do atleta na época ativa: número de camisola
+ * e/ou tipo de participação (secção 8.5).
+ *
+ * - `numero` grava tal como indicado (não é único — secção 9); `null` limpa-o.
+ * - `tipoParticipacao`, quando fornecido, respeita o invariante do «principal
+ *   por modalidade» (§9): passar a PRINCIPAL despromove o principal anterior da
+ *   mesma modalidade para SIMULTANEA; despromover o único principal é recusado.
+ *
+ * Autorização: gerir o plantel do escalão da participação (`PLANTEL_GERIR`),
+ * a mesma capacidade que rege `associarAEscalao`.
+ */
+export async function atualizarParticipacaoAtleta(
+  atletaId: string,
+  escalaoId: string,
+  data: { numero?: number | null; tipoParticipacao?: TipoParticipacao },
+): Promise<Resultado<AtletaEscalao>> {
+  const parsed = atualizarParticipacaoAtletaSchema.safeParse({
+    atletaId,
+    escalaoId,
+    ...data,
+  });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const perm = await exigirCapacidade("PLANTEL_GERIR", parsed.data.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+  const clubeId = perm.ctx.clube.id;
+
+  const atleta = await prisma.atleta.findFirst({
+    where: { id: parsed.data.atletaId, clubeId },
+    select: { id: true },
+  });
+  if (!atleta) return erro("Atleta não encontrado");
+
+  // A modalidade da participação deriva de escalao.seccao.modalidade (§1.7.1) e
+  // ancora o invariante do «principal por modalidade» (§9).
+  const escalao = await prisma.escalao.findFirst({
+    where: { id: parsed.data.escalaoId, clubeId },
+    select: { id: true, seccao: { select: { modalidade: true } } },
+  });
+  if (!escalao) return erro("O escalão selecionado não existe");
+
+  const epoca = await resolverEpocaId(clubeId, undefined);
+  if (!epoca.ok) return erro(epoca.erro);
+
+  const modalidadeAlvo = escalao.seccao?.modalidade ?? null;
+  const novoTipo = parsed.data.tipoParticipacao;
+
+  // Leitura + escrita numa única transação Serializable: o invariante do
+  // principal por modalidade (§9) é imposto na escrita, evitando que duas
+  // edições concorrentes criem dois principais na mesma modalidade.
+  const resultado = await prisma.$transaction(
+    async (tx): Promise<{ erro: string } | { atualizada: AtletaEscalao }> => {
+      const ativas = await tx.atletaEscalao.findMany({
+        where: { atletaId: atleta.id, epocaId: epoca.epocaId, estado: "ATIVO" },
+        select: {
+          id: true,
+          escalaoId: true,
+          tipo: true,
+          escalao: { select: { seccao: { select: { modalidade: true } } } },
+        },
+      });
+
+      const alvo = ativas.find((p) => p.escalaoId === parsed.data.escalaoId);
+      if (!alvo)
+        return { erro: "O atleta não tem uma participação ativa neste escalão." };
+
+      const dadosUpdate: Prisma.AtletaEscalaoUpdateInput = {};
+
+      // Número: gravado tal como indicado; `null` limpa (secção 9 — sem unicidade).
+      if (parsed.data.numero !== undefined) dadosUpdate.numero = parsed.data.numero;
+
+      if (novoTipo !== undefined) {
+        const destino = { escalaoId: parsed.data.escalaoId, tipo: novoTipo };
+
+        // Invariante POR MODALIDADE (§9): só as participações da modalidade do
+        // escalão editado entram na verificação e na despromoção.
+        const naModalidade = ativas.filter(
+          (p) => (p.escalao?.seccao?.modalidade ?? null) === modalidadeAlvo,
+        );
+
+        // Despromover o único PRINCIPAL da modalidade deixaria o atleta sem
+        // participação principal obrigatória (§9): recusado.
+        if (ficariaSemPrincipal(naModalidade, destino))
+          return {
+            erro: "A alteração deixaria o atleta sem participação principal nesta modalidade. Define outro escalão como principal primeiro.",
+          };
+
+        // Passar a PRINCIPAL despromove qualquer outro principal ativo da mesma
+        // modalidade para SIMULTANEA, garantindo o principal único.
+        for (const outro of principaisADespromover(naModalidade, destino)) {
+          await tx.atletaEscalao.update({
+            where: { id: outro.id },
+            data: { tipo: "SIMULTANEA" },
+          });
+        }
+
+        dadosUpdate.tipo = novoTipo;
+      }
+
+      const atualizada = await tx.atletaEscalao.update({
+        where: { id: alvo.id },
+        data: dadosUpdate,
       });
       return { atualizada };
     },
