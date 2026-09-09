@@ -2,9 +2,10 @@ import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { Badge } from "@/components/ui/badge";
 import { BadgeEstadoParticipacao } from "@/components/plantel/BadgesParticipacao";
 import { obterCarreiraAtleta } from "@/lib/actions/participacoes";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 function formatarData(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

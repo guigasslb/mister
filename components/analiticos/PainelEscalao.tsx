@@ -23,6 +23,7 @@ import { RankingAssiduidade } from "./RankingAssiduidade";
 import { TabelaAtletas } from "./TabelaAtletas";
 import { Kpi, SecaoAnalitico, GrelhaMeses, type AcentoKpi } from "./Kpi";
 import { pct, n1 } from "./Cartao";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 const LABEL_TIPO_SESSAO: Record<TipoSessao, string> = {
   NORMAL: "Normal",
@@ -56,8 +57,7 @@ function acentoTaxa(taxa: number): AcentoKpi {
 }
 
 function formatarData(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" });
+  return formatarDataHoraLisboa(iso, { day: "2-digit", month: "2-digit" });
 }
 
 export function PainelEscalao({

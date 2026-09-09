@@ -105,6 +105,12 @@ export default async function DetalheSessaoPage({
       notas: se.notas ?? null,
       series: se.series ?? null,
       descricaoOverride: se.descricaoOverride ?? null,
+      // §4.2.1: nº de jogadores/espaço — valor resolvido (override → snapshot) para
+      // pré-preencher a adaptação, mais o override cru desta sessão.
+      numeroJogadores: r.numeroJogadores,
+      espaco: r.espaco,
+      numeroJogadoresOverride: se.numeroJogadoresOverride ?? null,
+      espacoOverride: se.espacoOverride ?? null,
       // §3.5: fase do treino deste exercício nesta sessão (agrupamento na visualização).
       parteTreino: se.parteTreino ?? null,
     };
@@ -231,6 +237,10 @@ export default async function DetalheSessaoPage({
           descricaoOverride: e.descricaoOverride,
           notas: e.notas,
           parteTreino: e.parteTreino,
+          numeroJogadores: e.numeroJogadores,
+          espaco: e.espaco,
+          numeroJogadoresOverride: e.numeroJogadoresOverride,
+          espacoOverride: e.espacoOverride,
         }))}
       />
 
@@ -260,6 +270,8 @@ export default async function DetalheSessaoPage({
           descricaoOverride: e.descricaoOverride,
           notas: e.notas,
           parteTreino: e.parteTreino,
+          numeroJogadoresOverride: e.numeroJogadoresOverride,
+          espacoOverride: e.espacoOverride,
           exercicio: {
             id: e.exercicioId,
             nome: e.nome,
@@ -267,6 +279,8 @@ export default async function DetalheSessaoPage({
             descricao: e.descricao,
             objetivo: e.objetivo,
             diagrama: e.diagrama,
+            numeroJogadores: e.numeroJogadores,
+            espaco: e.espaco,
           },
         }))}
         subcategorias={subcategorias}

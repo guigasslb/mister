@@ -10,9 +10,10 @@ import { LABEL_MOMENTO } from "@/lib/schemas/modeloJogo";
 import { diagramaSchema } from "@/lib/schemas/exercicio";
 import { DiagramaModeloJogo } from "@/components/modelo-jogo/DiagramaModeloJogo";
 import { ApagarModeloJogoButton } from "@/components/modelo-jogo/ApagarModeloJogoButton";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 function formatarData(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     day: "2-digit",
     month: "short",
     year: "numeric",

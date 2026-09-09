@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { ActivarDemoButton } from "@/components/licenciamento/ActivarDemoButton";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 import type { EstadoLicenca } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Definições · Licença" };
@@ -43,7 +44,7 @@ function Detalhe({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) 
 }
 
 function formatarData(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     day: "2-digit",
     month: "long",
     year: "numeric",

@@ -50,6 +50,7 @@ import {
 import { ListaLembretes } from "@/components/lembretes/ListaLembretes";
 import type { Reuniao } from "@prisma/client";
 import { formatarDataHoraLisboa } from "@/lib/utils-datas";
+import { inicioDoDia, fimDoDia } from "@/lib/plano-semanal";
 
 function dataLonga(data: Date): string {
   return formatarDataHoraLisboa(data, {
@@ -145,11 +146,11 @@ export default async function DashboardPage() {
 
   const agora = new Date();
 
-  // Janela do dia de hoje (para os lembretes in-app — F14 / §8.16).
-  const inicioDia = new Date(agora);
-  inicioDia.setHours(0, 0, 0, 0);
-  const fimDia = new Date(agora);
-  fimDia.setHours(23, 59, 59, 999);
+  // Janela do dia de hoje (para os lembretes in-app — F14 / §8.16). Ancorada a
+  // Europe/Lisbon: em produção (Node UTC), `setHours` calcularia a fronteira do
+  // dia em UTC, incluindo/excluindo eventos junto à meia-noite no dia errado.
+  const inicioDia = inicioDoDia(agora);
+  const fimDia = fimDoDia(agora);
   const janelaHoje = { gte: inicioDia, lte: fimDia };
 
   // §6.4/§6.5: o dashboard mostra apenas dados dos escalões que o utilizador pode

@@ -8,6 +8,7 @@ import { obterEpocaAtiva } from "@/lib/epoca-context";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { eAdminPlataforma } from "@/lib/admin-guard";
 import { temLicencaValida } from "@/lib/licenca";
+import { inicioDoDia, fimDoDia } from "@/lib/plano-semanal";
 import { BarraTopo } from "@/components/layout/BarraTopo";
 import { Navegacao } from "@/components/layout/Navegacao";
 import { TemaClubeGlobal } from "@/components/layout/TemaClubeGlobal";
@@ -119,11 +120,11 @@ export default async function AppLayout({
     // Plantel vazio → mostra o atalho "Começar" (vitória rápida) na navegação (F10 / §8.1).
     let plantelVazio = false;
     if (epocaAtiva) {
-      const inicioDia = new Date();
-      inicioDia.setHours(0, 0, 0, 0);
-      const fimDia = new Date();
-      fimDia.setHours(23, 59, 59, 999);
-      const janela = { gte: inicioDia, lte: fimDia };
+      // Janela do dia de hoje ancorada a Europe/Lisbon: em produção (Node UTC),
+      // `setHours` calcularia a fronteira do dia em UTC (evento junto à meia-noite
+      // no dia errado). Ver `lib/utils-datas.ts`.
+      const agora = new Date();
+      const janela = { gte: inicioDoDia(agora), lte: fimDoDia(agora) };
       const [nSessoesHoje, nJogosHoje, nAtletas] = await Promise.all([
         prisma.sessao.count({
           where: { epocaId: epocaAtiva.id, escalao: { clubeId: clube.id }, data: janela },

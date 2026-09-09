@@ -644,14 +644,14 @@ describe("criarSessaoDeTemplate (cópia, sem ligação ao template)", () => {
           exercicioId: EX2,
           duracaoMin: null,
           notas: null,
-          exercicio: { id: EX2, duracaoMin: 12 },
+          exercicio: { id: EX2, duracaoMin: 12, numeroJogadores: 4, espaco: "1/4 campo" },
         },
         {
           ordem: 2,
           exercicioId: EX1,
           duracaoMin: 10,
           notas: "Um toque",
-          exercicio: { id: EX1, duracaoMin: 8 },
+          exercicio: { id: EX1, duracaoMin: 8, numeroJogadores: 6, espaco: "Meio-campo" },
         },
       ],
     });
@@ -679,12 +679,32 @@ describe("criarSessaoDeTemplate (cópia, sem ligação ao template)", () => {
         ordem: number;
         duracaoMin: number | null;
         notas: string | null;
+        numeroJogadoresOverride: number | null;
+        espacoOverride: string | null;
       }[];
     };
+    // Os overrides são semeados a partir do exercício-base (mesmo padrão de
+    // `adicionarExercicioSessao`): o treinador parte dos valores da biblioteca.
     expect(linhasArg.data).toEqual([
-      { sessaoId: "s1", exercicioId: EX1, ordem: 0, duracaoMin: 10, notas: "Um toque" },
+      {
+        sessaoId: "s1",
+        exercicioId: EX1,
+        ordem: 0,
+        duracaoMin: 10,
+        notas: "Um toque",
+        numeroJogadoresOverride: 6,
+        espacoOverride: "Meio-campo",
+      },
       // Sem duração no template → herda a duração do exercício.
-      { sessaoId: "s1", exercicioId: EX2, ordem: 1, duracaoMin: 12, notas: null },
+      {
+        sessaoId: "s1",
+        exercicioId: EX2,
+        ordem: 1,
+        duracaoMin: 12,
+        notas: null,
+        numeroJogadoresOverride: 4,
+        espacoOverride: "1/4 campo",
+      },
     ]);
   });
 

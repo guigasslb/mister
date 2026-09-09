@@ -8,13 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { LABEL_CATEGORIA } from "@/lib/schemas/exercicio";
 import { SecaoAnalitico } from "@/components/analiticos/Kpi";
 import { RankingUsoExerciciosGrafico } from "@/components/analiticos/RankingUsoExerciciosGrafico";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 export const metadata: Metadata = { title: "Ranking de exercícios" };
 
-/** Data PT-PT completa (ex.: "04/09/2026") ou travessão. */
+/** Data PT-PT completa (ex.: "04/09/2026") ou travessão — hora de Lisboa. */
 function formatarData(d: Date | null): string {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(d, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

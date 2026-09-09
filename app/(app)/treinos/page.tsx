@@ -55,19 +55,20 @@ function formatarDiaHora(data: Date): string {
 
 /** "15–21 set" (mesmo mês) ou "29 set–5 out" (meses diferentes). */
 function formatarIntervaloSemana(inicio: Date, fim: Date): string {
-  const mesI = inicio.toLocaleDateString("pt-PT", { month: "short" }).replace(".", "");
-  const mesF = fim.toLocaleDateString("pt-PT", { month: "short" }).replace(".", "");
-  if (inicio.getMonth() === fim.getMonth()) {
-    return `${inicio.getDate()}–${fim.getDate()} ${mesF}`;
+  const pi = partesDataLisboa(inicio);
+  const pf = partesDataLisboa(fim);
+  const mesI = formatarDataHoraLisboa(inicio, { month: "short" }).replace(".", "");
+  const mesF = formatarDataHoraLisboa(fim, { month: "short" }).replace(".", "");
+  if (pi.mes === pf.mes) {
+    return `${pi.dia}–${pf.dia} ${mesF}`;
   }
-  return `${inicio.getDate()} ${mesI}–${fim.getDate()} ${mesF}`;
+  return `${pi.dia} ${mesI}–${pf.dia} ${mesF}`;
 }
 
-/** YYYY-MM-DD (local) da segunda-feira, para pré-preencher «+ Treino». */
+/** YYYY-MM-DD (dia de Lisboa) da segunda-feira, para pré-preencher «+ Treino». */
 function isoData(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
+  const { ano, mes, dia } = partesDataLisboa(d);
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
 }
 
 type SemanaGrupo = {

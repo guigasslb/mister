@@ -14,6 +14,7 @@ import { EstadoErro } from "@/components/layout/EstadosUI";
 import { LigarCalendarioButton } from "@/components/integracoes/LigarCalendarioButton";
 import { DesligarCalendarioButton } from "@/components/integracoes/DesligarCalendarioButton";
 import { NotificacaoCalendario } from "@/components/integracoes/NotificacaoCalendario";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 export const metadata: Metadata = { title: "Definições · Integrações" };
 
@@ -22,7 +23,7 @@ type PageProps = {
 };
 
 function formatarData(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     day: "2-digit",
     month: "long",
     year: "numeric",

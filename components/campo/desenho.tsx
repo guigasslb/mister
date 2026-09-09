@@ -459,6 +459,7 @@ export function ElementoSVG({
   raioHit = 0,
   onFocarHit,
   pathSelecionavel = true,
+  animarTrajeto,
 }: {
   elemento: ElementoCampo;
   selecionado?: boolean;
@@ -470,10 +471,27 @@ export function ElementoSVG({
   // participam nos passos, logo a faixa de hit/foco do trajecto é desativada para
   // não interceptar cliques/foco de teclado destinados aos elementos-ponto.
   pathSelecionavel?: boolean;
+  // Reprodução "desenho de trajeto": quando definido, uma seta/linha desenha-se
+  // progressivamente (stroke-dashoffset 1→0 sobre um trajeto normalizado). O
+  // `atrasoMs` dá o efeito sequencial (uma seta após a outra). Aditivo: ausente →
+  // render estático de sempre (não afeta o editor nem os testes de regressão).
+  animarTrajeto?: { atrasoMs: number; duracaoMs: number } | null;
 }) {
   // B3: para setas/linhas o anel usa o primeiro ponto do trajecto (não (0,0)).
   const ancora = ancoraElemento(elemento);
   const temPonto = "x" in elemento && "y" in elemento;
+
+  // Estilo de "desenho" aplicado a setas/linhas quando em reprodução. Normaliza o
+  // comprimento do trajecto a 1 (pathLength) para animar o dashoffset sem precisar
+  // de medir o path. `both` mantém o estado inicial (invisível) durante o atraso e
+  // o final (desenhado) após terminar.
+  const estiloDesenho = animarTrajeto
+    ? {
+        strokeDasharray: 1,
+        strokeDashoffset: 1,
+        animation: `campo-desenhar-trajeto ${animarTrajeto.duracaoMs}ms ease-in-out ${animarTrajeto.atrasoMs}ms both`,
+      }
+    : undefined;
 
   const anelSelecao = selecionado ? (
     <circle
@@ -671,6 +689,8 @@ export function ElementoSVG({
             strokeWidth={2}
             strokeDasharray={dash}
             markerEnd={`url(#${markerId})`}
+            pathLength={estiloDesenho ? 1 : undefined}
+            style={estiloDesenho}
           />
         </g>
       );
@@ -685,6 +705,8 @@ export function ElementoSVG({
             fill="none"
             stroke={corParaHex(elemento.cor)}
             strokeWidth={1.5}
+            pathLength={estiloDesenho ? 1 : undefined}
+            style={estiloDesenho}
           />
         </g>
       );

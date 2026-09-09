@@ -8,6 +8,8 @@
  * Módulo puro (sem Prisma/servidor) → testável e reutilizável no cliente.
  */
 
+import { partesDataLisboa } from "@/lib/utils-datas";
+
 /** Forma mínima de um evento (sessão ou jogo) para os lembretes. */
 export interface EventoLite {
   id: string;
@@ -31,20 +33,29 @@ export interface Lembrete {
   passou: boolean;
 }
 
-/** Verdadeiro se as duas datas caem no mesmo dia civil (hora local). */
+/**
+ * Verdadeiro se as duas datas caem no mesmo dia civil (hora de Lisboa).
+ *
+ * Ancorado a Europe/Lisbon (via `partesDataLisboa`): em produção o processo
+ * Node corre em UTC e `getFullYear()/getMonth()/getDate()` colocariam eventos
+ * junto à meia-noite no dia errado (−1h no Verão, WEST=UTC+1).
+ */
 export function mesmoDia(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+  const pa = partesDataLisboa(a);
+  const pb = partesDataLisboa(b);
+  return pa.ano === pb.ano && pa.mes === pb.mes && pa.dia === pb.dia;
 }
 
-/** Hora local no formato "HH:MM" (determinístico, sem depender de locale). */
+/**
+ * Hora no formato "HH:MM", sempre em hora de parede de Lisboa.
+ *
+ * Ancorado a Europe/Lisbon (via `partesDataLisboa`): em produção (Node UTC),
+ * `getHours()/getMinutes()` mostrariam a hora UTC (ex.: treino às 20:30 Lisboa
+ * exibido como "19:30"). Ver `lib/utils-datas.ts`.
+ */
 export function horaCurta(d: Date): string {
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
+  const { hora, minuto } = partesDataLisboa(d);
+  return `${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}`;
 }
 
 function detalheEvento(e: EventoLite, tipo: TipoLembrete): string {

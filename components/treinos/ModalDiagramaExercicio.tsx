@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { diagramaSchema } from "@/lib/schemas/exercicio";
-import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
+import { DiagramaReproduzivel } from "@/components/campo/DiagramaReproduzivel";
 
 interface Props {
   aberto: boolean;
@@ -44,8 +44,15 @@ export function ModalDiagramaExercicio({ aberto, onFechar, exercicio }: Props) {
 
         <div className="space-y-4">
           {temDiagrama && diag.success ? (
-            <div className="mx-auto w-full overflow-hidden rounded-lg border border-cinza-200">
-              <MiniaturaCampo diagrama={diag.data} largura={500} className="w-full" />
+            // Reproduz o exercício ao abrir: com keyframes anima o movimento dos
+            // jogadores/bola; senão desenha as setas progressivamente. Clicar na
+            // imagem volta a reproduzir.
+            <div className="mx-auto w-full">
+              <DiagramaReproduzivel
+                diagrama={diag.data}
+                autoReproduzir
+                className="h-auto w-full rounded-lg border border-cinza-200"
+              />
             </div>
           ) : (
             <div

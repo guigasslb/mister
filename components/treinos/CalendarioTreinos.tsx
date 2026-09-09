@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { formatarDataHoraLisboa } from "@/lib/utils-datas";
+import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
 
 type SessaoCalendario = {
   id: string;
@@ -58,24 +58,23 @@ export function CalendarioTreinos({
   const diasNoMes = new Date(ano, mes + 1, 0).getDate();
   const offsetInicial = indiceSemana(primeiroDia);
 
-  // Agrupa sessões por dia do mês corrente
+  // Agrupa sessões por dia do mês corrente (dia de calendário de Lisboa — em
+  // produção, Node UTC colocaria eventos junto à meia-noite no dia errado).
   const porDia = new Map<number, SessaoCalendario[]>();
   for (const s of sessoes) {
-    const d = new Date(s.data);
-    if (d.getFullYear() === ano && d.getMonth() === mes) {
-      const dia = d.getDate();
+    const { ano: a, mes: m, dia } = partesDataLisboa(s.data);
+    if (a === ano && m === mes + 1) {
       const lista = porDia.get(dia) ?? [];
       lista.push(s);
       porDia.set(dia, lista);
     }
   }
 
-  // Agrupa reuniões por dia do mês corrente
+  // Agrupa reuniões por dia do mês corrente (dia de Lisboa)
   const reunioesPorDia = new Map<number, ReuniaoCalendario[]>();
   for (const r of reunioes) {
-    const d = new Date(r.data);
-    if (d.getFullYear() === ano && d.getMonth() === mes) {
-      const dia = d.getDate();
+    const { ano: a, mes: m, dia } = partesDataLisboa(r.data);
+    if (a === ano && m === mes + 1) {
       const lista = reunioesPorDia.get(dia) ?? [];
       lista.push(r);
       reunioesPorDia.set(dia, lista);
@@ -85,9 +84,9 @@ export function CalendarioTreinos({
   const mesAnterior = mes === 0 ? chaveMes(ano - 1, 11) : chaveMes(ano, mes - 1);
   const mesSeguinte = mes === 11 ? chaveMes(ano + 1, 0) : chaveMes(ano, mes + 1);
 
-  const hoje = new Date();
+  const hoje = partesDataLisboa(new Date());
   const ehHoje = (dia: number) =>
-    hoje.getFullYear() === ano && hoje.getMonth() === mes && hoje.getDate() === dia;
+    hoje.ano === ano && hoje.mes === mes + 1 && hoje.dia === dia;
 
   // Células: espaços vazios iniciais + dias do mês
   const celulas: (number | null)[] = [
@@ -100,7 +99,7 @@ export function CalendarioTreinos({
       <div className="flex items-center justify-between">
         <Link
           href={`${hrefBase}&mes=${mesAnterior}`}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-cinza-200 text-cinza-600 hover:bg-cinza-50"
+          className="flex h-11 w-11 items-center justify-center rounded-md border border-cinza-200 text-cinza-600 hover:bg-cinza-50"
           aria-label="Mês anterior"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -110,7 +109,7 @@ export function CalendarioTreinos({
         </p>
         <Link
           href={`${hrefBase}&mes=${mesSeguinte}`}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-cinza-200 text-cinza-600 hover:bg-cinza-50"
+          className="flex h-11 w-11 items-center justify-center rounded-md border border-cinza-200 text-cinza-600 hover:bg-cinza-50"
           aria-label="Mês seguinte"
         >
           <ChevronRight className="h-4 w-4" />

@@ -45,6 +45,8 @@ const INCLUDE_MODELO = {
           duracaoMin: true,
           categoriaPrincipal: true,
           parteTreino: true,
+          numeroJogadores: true,
+          espaco: true,
           diagrama: true,
           proprietario: true,
         },
@@ -412,6 +414,11 @@ export async function criarSessaoDeTemplate(dados: unknown): Promise<Resultado<S
           ordem: i,
           duracaoMin: e.duracaoMin ?? e.exercicio.duracaoMin ?? null,
           notas: e.notas ?? null,
+          // Overrides semeados da base ao aplicar o template (mesmo padrão de
+          // `adicionarExercicioSessao`): o treinador parte dos valores do
+          // exercício e ajusta por sessão sem começar do vazio. §4.2.1.
+          numeroJogadoresOverride: e.exercicio.numeroJogadores ?? null,
+          espacoOverride: e.exercicio.espaco ?? null,
           // Exercícios do treinador geram snapshot; do clube não (helper devolve null).
           ...(construirSnapshotExercicio(e.exercicio, agora) ?? {}),
         })),

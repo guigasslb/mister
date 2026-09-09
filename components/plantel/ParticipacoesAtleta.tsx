@@ -11,9 +11,10 @@ import { TransferirEscalaoForm } from "@/components/plantel/TransferirEscalaoFor
 import { EditarTipoParticipacaoButton } from "@/components/plantel/EditarTipoParticipacaoButton";
 import { TerminarParticipacaoButton } from "@/components/plantel/TerminarParticipacaoButton";
 import type { ParticipacaoHistorico } from "@/lib/actions/participacoes";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 function formatarData(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

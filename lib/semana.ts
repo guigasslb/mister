@@ -5,26 +5,45 @@
  * agrupam-se por semana ISO (segunda a domingo) automaticamente pela data.
  * Estas funções são puras (sem I/O) para poderem ser testadas e partilhadas
  * entre a sugestão de planeamento e a agregação de sessões por semana.
+ *
+ * ⚠️ Fuso: todas as fronteiras de dia/semana são ancoradas a `Europe/Lisbon`
+ * (via `partesDataLisboa`/`wallClockLisbonToInstant`), nunca ao fuso do processo
+ * Node. Em produção o processo corre em UTC; `getDay()`/`getDate()`/`setHours()`
+ * colocariam as datas de Lisboa no dia errado (−1h no Verão, WEST=UTC+1),
+ * quebrando o agrupamento por semana. Ver `lib/utils-datas.ts`.
  */
+
+import { partesDataLisboa, wallClockLisbonToInstant } from "@/lib/utils-datas";
+import { diaSemanaISO } from "@/lib/plano-semanal";
 
 const MS_DIA = 24 * 60 * 60 * 1000;
 
-/** Segunda-feira (00:00) da semana ISO que contém `d`. */
-export function segundaFeira(d: Date): Date {
-  const dt = new Date(d);
-  dt.setHours(0, 0, 0, 0);
-  const dow = dt.getDay(); // 0 = domingo … 6 = sábado
-  const desloca = dow === 0 ? -6 : 1 - dow; // recua até segunda
-  dt.setDate(dt.getDate() + desloca);
-  return dt;
+/**
+ * Instante da meia-noite (00:00, hora de parede de Lisboa) do dia de calendário
+ * `ano/mes/dia` (mês em base 1). Aceita `dia` fora do intervalo (ex.: `dia + 6`)
+ * e normaliza via `Date.UTC` — composição fina sobre `wallClockLisbonToInstant`,
+ * sem reimplementar lógica de fuso.
+ */
+function meiaNoiteLisboa(ano: number, mes: number, dia: number): Date {
+  const norm = new Date(Date.UTC(ano, mes - 1, dia));
+  const y = norm.getUTCFullYear();
+  const m = String(norm.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(norm.getUTCDate()).padStart(2, "0");
+  return wallClockLisbonToInstant(`${y}-${m}-${dd}T00:00`);
 }
 
-/** Domingo (00:00) da semana ISO que contém `d`. */
+/** Segunda-feira (00:00 Lisboa) da semana ISO que contém `d`. */
+export function segundaFeira(d: Date): Date {
+  const { ano, mes, dia } = partesDataLisboa(d);
+  const dow = diaSemanaISO(d); // 1 = segunda … 7 = domingo (dia de Lisboa)
+  return meiaNoiteLisboa(ano, mes, dia + (1 - dow)); // recua até segunda
+}
+
+/** Domingo (00:00 Lisboa) da semana ISO que contém `d`. */
 export function domingo(d: Date): Date {
-  const seg = segundaFeira(d);
-  const dom = new Date(seg);
-  dom.setDate(seg.getDate() + 6);
-  return dom;
+  const { ano, mes, dia } = partesDataLisboa(d);
+  const dow = diaSemanaISO(d); // 1 = segunda … 7 = domingo (dia de Lisboa)
+  return meiaNoiteLisboa(ano, mes, dia + (7 - dow)); // avança até domingo
 }
 
 /**
@@ -54,11 +73,10 @@ export function semanaSobrepoePlaneamento(
     dom.getTime() >= new Date(planInicio).getTime();
 }
 
-/** Início do dia (00:00) de `d`. */
+/** Início do dia (00:00 Lisboa) de `d`. */
 export function inicioDoDia(d: Date): Date {
-  const dt = new Date(d);
-  dt.setHours(0, 0, 0, 0);
-  return dt;
+  const { ano, mes, dia } = partesDataLisboa(d);
+  return meiaNoiteLisboa(ano, mes, dia);
 }
 
 /**

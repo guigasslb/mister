@@ -44,6 +44,11 @@ export type ExercicioModo = {
   notas: string | null;
   // §3.5: fase do treino deste exercício nesta sessão (null = sem fase).
   parteTreino: ParteTreinoValor | null;
+  // §4.2.1: nº de jogadores/espaço — valor resolvido (base) + override desta sessão.
+  numeroJogadores: string | null;
+  espaco: string | null;
+  numeroJogadoresOverride: string | null;
+  espacoOverride: string | null;
 };
 
 // Rótulos das fases na barra de navegação — reusa os rótulos da biblioteca e
@@ -238,7 +243,7 @@ export function ModoTreino({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex h-[100dvh] flex-col bg-white"
+      className="fixed inset-0 z-50 flex h-[100dvh] flex-col bg-white pt-[env(safe-area-inset-top)]"
       role="dialog"
       aria-modal="true"
     >
@@ -442,6 +447,10 @@ export function ModoTreino({
             descricaoOverride: atual.descricaoOverride,
             notas: atual.notas,
             parteTreino: atual.parteTreino,
+            numeroJogadoresBase: atual.numeroJogadores,
+            espacoBase: atual.espaco,
+            numeroJogadoresOverride: atual.numeroJogadoresOverride,
+            espacoOverride: atual.espacoOverride,
           }}
           aberto={adaptarAberto}
           onFechar={() => setAdaptarAberto(false)}

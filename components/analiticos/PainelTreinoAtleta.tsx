@@ -16,6 +16,7 @@ import type { AnaliticoTreinoAtleta } from "@/lib/actions/analise";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { Kpi, SecaoAnalitico, type AcentoKpi } from "./Kpi";
 import { pct } from "./Cartao";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 const GraficoLinhas = dynamic(
   () => import("@/components/graficos/GraficoLinhas").then((m) => ({ default: m.GraficoLinhas })),
@@ -44,9 +45,9 @@ function acentoTaxa(taxa: number): AcentoKpi {
   return "vermelho";
 }
 
-/** Data abreviada dia/mês para o eixo X do gráfico de RPE. */
+/** Data abreviada dia/mês (hora de Lisboa) para o eixo X do gráfico de RPE. */
 function dataAbrev(d: Date): string {
-  return new Date(d).toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" });
+  return formatarDataHoraLisboa(d, { day: "2-digit", month: "2-digit" });
 }
 
 export function PainelTreinoAtleta({ dados }: { dados: AnaliticoTreinoAtleta }) {

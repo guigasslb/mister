@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { CasaFora, TipoJogo, TipoSessao } from "@prisma/client";
-import { formatarDataHoraLisboa } from "@/lib/utils-datas";
+import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
 
 // Forma completa do evento da agenda unificada (treinos + jogos + reuniões).
 // Definida localmente (e não importada de `lib/actions/agenda`) para que o
@@ -104,12 +104,13 @@ export function CalendarioAgenda({ eventos, ano, mes, hrefBase }: Props) {
   const diasNoMes = new Date(ano, mesIdx + 1, 0).getDate();
   const offsetInicial = indiceSemana(primeiroDia);
 
-  // Agrupa eventos por dia do mês corrente, mantendo a ordem cronológica recebida.
+  // Agrupa eventos por dia do mês corrente (dia de calendário de Lisboa),
+  // mantendo a ordem cronológica recebida. Em produção (Node UTC), agrupar por
+  // `getDate()` colocaria eventos junto à meia-noite no dia errado.
   const porDia = new Map<number, EventoAgenda[]>();
   for (const ev of eventos) {
-    const d = new Date(ev.data);
-    if (d.getFullYear() === ano && d.getMonth() === mesIdx) {
-      const dia = d.getDate();
+    const { ano: a, mes: m, dia } = partesDataLisboa(ev.data);
+    if (a === ano && m === mes) {
       const lista = porDia.get(dia) ?? [];
       lista.push(ev);
       porDia.set(dia, lista);
@@ -121,11 +122,9 @@ export function CalendarioAgenda({ eventos, ano, mes, hrefBase }: Props) {
   const mesSeguinte =
     mes === 12 ? chaveMes(ano + 1, 1) : chaveMes(ano, mes + 1);
 
-  const hoje = new Date();
+  const hoje = partesDataLisboa(new Date());
   const ehHoje = (dia: number) =>
-    hoje.getFullYear() === ano &&
-    hoje.getMonth() === mesIdx &&
-    hoje.getDate() === dia;
+    hoje.ano === ano && hoje.mes === mes && hoje.dia === dia;
 
   // Células: espaços vazios iniciais + dias do mês
   const celulas: (number | null)[] = [

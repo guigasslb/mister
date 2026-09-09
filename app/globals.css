@@ -605,3 +605,18 @@ html.dark .landing-root h3 {
     display: block !important;
   }
 }
+
+/* ─── Animação de "desenho" de trajetos (setas/linhas do diagrama) ───────────
+   Usada por DiagramaReproduzivel/ElementoSVG para reproduzir o exercício: cada
+   seta desenha-se progressivamente (stroke-dashoffset 1→0 sobre um trajeto
+   normalizado com pathLength=1). O atraso incremental por seta é aplicado
+   inline (animation-delay) para o efeito sequencial. Respeita o utilizador que
+   pede menos movimento — nesse caso o componente não ativa a animação. */
+@keyframes campo-desenhar-trajeto {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}

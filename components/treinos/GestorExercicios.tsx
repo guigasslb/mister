@@ -57,6 +57,9 @@ type ExercicioSessao = {
   notas: string | null;
   // §3.5: fase do treino deste exercício nesta sessão (null = sem fase).
   parteTreino: ParteTreinoValor | null;
+  // §4.2.1: overrides de nº de jogadores/espaço desta sessão (null = usa a base).
+  numeroJogadoresOverride: string | null;
+  espacoOverride: string | null;
   exercicio: {
     id: string;
     nome: string;
@@ -65,6 +68,9 @@ type ExercicioSessao = {
     descricao: string | null;
     objetivo: string | null;
     diagrama: unknown;
+    // Valores resolvidos (override → snapshot) para pré-preencher a adaptação.
+    numeroJogadores: string | null;
+    espaco: string | null;
   };
 };
 
@@ -726,6 +732,10 @@ export function GestorExercicios({
             descricaoOverride: exercicioAdaptar.descricaoOverride ?? null,
             notas: exercicioAdaptar.notas ?? null,
             parteTreino: exercicioAdaptar.parteTreino ?? null,
+            numeroJogadoresBase: exercicioAdaptar.exercicio.numeroJogadores,
+            espacoBase: exercicioAdaptar.exercicio.espaco,
+            numeroJogadoresOverride: exercicioAdaptar.numeroJogadoresOverride,
+            espacoOverride: exercicioAdaptar.espacoOverride,
           }}
           aberto={true}
           onFechar={() => setExercicioAdaptar(null)}

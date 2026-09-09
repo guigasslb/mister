@@ -5,11 +5,12 @@ import { listarMovimentosCarteira } from "@/lib/actions/licenciamento";
 import { LABEL_TIPO_MOVIMENTO, formatarEuros } from "@/lib/schemas/licenciamento";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { cn } from "@/lib/utils";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 export const metadata: Metadata = { title: "Definições · Movimentos da carteira" };
 
 function formatarData(data: Date): string {
-  return new Date(data).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(data, {
     day: "2-digit",
     month: "short",
     year: "numeric",

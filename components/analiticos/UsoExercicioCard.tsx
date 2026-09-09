@@ -7,6 +7,7 @@ import { obterUsoExercicio } from "@/lib/actions/analise";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { Badge } from "@/components/ui/badge";
 import { SecaoAnalitico, Kpi } from "./Kpi";
+import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 const LABEL_TIPO_SESSAO: Record<TipoSessao, string> = {
   NORMAL: "Normal",
@@ -15,9 +16,9 @@ const LABEL_TIPO_SESSAO: Record<TipoSessao, string> = {
   EVENTO: "Evento",
 };
 
-/** Data PT-PT completa (ex.: "04/09/2026"). */
+/** Data PT-PT completa (ex.: "04/09/2026") — hora de Lisboa. */
 function formatarData(d: Date): string {
-  return new Date(d).toLocaleDateString("pt-PT", {
+  return formatarDataHoraLisboa(d, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
