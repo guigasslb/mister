@@ -12,6 +12,14 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./", import.meta.url)),
+      // `server-only` lança ao ser importado fora do runtime RSC (a sua proteção
+      // de build). Em testes (Node) apontamos para o módulo vazio que o próprio
+      // pacote serve no servidor — reflete o comportamento real (no-op) e permite
+      // testar módulos que dependem, transitivamente, de clientes server-only
+      // (ex.: `lib/supabase-storage.ts`).
+      "server-only": fileURLToPath(
+        new URL("./node_modules/server-only/empty.js", import.meta.url),
+      ),
     },
   },
 });

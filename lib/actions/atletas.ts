@@ -1,7 +1,14 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+import sharp from "sharp";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import {
+  BUCKET_ATLETAS,
+  obterSupabaseStorage,
+  extrairPathDoStorage,
+} from "@/lib/supabase-storage";
 import { obterEpocaAtiva, obterClubeIdAtual } from "@/lib/epoca-context";
 import {
   exigirCapacidade,
@@ -16,6 +23,7 @@ import {
   atualizarAtletaSchema,
   apagarAtletaDefinitivamenteSchema,
   toggleAtivoAtletaSchema,
+  uploadFotoAtletaSchema,
   posicoesPorModalidade,
   LABEL_POSICAO,
 } from "@/lib/schemas/atleta";
@@ -652,6 +660,7 @@ export async function apagarAtletaDefinitivamente(
     where: { id: parsed.data.atletaId, clubeId },
     select: {
       id: true,
+      fotoUrl: true,
       participacoes: { select: { escalaoId: true } },
       _count: { select: { estatisticas: true } },
     },
@@ -669,6 +678,11 @@ export async function apagarAtletaDefinitivamente(
       "Atleta com estatísticas registadas — exportar dados antes de apagar",
     );
   }
+
+  // Ciclo de vida do ficheiro (§8.5): apaga a foto do Storage ANTES do
+  // hard-delete. Best-effort — uma falha aqui não bloqueia o apagamento RGPD do
+  // atleta (fica registada no log; o ficheiro pode ser recolhido depois).
+  await apagarFotoDoStorage(existe.fotoUrl);
 
   // Os cascades do schema removem os dados relacionados (P1.3).
   await prisma.atleta.delete({ where: { id: parsed.data.atletaId } });
@@ -865,4 +879,149 @@ export async function obterAniversariosProximos(): Promise<
   resultado.sort((a, b) => a.diasAte - b.diasAte || a.nome.localeCompare(b.nome));
 
   return ok(resultado);
+}
+
+// ─── Upload de fotografia do atleta (§8.5) ───────────────────────────────────
+
+// Limite ANTES da compressão (o `sharp` reduz para ~50 KB). O input do browser
+// vem já comprimido (~5 MB, alinhado com `bodySizeLimit`); este teto é uma
+// salvaguarda do servidor contra ficheiros grandes chegados por outra via.
+const MAX_BYTES_FOTO = 10 * 1024 * 1024;
+
+// Assinaturas de ficheiro (magic bytes) aceites. Não confiamos na extensão nem
+// no content-type declarado pelo cliente — validamos os bytes reais.
+const ASSINATURAS_IMAGEM: ReadonlyArray<{ mime: string; bytes: number[] }> = [
+  { mime: "image/jpeg", bytes: [0xff, 0xd8, 0xff] },
+  { mime: "image/png", bytes: [0x89, 0x50, 0x4e, 0x47] },
+  { mime: "image/webp", bytes: [0x52, 0x49, 0x46, 0x46] }, // "RIFF"
+];
+
+// "WEBP" (fourcc no offset 8): o prefixo RIFF é partilhado com WAV/AVI, por isso
+// confirmamos o fourcc para não aceitar áudio/vídeo mascarado de imagem.
+const FOURCC_WEBP = [0x57, 0x45, 0x42, 0x50];
+
+/** Deteta o mime real da imagem pelos magic bytes, ou `null` se não for JPEG/PNG/WebP. */
+function detetarMimeImagem(buffer: Buffer): string | null {
+  for (const { mime, bytes } of ASSINATURAS_IMAGEM) {
+    if (bytes.every((b, i) => buffer[i] === b)) {
+      if (mime === "image/webp" && !FOURCC_WEBP.every((b, i) => buffer[8 + i] === b)) {
+        continue;
+      }
+      return mime;
+    }
+  }
+  return null;
+}
+
+/**
+ * Apaga um ficheiro do bucket `atletas` se o `fotoUrl` apontar para o NOSSO
+ * Supabase Storage (URLs externos colados pelo utilizador são ignorados).
+ * Best-effort: nunca lança — regista o erro e segue.
+ */
+async function apagarFotoDoStorage(fotoUrl: string | null): Promise<void> {
+  if (!fotoUrl) return;
+  const path = extrairPathDoStorage(fotoUrl);
+  if (!path) return;
+
+  const storage = obterSupabaseStorage();
+  if (!storage) return;
+
+  try {
+    const { error } = await storage.storage.from(BUCKET_ATLETAS).remove([path]);
+    if (error) {
+      console.error("Falha ao apagar foto do Storage:", error.message);
+    }
+  } catch (e) {
+    console.error("Erro ao apagar foto do Storage:", e);
+  }
+}
+
+/**
+ * Faz upload da fotografia do atleta: valida o ficheiro (magic bytes + tamanho),
+ * re-encoda para WebP 256×256 (q80, `cover`, sem upscale), guarda no bucket
+ * público `atletas` com um path não-adivinhável (UUID), apaga a foto anterior (se
+ * for nossa) e persiste o novo `fotoUrl` (§8.5).
+ */
+export async function uploadFotoAtleta(
+  atletaId: string,
+  formData: FormData,
+): Promise<Resultado<{ fotoUrl: string }>> {
+  const parsed = uploadFotoAtletaSchema.safeParse({ atletaId });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const atleta = await prisma.atleta.findFirst({
+    where: { id: parsed.data.atletaId, clubeId },
+    select: {
+      id: true,
+      fotoUrl: true,
+      participacoes: { where: { estado: "ATIVO" }, select: { escalaoId: true } },
+    },
+  });
+  if (!atleta) return erro("Atleta não encontrado");
+
+  const perm = await exigirCapacidadeEmAlgumEscalao(
+    "PLANTEL_GERIR",
+    atleta.participacoes.map((p) => p.escalaoId),
+  );
+  if (!perm.ok) return erro(perm.erro);
+
+  const ficheiro = formData.get("foto");
+  if (!(ficheiro instanceof File) || ficheiro.size === 0) {
+    return erro("Nenhum ficheiro de foto recebido");
+  }
+
+  const bytes = Buffer.from(await ficheiro.arrayBuffer());
+
+  const mime = detetarMimeImagem(bytes);
+  if (!mime) {
+    return erro("Formato de imagem inválido. Usa JPEG, PNG ou WebP.");
+  }
+
+  if (bytes.byteLength > MAX_BYTES_FOTO) {
+    return erro("A imagem excede o tamanho máximo de 10 MB. Reduz o ficheiro e tenta novamente.");
+  }
+
+  const storage = obterSupabaseStorage();
+  if (!storage) {
+    return erro("Armazenamento de imagens não configurado");
+  }
+
+  let webp: Buffer;
+  try {
+    webp = await sharp(bytes)
+      .resize(256, 256, { fit: "cover", withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+  } catch {
+    return erro("Não foi possível processar a imagem. Tenta outro ficheiro.");
+  }
+
+  // Path não-adivinhável (UUID) no bucket público (§5.6): protege a foto sem o
+  // custo de signed URLs (que expirariam a cada carregamento de página).
+  const path = `atletas/${clubeId}/${atleta.id}-${randomUUID()}.webp`;
+
+  const { error: erroUpload } = await storage.storage
+    .from(BUCKET_ATLETAS)
+    .upload(path, webp, { contentType: "image/webp", upsert: false });
+  if (erroUpload) {
+    return erro("Não foi possível guardar a imagem. Tenta novamente.");
+  }
+
+  const { data: publico } = storage.storage.from(BUCKET_ATLETAS).getPublicUrl(path);
+  const fotoUrl = publico.publicUrl;
+
+  await prisma.atleta.update({ where: { id: atleta.id }, data: { fotoUrl } });
+
+  // Só depois de o novo ficheiro estar guardado e o `fotoUrl` persistido é que
+  // apagamos o anterior — mantém a BD sempre consistente se algum passo falhar.
+  await apagarFotoDoStorage(atleta.fotoUrl);
+
+  revalidatePath(PATH);
+  revalidatePath(`${PATH}/${atleta.id}`);
+  revalidatePath(PATH_DASHBOARD);
+
+  return ok({ fotoUrl });
 }

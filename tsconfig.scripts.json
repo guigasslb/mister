@@ -1,0 +1,22 @@
+{
+  // Config dedicada a scripts standalone corridos com ts-node (fora do bundle Next).
+  // Estende a base mas força CommonJS + resolução Node, que é o que o ts-node espera.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "noEmit": false,
+    "incremental": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "ts-node": {
+    // Só transpila (sem type-check do projeto inteiro): scripts arrancam rápido
+    // e não são bloqueados por typings do lado Next/React.
+    "transpileOnly": true
+  },
+  "include": ["scripts/**/*.ts"],
+  "exclude": ["node_modules"]
+}

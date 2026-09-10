@@ -119,6 +119,12 @@ export const toggleAtivoAtletaSchema = z.object({
   atletaId: z.string().cuid("Atleta inválido"),
 });
 
+/** Upload da fotografia do atleta (§8.5). O ficheiro é validado na action (magic
+ * bytes + tamanho); aqui valida-se apenas o identificador do atleta. */
+export const uploadFotoAtletaSchema = z.object({
+  atletaId: z.string().cuid("Atleta inválido"),
+});
+
 export type AtletaPessoalInput = z.infer<typeof atletaPessoalSchema>;
 export type CriarAtletaInput = z.infer<typeof criarAtletaSchema>;
 

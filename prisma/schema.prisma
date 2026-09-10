@@ -500,7 +500,7 @@ model Atleta {
   posicoes       Posicao[] // um atleta pode ter várias posições
   numero         Int?
   observacoes    String?   @db.Text
-  fotoUrl        String? // por URL (sem upload por agora)
+  fotoUrl        String? // upload (Supabase Storage, WebP 256×256) ou URL externo (§8.5)
   ativo          Boolean   @default(true)
   // Inscrição federativa/no clube (secção 8 — plantel): distingue quem já está
   // formalmente inscrito de quem falta inscrever. Independente de `ativo` (um

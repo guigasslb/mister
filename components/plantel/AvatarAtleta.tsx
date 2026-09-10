@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 const CORES = [
   "bg-primary",
   "bg-azul-900",
@@ -38,12 +42,17 @@ export function AvatarAtleta({
   tamanho?: keyof typeof TAMANHOS;
   fotoUrl?: string | null;
 }) {
-  if (fotoUrl) {
+  // Guarda o URL que falhou (em vez de um simples booleano) para que, se o
+  // `fotoUrl` mudar para um novo válido, a imagem volte a ser tentada.
+  const [urlFalhada, setUrlFalhada] = useState<string | null>(null);
+
+  if (fotoUrl && fotoUrl !== urlFalhada) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={fotoUrl}
         alt={nome}
+        onError={() => setUrlFalhada(fotoUrl)}
         className={`flex-shrink-0 rounded-full object-cover ${TAMANHOS[tamanho]}`}
       />
     );

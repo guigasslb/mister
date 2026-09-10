@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { criarAtleta, atualizarAtleta } from "@/lib/actions/atletas";
+import { FotoUpload } from "@/components/plantel/FotoUpload";
 import { mostrarEncarregadoEducacao } from "@/lib/utils";
 import {
   LABEL_POSICAO,
@@ -367,11 +368,21 @@ export function AtletaForm({
           {erros.email && <p className="text-legenda text-vermelho-600">{erros.email}</p>}
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="fotoUrl">Fotografia (URL)</Label>
-          <Input id="fotoUrl" name="fotoUrl" defaultValue={atleta?.fotoUrl ?? ""} placeholder="https://…" />
-          {erros.fotoUrl && <p className="text-legenda text-vermelho-600">{erros.fotoUrl}</p>}
-        </div>
+        {atleta ? (
+          // Edição: o upload persiste de imediato (Server Action) e mantém o
+          // `fotoUrl` do formulário num input escondido dentro do próprio picker.
+          <FotoUpload atletaId={atleta.id} fotoUrlInicial={atleta.fotoUrl} nome={atleta.nome} />
+        ) : (
+          // Criação: só é possível carregar foto depois de o atleta existir (o
+          // upload precisa de um `atletaId`). Sem input `fotoUrl` — o atleta nasce
+          // sem foto e adiciona-se na edição.
+          <div className="space-y-1.5">
+            <Label>Fotografia</Label>
+            <p className="text-legenda text-cinza-400">
+              Guarda primeiro o atleta para adicionar uma fotografia.
+            </p>
+          </div>
+        )}
 
         {/* Inscrição (secção 8): estado editável do atleta no clube/federação. */}
         <div className="flex min-h-[44px] items-center justify-between gap-4 rounded-lg border border-cinza-200 px-4 py-2">

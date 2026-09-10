@@ -38,6 +38,12 @@ const nextConfig = {
   // serverless da Vercel, logo sem necessidade de `serverExternalPackages`.
   experimental: {
     optimizePackageImports: ["lucide-react"],
+    // Upload de foto do atleta (§8.5): o cliente comprime antes de enviar, mas o
+    // corpo do FormData pode chegar a ~5 MB antes da compressão server-side (sharp
+    // reduz para ~50 KB). Sobe o limite default (1 MB) das Server Actions.
+    serverActions: {
+      bodySizeLimit: "5mb",
+    },
   },
   images: {
     // Lista restritiva de hosts permitidos (evita proxy de imagem aberto / SSRF).
