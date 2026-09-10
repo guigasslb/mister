@@ -37,7 +37,7 @@ export function SeletorEpoca({ epocas, epocaAtivaId }: Props) {
       }}
       disabled={pending}
     >
-      <SelectTrigger className="h-9 w-auto gap-1 border-cinza-200 bg-white text-corpo text-cinza-900 focus:ring-primary">
+      <SelectTrigger className="h-9 w-auto gap-1 border-border bg-background text-corpo text-foreground focus:ring-primary">
         <span className="mr-1 text-legenda text-cinza-400">Época</span>
         <SelectValue />
       </SelectTrigger>

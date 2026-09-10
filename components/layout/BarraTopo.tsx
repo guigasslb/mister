@@ -78,8 +78,14 @@ export function BarraTopo({
 
       {/* Seletor de época + ações + menu do utilizador */}
       <div className="flex items-center gap-2 ml-auto sm:gap-3">
-        <SeletorSeccao seccoes={seccoes} seccaoAtivaId={seccaoAtivaId} />
-        <SeletorEpoca epocas={epocas} epocaAtivaId={epocaAtivaId} />
+        {/* Seletores ocultos em mobile (§12.2) — em ecrãs estreitos ficam só
+            os 3 botões de ação, evitando sobreposição visual (<430px). */}
+        <div className="hidden sm:flex">
+          <SeletorSeccao seccoes={seccoes} seccaoAtivaId={seccaoAtivaId} />
+        </div>
+        <div className="hidden sm:flex">
+          <SeletorEpoca epocas={epocas} epocaAtivaId={epocaAtivaId} />
+        </div>
 
         {/* Indicador de evento hoje (treino/jogo) → dashboard */}
         <Link

@@ -211,7 +211,7 @@ export function Navegacao({
           <>
             {/* overlay para fechar ao clicar fora */}
             <div
-              className="fixed inset-0 z-10"
+              className="fixed inset-0 z-20"
               onClick={() => setMaisAberto(false)}
             />
             <div className="absolute bottom-full left-0 right-0 z-40 border-t border-cinza-200 bg-white shadow-md">

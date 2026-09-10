@@ -26,7 +26,7 @@ export function AlternadorTema() {
       onClick={() => setTheme(escuro ? "light" : "dark")}
       aria-label={escuro ? "Ativar tema claro" : "Ativar tema escuro"}
       title={escuro ? "Tema claro" : "Tema escuro"}
-      className="flex h-9 w-9 items-center justify-center rounded-full text-cinza-500 transition-colors hover:bg-cinza-100 hover:text-cinza-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+      className="flex h-11 w-11 items-center justify-center rounded-full text-cinza-500 transition-colors hover:bg-cinza-100 hover:text-cinza-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
     >
       {/* Antes de montar, mostra a lua (coerente com o default escuro). */}
       {!montado || escuro ? (
