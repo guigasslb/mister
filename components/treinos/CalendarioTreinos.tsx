@@ -183,10 +183,10 @@ export function CalendarioTreinos({
                   <Link
                     key={s.id}
                     href={`/treinos/${s.id}`}
-                    className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-legenda text-white ${
+                    className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-legenda ${
                       treinoConcluido(s.data)
-                        ? "bg-cinza-400 hover:bg-cinza-500"
-                        : "bg-primary hover:bg-azul-900"
+                        ? "bg-cinza-200 text-cinza-600 hover:bg-cinza-300"
+                        : "bg-primary/10 text-primary hover:bg-primary/20"
                     }`}
                     title={
                       s.precisaAtencao
@@ -213,7 +213,11 @@ export function CalendarioTreinos({
                   <Link
                     key={r.id}
                     href="/reunioes"
-                    className="block truncate rounded bg-verde-600 px-1 py-0.5 text-legenda text-white hover:opacity-90"
+                    className={`block truncate rounded px-1 py-0.5 text-legenda ${
+                      treinoConcluido(r.data)
+                        ? "bg-cinza-200 text-cinza-600 hover:bg-cinza-300"
+                        : "bg-verde-600/10 text-verde-600 hover:bg-verde-600/20"
+                    }`}
                     title={`Reunião · ${r.titulo}`}
                   >
                     {formatarDataHoraLisboa(r.data, {

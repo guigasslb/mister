@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { CasaFora, TipoJogo, TipoSessao } from "@prisma/client";
 import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
+import { treinoConcluido } from "@/lib/semana";
 
 // Forma completa do evento da agenda unificada (treinos + jogos + reuniões).
 // Definida localmente (e não importada de `lib/actions/agenda`) para que o
@@ -56,12 +57,18 @@ const ROTULO_TIPO: Record<EventoAgenda["tipo"], string> = {
   REUNIAO: "Reunião",
 };
 
-// Estilo da pill por tipo (spec da agenda unificada).
+// Estilo da pill por tipo — soft pills (border/bg a 10% + texto do tom),
+// consistente com os badges da vista lista da agenda (§12):
+//   Treino → cor do clube · Jogo → âmbar · Reunião → verde.
 const PILL_CLS: Record<EventoAgenda["tipo"], string> = {
-  TREINO: "bg-primary text-primary-foreground hover:bg-primary/90",
-  JOGO: "bg-amber-500 text-white hover:bg-amber-600",
-  REUNIAO: "bg-emerald-600 text-white hover:bg-emerald-700",
+  TREINO: "bg-primary/10 text-primary hover:bg-primary/20",
+  JOGO: "bg-ambar-500/10 text-ambar-600 hover:bg-ambar-500/20",
+  REUNIAO: "bg-verde-600/10 text-verde-600 hover:bg-verde-600/20",
 };
+
+// Eventos já realizados (data no passado) → cinza neutro/discreto, tal como o
+// badge «Realizado» da lista, para amortecer o que já aconteceu.
+const PILL_PASSADO = "bg-cinza-200 text-cinza-600 hover:bg-cinza-300";
 
 /** Destino de cada evento por tipo. Reunião não tem rota de detalhe → lista. */
 function hrefEvento(ev: EventoAgenda): string {
@@ -181,7 +188,9 @@ export function CalendarioAgenda({ eventos, ano, mes, hrefBase }: Props) {
                   <Link
                     key={`${ev.tipo}-${ev.id}`}
                     href={hrefEvento(ev)}
-                    className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-legenda ${PILL_CLS[ev.tipo]}`}
+                    className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-legenda ${
+                      treinoConcluido(ev.data) ? PILL_PASSADO : PILL_CLS[ev.tipo]
+                    }`}
                     title={
                       ev.precisaAtencao
                         ? `${ROTULO_TIPO[ev.tipo]} · ${ev.titulo} · ${ev.escalaoNome} · sessão sem exercícios`

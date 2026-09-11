@@ -76,6 +76,17 @@ function apresentacao(ev: EventoAgenda): {
   }
 }
 
+/**
+ * Cor do badge por tipo de evento (§12). Segue a convenção de pills suaves da
+ * app (border/30 + bg/10 + texto do tom), já usada em Treinos/Jogos/Comunicações:
+ *   Treino → cor do clube (primary) · Jogo → âmbar · Reunião → verde.
+ */
+const BADGE_TIPO: Record<TipoEvento, string> = {
+  TREINO: "border-primary/30 bg-primary/10 text-primary",
+  JOGO: "border-ambar-500/30 bg-ambar-500/10 text-ambar-600",
+  REUNIAO: "border-verde-600/30 bg-verde-600/10 text-verde-600",
+};
+
 export default async function AgendaPage({
   searchParams,
 }: {
@@ -290,11 +301,11 @@ export default async function AgendaPage({
                             >
                               {ev.titulo}
                             </p>
-                            {passado && (
-                              <span className="rounded-full bg-cinza-100 px-2.5 py-0.5 text-legenda text-cinza-500">
-                                Realizado
-                              </span>
-                            )}
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-legenda font-medium ${BADGE_TIPO[ev.tipo]}`}
+                            >
+                              {rotulo}
+                            </span>
                             <span className="rounded-full bg-primary/5 px-2.5 py-0.5 text-legenda text-primary">
                               {ev.escalaoNome}
                             </span>
@@ -303,16 +314,20 @@ export default async function AgendaPage({
                                 {ev.casaFora === "CASA" ? "Casa" : "Fora"}
                               </span>
                             )}
+                            {passado && (
+                              <span className="rounded-full bg-cinza-200 px-2.5 py-0.5 text-legenda text-cinza-600">
+                                Realizado
+                              </span>
+                            )}
                           </div>
-                          <div className="mt-1 flex flex-wrap gap-3 text-legenda text-cinza-500">
-                            <span>{rotulo}</span>
-                            {ev.local && (
+                          {ev.local && (
+                            <div className="mt-1 flex flex-wrap gap-3 text-legenda text-cinza-500">
                               <span className="flex items-center gap-1">
                                 <MapPin className="h-3.5 w-3.5" />
                                 {ev.local}
                               </span>
-                            )}
-                          </div>
+                            </div>
+                          )}
                           {ev.descricao && (
                             <p className="mt-1 line-clamp-1 text-legenda text-cinza-500">
                               {ev.descricao}
