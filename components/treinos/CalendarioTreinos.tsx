@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
+import { treinoConcluido } from "@/lib/semana";
 
 type SessaoCalendario = {
   id: string;
@@ -88,6 +89,29 @@ export function CalendarioTreinos({
   const ehHoje = (dia: number) =>
     hoje.ano === ano && hoje.mes === mes + 1 && hoje.dia === dia;
 
+  // Dia de calendário totalmente no passado (anterior a hoje, em dia de Lisboa).
+  // Consistente com `ehHoje`: usa o mesmo tuplo (ano, mes 1-12, dia).
+  const diaNoPassado = (dia: number) => {
+    if (ano !== hoje.ano) return ano < hoje.ano;
+    if (mes + 1 !== hoje.mes) return mes + 1 < hoje.mes;
+    return dia < hoje.dia;
+  };
+
+  // Existência de sessões nos meses adjacentes (dia de Lisboa), para indicador
+  // discreto sob as setas de navegação. mês 1-12 para bater com partesDataLisboa.
+  const anoAnterior = mes === 0 ? ano - 1 : ano;
+  const mesAnteriorNum = mes === 0 ? 12 : mes;
+  const anoSeguinte = mes === 11 ? ano + 1 : ano;
+  const mesSeguinteNum = mes === 11 ? 1 : mes + 2;
+  const temSessoesNoMesAnterior = sessoes.some((s) => {
+    const { ano: a, mes: m } = partesDataLisboa(s.data);
+    return a === anoAnterior && m === mesAnteriorNum;
+  });
+  const temSessoesNoMesSeguinte = sessoes.some((s) => {
+    const { ano: a, mes: m } = partesDataLisboa(s.data);
+    return a === anoSeguinte && m === mesSeguinteNum;
+  });
+
   // Células: espaços vazios iniciais + dias do mês
   const celulas: (number | null)[] = [
     ...Array.from({ length: offsetInicial }, () => null),
@@ -99,20 +123,36 @@ export function CalendarioTreinos({
       <div className="flex items-center justify-between">
         <Link
           href={`${hrefBase}&mes=${mesAnterior}`}
-          className="flex h-11 w-11 items-center justify-center rounded-md border border-cinza-200 text-cinza-600 hover:bg-cinza-50"
-          aria-label="Mês anterior"
+          className="relative flex h-11 w-11 items-center justify-center rounded-md border border-cinza-200 text-cinza-600 hover:bg-cinza-50"
+          aria-label={
+            temSessoesNoMesAnterior ? "Mês anterior (com sessões)" : "Mês anterior"
+          }
         >
           <ChevronLeft className="h-4 w-4" />
+          {temSessoesNoMesAnterior && (
+            <span
+              className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary"
+              aria-hidden="true"
+            />
+          )}
         </Link>
         <p className="text-corpo font-semibold text-cinza-900 capitalize">
           {MESES[mes]} {ano}
         </p>
         <Link
           href={`${hrefBase}&mes=${mesSeguinte}`}
-          className="flex h-11 w-11 items-center justify-center rounded-md border border-cinza-200 text-cinza-600 hover:bg-cinza-50"
-          aria-label="Mês seguinte"
+          className="relative flex h-11 w-11 items-center justify-center rounded-md border border-cinza-200 text-cinza-600 hover:bg-cinza-50"
+          aria-label={
+            temSessoesNoMesSeguinte ? "Mês seguinte (com sessões)" : "Mês seguinte"
+          }
         >
           <ChevronRight className="h-4 w-4" />
+          {temSessoesNoMesSeguinte && (
+            <span
+              className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary"
+              aria-hidden="true"
+            />
+          )}
         </Link>
       </div>
 
@@ -130,7 +170,11 @@ export function CalendarioTreinos({
             <div
               key={dia}
               className={`min-h-[72px] rounded-md border p-1 ${
-                ehHoje(dia) ? "border-primary bg-primary/5" : "border-cinza-200 bg-white"
+                ehHoje(dia)
+                  ? "border-primary bg-primary/5"
+                  : diaNoPassado(dia)
+                    ? "border-cinza-200 bg-cinza-50"
+                    : "border-cinza-200 bg-white"
               }`}
             >
               <span className="text-legenda text-cinza-500">{dia}</span>
@@ -139,7 +183,11 @@ export function CalendarioTreinos({
                   <Link
                     key={s.id}
                     href={`/treinos/${s.id}`}
-                    className="flex items-center gap-1 truncate rounded bg-primary px-1 py-0.5 text-legenda text-white hover:bg-azul-900"
+                    className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-legenda text-white ${
+                      treinoConcluido(s.data)
+                        ? "bg-cinza-400 hover:bg-cinza-500"
+                        : "bg-primary hover:bg-azul-900"
+                    }`}
                     title={
                       s.precisaAtencao
                         ? `${s.escalaoNome} · sessão sem exercícios`

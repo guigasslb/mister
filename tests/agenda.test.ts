@@ -29,7 +29,13 @@ import { podeLerEscalao, escaloesLegiveis } from "@/lib/permissoes";
 import { prisma } from "@/lib/db";
 
 const CLUBE = "clube-1";
-const EPOCA = { id: "epoca-1", clubeId: CLUBE, ativa: true } as never;
+const EPOCA = {
+  id: "epoca-1",
+  clubeId: CLUBE,
+  ativa: true,
+  dataInicio: new Date("2026-07-01T00:00:00"),
+  dataFim: new Date("2027-06-30T00:00:00"),
+} as never;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -159,6 +165,19 @@ describe("obterAgendaClube", () => {
     };
     expect(whereSessao.data.gte).toEqual(new Date(2026, 7, 1, 0, 0, 0, 0));
     expect(whereSessao.data.lte).toEqual(new Date(2026, 8, 0, 23, 59, 59, 999));
+  });
+
+  it("sem mes/ano (vista lista) abrange toda a época ativa, sem limite de 30 dias", async () => {
+    await obterAgendaClube();
+    const whereSessao = vi.mocked(prisma.sessao.findMany).mock.calls[0][0]?.where as {
+      data: { gte: Date; lte: Date };
+    };
+    const gteEsperado = new Date("2026-07-01T00:00:00");
+    gteEsperado.setHours(0, 0, 0, 0);
+    const lteEsperado = new Date("2027-06-30T00:00:00");
+    lteEsperado.setHours(23, 59, 59, 999);
+    expect(whereSessao.data.gte).toEqual(gteEsperado);
+    expect(whereSessao.data.lte).toEqual(lteEsperado);
   });
 
   it("expõe tipoSessao no treino e tipo/casaFora no jogo", async () => {

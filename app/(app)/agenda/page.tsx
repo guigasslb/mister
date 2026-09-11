@@ -10,6 +10,7 @@ import {
   Plus,
 } from "lucide-react";
 import { obterAgendaClube, type EventoAgenda } from "@/lib/actions/agenda";
+import { treinoConcluido } from "@/lib/semana";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterEscalaoDoUtilizador, filtrarEscaloesLegiveis } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
@@ -153,7 +154,7 @@ export default async function AgendaPage({
   const ambitoTexto = escalaoNome
     ? `do escalão ${escalaoNome}`
     : "de todos os escalões";
-  const janelaTexto = ehCalendario ? "vista mensal" : "próximos 30 dias";
+  const janelaTexto = ehCalendario ? "vista mensal" : "toda a época";
   const subtitulo = `Treinos, jogos e reuniões ${ambitoTexto} · ${janelaTexto}`;
 
   // Preserva escalão + tipo ao alternar de vista e ao navegar entre meses.
@@ -239,7 +240,7 @@ export default async function AgendaPage({
       ) : eventos.length === 0 ? (
         <EstadoVazio
           titulo="Sem eventos agendados"
-          descricao="Não há treinos, jogos nem reuniões nos próximos 30 dias para os filtros selecionados."
+          descricao="Não há treinos, jogos nem reuniões nesta época para os filtros selecionados."
         />
       ) : (
         <div className="space-y-8">
@@ -253,16 +254,27 @@ export default async function AgendaPage({
                 {doDia.map((ev) => {
                   const { Icon, href, rotulo, destaque } = apresentacao(ev);
                   const ehJogo = ev.tipo === "JOGO";
+                  // Entrada já realizada (data anterior a hoje) → estilo amortecido,
+                  // para distinguir visualmente o passado do que está por vir.
+                  const passado = treinoConcluido(ev.data);
                   return (
                     <li key={`${ev.tipo}-${ev.id}`}>
                       <Link
                         href={href}
-                        className="flex items-center gap-4 rounded-lg border border-cinza-200 bg-white p-4 shadow-card transition-all hover:border-azul-300 hover:shadow-md"
+                        className={`flex items-center gap-4 rounded-lg border p-4 transition-all ${
+                          passado
+                            ? "border-cinza-200 bg-cinza-50 hover:border-cinza-300"
+                            : "border-cinza-200 bg-white shadow-card hover:border-azul-300 hover:shadow-md"
+                        }`}
                       >
                         <div className="flex flex-col items-center">
                           <Icon
                             className={`h-5 w-5 ${
-                              destaque ? "text-primary" : "text-cinza-400"
+                              passado
+                                ? "text-cinza-400"
+                                : destaque
+                                  ? "text-primary"
+                                  : "text-cinza-400"
                             }`}
                           />
                           <span className="mt-1 text-legenda font-medium text-cinza-500">
@@ -271,9 +283,18 @@ export default async function AgendaPage({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-corpo font-semibold text-cinza-900">
+                            <p
+                              className={`text-corpo font-semibold ${
+                                passado ? "text-cinza-500" : "text-cinza-900"
+                              }`}
+                            >
                               {ev.titulo}
                             </p>
+                            {passado && (
+                              <span className="rounded-full bg-cinza-100 px-2.5 py-0.5 text-legenda text-cinza-500">
+                                Realizado
+                              </span>
+                            )}
                             <span className="rounded-full bg-primary/5 px-2.5 py-0.5 text-legenda text-primary">
                               {ev.escalaoNome}
                             </span>

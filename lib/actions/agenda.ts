@@ -83,9 +83,16 @@ async function contexto(): Promise<Contexto> {
 
 /**
  * Janela temporal a considerar. Com `mes` (1–12) + `ano` válidos, foca esse mês
- * completo; caso contrário, os próximos 30 dias a partir do início de hoje.
+ * completo (vista de calendário); caso contrário — vista de lista — abrange toda
+ * a época ativa, de `dataInicio` a `dataFim` (inclusive), para que a lista mostre
+ * cronologicamente todos os eventos da época (passados e futuros), sem o limite
+ * artificial de 30 dias que truncava as entradas mais distantes.
  */
-function resolverJanela(mes?: number, ano?: number): { gte: Date; lte: Date } {
+function resolverJanela(
+  epoca: Epoca,
+  mes?: number,
+  ano?: number,
+): { gte: Date; lte: Date } {
   const mesValido =
     typeof mes === "number" && Number.isInteger(mes) && mes >= 1 && mes <= 12;
   const anoValido =
@@ -97,10 +104,11 @@ function resolverJanela(mes?: number, ano?: number): { gte: Date; lte: Date } {
     return { gte, lte };
   }
 
-  const gte = new Date();
+  // Vista de lista: toda a época ativa. O teto é a `dataFim` da época (fim do dia),
+  // não um limite fixo de dias — evita truncar eventos além da janela de 30 dias.
+  const gte = new Date(epoca.dataInicio);
   gte.setHours(0, 0, 0, 0);
-  const lte = new Date(gte);
-  lte.setDate(lte.getDate() + 30);
+  const lte = new Date(epoca.dataFim);
   lte.setHours(23, 59, 59, 999);
   return { gte, lte };
 }
@@ -117,7 +125,7 @@ export async function obterAgendaClube(
   const ctx = await contexto();
   if (ctx.estado === "erro") return erro(ctx.erro);
 
-  const janela = resolverJanela(filtros.mes, filtros.ano);
+  const janela = resolverJanela(ctx.epoca, filtros.mes, filtros.ano);
 
   // Que tipos de evento incluir. Sem `filtros.tipo`, incluem-se os três
   // (comportamento atual de agregação completa).
