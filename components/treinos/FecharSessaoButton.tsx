@@ -11,6 +11,10 @@ import { fecharSessao, reabrirSessao } from "@/lib/actions/treinos";
  * Alterna o estado aberto/fechado de uma sessão de treino. A ação é reversível,
  * pelo que não há confirmação (AlertDialog) — segue o padrão dos botões de ação
  * simples do detalhe do treino.
+ *
+ * Renderiza como ação principal no final do conteúdo da sessão: "Fechar sessão"
+ * usa a cor de ação primária (laranja) e "Reabrir sessão" a variante outline,
+ * ambos com alvo de toque ≥44px (size="lg" → 48px).
  */
 export function FecharSessaoButton({
   sessaoId,
@@ -37,7 +41,13 @@ export function FecharSessaoButton({
   }
 
   return (
-    <Button variant="outline" onClick={handleAlternar} disabled={pending}>
+    <Button
+      variant={fechado ? "outline" : "default"}
+      size="lg"
+      className="w-full sm:w-auto"
+      onClick={handleAlternar}
+      disabled={pending}
+    >
       {fechado ? (
         <>
           <LockOpen className="h-4 w-4" />

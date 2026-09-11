@@ -88,3 +88,15 @@ export function inicioDoDia(d: Date): Date {
 export function treinoConcluido(data: Date, agora: Date = new Date()): boolean {
   return new Date(data).getTime() < inicioDoDia(agora).getTime();
 }
+
+/**
+ * True se um treino já pode ser fechado/concluído pelo treinador — ou seja, o dia
+ * do treino é hoje ou anterior (`inicioDoDia(data) <= inicioDoDia(agora)`). Ao
+ * contrário de `treinoConcluido`, inclui o PRÓPRIO dia: se o treinador marcou
+ * presenças e validou tudo hoje, deve poder fechar a sessão hoje. Não permite
+ * fechar treinos futuros (ainda por acontecer). Helper puro para o gate do botão
+ * de fechar, mantendo `treinoConcluido` intacto para o tratamento visual.
+ */
+export function treinoFechavel(data: Date, agora: Date = new Date()): boolean {
+  return inicioDoDia(new Date(data)).getTime() <= inicioDoDia(agora).getTime();
+}

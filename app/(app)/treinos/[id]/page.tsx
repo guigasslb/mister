@@ -5,7 +5,7 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { EditarTreinoBotao } from "@/components/treinos/EditarTreinoBotao";
 import { ExportarTreinoPdfBotao } from "@/components/treinos/ExportarTreinoPdfBotao";
 import { FecharSessaoButton } from "@/components/treinos/FecharSessaoButton";
-import { treinoConcluido } from "@/lib/semana";
+import { treinoConcluido, treinoFechavel } from "@/lib/semana";
 import { obterSessao } from "@/lib/actions/treinos";
 import { listarExercicios } from "@/lib/actions/exercicios";
 import { listarSubcategorias } from "@/lib/actions/subcategorias";
@@ -89,6 +89,12 @@ export default async function DetalheSessaoPage({
   // consistente entre lista e detalhe). Muda o CTA para "Ver treino" e pede
   // confirmação ao editar.
   const concluido = treinoConcluido(s.data);
+
+  // O fecho da sessão é permitido no próprio dia (ou depois), não só a partir do
+  // dia seguinte: se o treinador validou presenças hoje, pode concluir hoje.
+  // Distinto de `concluido` (estritamente passado) para não afetar o tratamento
+  // visual nem os restantes botões.
+  const podeFechar = treinoFechavel(s.data);
 
   // §4.2.1: fallback ao snapshot quando o exercício original já não é visível (o
   // treinador saiu com o master editável) — sem "buracos". Resolvido uma vez e
@@ -197,7 +203,6 @@ export default async function DetalheSessaoPage({
         />
         <div className="flex items-center gap-2">
           <ExportarTreinoPdfBotao sessaoId={s.id} />
-          {concluido && <FecharSessaoButton sessaoId={s.id} fechado={s.fechado} />}
           <EditarTreinoBotao href={`/treinos/${s.id}/editar`} concluido={concluido} />
         </div>
       </div>
@@ -348,6 +353,20 @@ export default async function DetalheSessaoPage({
 
       {/* Melhoria 4.6 — notas sempre visíveis e editáveis inline. */}
       <NotasSessao sessaoId={s.id} notasIniciais={s.notas} />
+
+      {/* Concluir a sessão — ação principal no final do conteúdo (a seguir a
+          marcar presenças, exercícios, métricas e notas), não no topo.
+          Disponível no próprio dia (`podeFechar`), não só a partir do dia seguinte. */}
+      {podeFechar && (
+        <div className="flex flex-col gap-2 border-t border-cinza-100 pt-6 sm:items-end">
+          <FecharSessaoButton sessaoId={s.id} fechado={s.fechado} />
+          <p className="text-legenda text-cinza-600 sm:text-right">
+            {s.fechado
+              ? "Sessão fechada em modo só-leitura. Podes reabrir para editar."
+              : "Fecha a sessão quando terminares de registar presenças, métricas e notas."}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

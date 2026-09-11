@@ -8,6 +8,7 @@ import {
   semanaSobrepoePlaneamento,
   inicioDoDia,
   treinoConcluido,
+  treinoFechavel,
 } from "@/lib/semana";
 
 const d = (s: string) => new Date(`${s}T12:00:00`);
@@ -73,6 +74,19 @@ describe("lib/semana — helpers puros", () => {
     expect(treinoConcluido(new Date("2026-09-10T20:00:00"), agora)).toBe(false);
     // Amanhã → futuro, não concluído.
     expect(treinoConcluido(d("2026-09-11"), agora)).toBe(false);
+  });
+
+  it("treinoFechavel: permite fechar no próprio dia e no passado, mas não no futuro", () => {
+    const agora = d("2026-09-10"); // referência de "hoje"
+    // Ontem (qualquer hora) → fechável.
+    expect(treinoFechavel(d("2026-09-09"), agora)).toBe(true);
+    expect(treinoFechavel(new Date("2026-09-09T23:59:00"), agora)).toBe(true);
+    // Hoje (manhã ou noite) → fechável no próprio dia.
+    expect(treinoFechavel(new Date("2026-09-10T00:00:00"), agora)).toBe(true);
+    expect(treinoFechavel(new Date("2026-09-10T20:00:00"), agora)).toBe(true);
+    // Amanhã → futuro, não fechável.
+    expect(treinoFechavel(d("2026-09-11"), agora)).toBe(false);
+    expect(treinoFechavel(new Date("2026-09-11T00:00:00"), agora)).toBe(false);
   });
 });
 
