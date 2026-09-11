@@ -3,19 +3,31 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { obterClubeIdAtual } from "@/lib/epoca-context";
-import { exigirCapacidade } from "@/lib/permissoes";
+import { exigirCapacidade, podeLerEscalao } from "@/lib/permissoes";
 import { ok, erro, erroDeValidacao, type Resultado } from "@/lib/utils";
-import { metricaSchema } from "@/lib/schemas/metrica";
+import { metricaSchema, guardarMetricasSessaoSchema } from "@/lib/schemas/metrica";
 import type { MetricaConfig } from "@prisma/client";
 
 const PATH = "/definicoes/metricas";
 
-export async function listarMetricas(apenasAtivas = false): Promise<Resultado<MetricaConfig[]>> {
+/**
+ * Lista as métricas do clube. `contexto` filtra por âmbito de registo (§8.20):
+ * "JOGO" devolve métricas de jogo + ambos; "TREINO" devolve métricas de treino
+ * + ambos; omisso devolve todas.
+ */
+export async function listarMetricas(
+  apenasAtivas = false,
+  contexto?: "JOGO" | "TREINO",
+): Promise<Resultado<MetricaConfig[]>> {
   const clubeId = await obterClubeIdAtual();
   if (!clubeId) return erro("Não autenticado");
 
   const metricas = await prisma.metricaConfig.findMany({
-    where: { clubeId, ...(apenasAtivas ? { ativa: true } : {}) },
+    where: {
+      clubeId,
+      ...(apenasAtivas ? { ativa: true } : {}),
+      ...(contexto ? { contexto: { in: [contexto, "AMBOS"] } } : {}),
+    },
     orderBy: { ordem: "asc" },
   });
   return ok(metricas);
@@ -77,5 +89,122 @@ export async function moverMetrica(
     prisma.metricaConfig.update({ where: { id: todas[idxAdj].id }, data: { ordem: todas[idx].ordem } }),
   ]);
   revalidatePath(PATH);
+  return ok(undefined);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Métricas de sessão de treino (§8.20)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Métrica de treino ativa + os valores já registados numa sessão. */
+export interface MetricasSessao {
+  metricas: MetricaConfig[];
+  /** valores[atletaId][metricaId] = valor. */
+  valores: Record<string, Record<string, number>>;
+}
+
+/**
+ * Métricas de treino ativas (contexto TREINO/AMBOS) do clube e os valores já
+ * registados na sessão indicada. Exige leitura do escalão da sessão (§8.20).
+ */
+export async function listarMetricasSessao(
+  sessaoId: string,
+): Promise<Resultado<MetricasSessao>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const sessao = await prisma.sessao.findFirst({
+    where: { id: sessaoId, escalao: { clubeId } },
+    select: { id: true, escalaoId: true },
+  });
+  if (!sessao) return erro("Sessão não encontrada");
+  if (!(await podeLerEscalao(sessao.escalaoId))) return erro("Sem permissão neste escalão");
+
+  const [metricas, valores] = await Promise.all([
+    prisma.metricaConfig.findMany({
+      where: { clubeId, ativa: true, contexto: { in: ["TREINO", "AMBOS"] } },
+      orderBy: { ordem: "asc" },
+    }),
+    prisma.valorMetricaSessao.findMany({
+      where: { sessaoId: sessao.id },
+      select: { atletaId: true, metricaId: true, valor: true },
+    }),
+  ]);
+
+  const mapa: Record<string, Record<string, number>> = {};
+  for (const v of valores) {
+    (mapa[v.atletaId] ??= {})[v.metricaId] = v.valor;
+  }
+
+  return ok({ metricas, valores: mapa });
+}
+
+/**
+ * Grava (upsert) os valores de métricas de treino de uma sessão, por atleta.
+ * Só grava valores de métricas de treino ativas do clube; um valor `null` (ou
+ * ausente) remove o registo. Exige TREINOS_GERIR no escalão da sessão (§8.20).
+ */
+export async function guardarMetricasSessao(
+  sessaoId: string,
+  dados: unknown,
+): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const sessao = await prisma.sessao.findFirst({
+    where: { id: sessaoId, escalao: { clubeId } },
+    select: { id: true, escalaoId: true, fechado: true },
+  });
+  if (!sessao) return erro("Sessão não encontrada");
+  if (sessao.fechado) return erro("Sessão fechada");
+
+  const perm = await exigirCapacidade("TREINOS_GERIR", sessao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const parsed = guardarMetricasSessaoSchema.safeParse(dados);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  // Só métricas de treino ativas do clube são aceites.
+  const metricasValidas = await prisma.metricaConfig.findMany({
+    where: { clubeId, ativa: true, contexto: { in: ["TREINO", "AMBOS"] } },
+    select: { id: true },
+  });
+  const idsValidos = new Set(metricasValidas.map((m) => m.id));
+
+  // Só atletas do clube.
+  const idsAtletas = parsed.data.map((d) => d.atletaId);
+  const atletas = await prisma.atleta.findMany({
+    where: { id: { in: idsAtletas }, clubeId },
+    select: { id: true },
+  });
+  const idsAtletasValidos = new Set(atletas.map((a) => a.id));
+
+  const linhasValidas = parsed.data.filter((l) => idsAtletasValidos.has(l.atletaId));
+  const atletasSubmetidos = linhasValidas.map((l) => l.atletaId);
+
+  const novos = linhasValidas.flatMap((linha) =>
+    linha.valores
+      .filter((v) => idsValidos.has(v.metricaId))
+      .map((v) => ({
+        metricaId: v.metricaId,
+        sessaoId: sessao.id,
+        atletaId: linha.atletaId,
+        valor: v.valor,
+      })),
+  );
+
+  // Delete-then-create pelos atletas submetidos: valores omitidos são removidos
+  // (o treinador limpou o campo). Só toca nos atletas enviados nesta gravação.
+  await prisma.$transaction([
+    prisma.valorMetricaSessao.deleteMany({
+      where: { sessaoId: sessao.id, atletaId: { in: atletasSubmetidos } },
+    }),
+    ...(novos.length > 0
+      ? [prisma.valorMetricaSessao.createMany({ data: novos })]
+      : []),
+  ]);
+
+  revalidatePath("/treinos");
+  revalidatePath(`/treinos/${sessao.id}`);
   return ok(undefined);
 }

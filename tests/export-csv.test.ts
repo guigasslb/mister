@@ -36,6 +36,7 @@ vi.mock("@/lib/db", () => ({
     habilidade: { count: vi.fn() },
     progressoHabilidade: { findMany: vi.fn() },
     valorMetrica: { findMany: vi.fn() },
+    valorMetricaSessao: { findMany: vi.fn() },
   },
 }));
 
@@ -87,6 +88,7 @@ beforeEach(() => {
   (obterMembroAtual as ReturnType<typeof vi.fn>).mockResolvedValue(membroComRelatorios());
   p.epoca.findFirst.mockResolvedValue({ id: EPOCA, nome: "2025/26" });
   p.valorMetrica.findMany.mockResolvedValue([]);
+  p.valorMetricaSessao.findMany.mockResolvedValue([]);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

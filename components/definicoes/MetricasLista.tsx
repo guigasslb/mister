@@ -23,25 +23,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { criarMetrica, alternarMetrica, moverMetrica } from "@/lib/actions/metricas";
-import { LABEL_TIPO } from "@/lib/schemas/metrica";
-import type { MetricaConfig, TipoMetrica } from "@prisma/client";
+import { LABEL_TIPO, LABEL_CONTEXTO } from "@/lib/schemas/metrica";
+import type { MetricaConfig, TipoMetrica, ContextoMetrica } from "@prisma/client";
 
 function CriarMetricaDialog() {
   const [aberto, setAberto] = useState(false);
   const [pending, startTransition] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
   const [tipo, setTipo] = useState<TipoMetrica>("NUMERO");
+  const [contexto, setContexto] = useState<ContextoMetrica>("JOGO");
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     setErro(null);
     startTransition(async () => {
-      const res = await criarMetrica({ nome: fd.get("nome"), tipo });
+      const res = await criarMetrica({ nome: fd.get("nome"), tipo, contexto });
       if (res.sucesso) {
         toast.success("Métrica criada");
         setAberto(false);
         setTipo("NUMERO");
+        setContexto("JOGO");
       } else {
         setErro(res.erro);
       }
@@ -76,6 +78,21 @@ function CriarMetricaDialog() {
                 {(Object.keys(LABEL_TIPO) as TipoMetrica[]).map((t) => (
                   <SelectItem key={t} value={t}>
                     {LABEL_TIPO[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Onde se regista</Label>
+            <Select value={contexto} onValueChange={(v) => setContexto(v as ContextoMetrica)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(LABEL_CONTEXTO) as ContextoMetrica[]).map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {LABEL_CONTEXTO[c]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -121,7 +138,8 @@ export function MetricasLista({
         <div>
           <h1>Métricas</h1>
           <p className="mt-1 text-corpo-sec text-cinza-600">
-            As métricas ativas aparecem na grelha de estatísticas dos jogos.
+            As métricas ativas aparecem na grelha de estatísticas dos jogos e/ou
+            treinos, conforme o contexto escolhido.
           </p>
         </div>
         {podeGerir && <CriarMetricaDialog />}
@@ -163,7 +181,9 @@ export function MetricasLista({
               {/* Dados */}
               <div className="flex-1">
                 <p className="text-corpo font-semibold text-cinza-900">{m.nome}</p>
-                <p className="text-legenda text-cinza-600">{LABEL_TIPO[m.tipo]}</p>
+                <p className="text-legenda text-cinza-600">
+                  {LABEL_TIPO[m.tipo]} · {LABEL_CONTEXTO[m.contexto]}
+                </p>
               </div>
 
               {/* Estado */}

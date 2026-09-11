@@ -68,6 +68,8 @@ export function PainelAtleta({
     // Snapshots de relatórios antigos (pré-agregação de métricas) não têm o
     // campo — o default garante zero regressão na vista pública.
     metricas = [],
+    // Métricas de treino (§8.20); default para snapshots antigos.
+    metricasTreino = [],
     // Cartões acumulados (disciplina — §3.7); default para snapshots antigos.
     cartoes = { amarelos: 0, vermelhos: 0 },
   } = dados;
@@ -398,6 +400,35 @@ export function PainelAtleta({
           </ul>
         )}
       </div>
+
+      {/* Métricas de treino (§8.20) — pontuações agregadas por sessão. */}
+      {metricasTreino.length > 0 && (
+        <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
+          <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
+            Métricas de treino
+          </p>
+          <ul className="divide-y divide-cinza-100">
+            {metricasTreino.map((m) => (
+              <li
+                key={m.nome}
+                className="flex items-center justify-between gap-3 py-2.5"
+              >
+                <span className="min-w-0 truncate text-corpo text-cinza-900">
+                  {m.nome}
+                </span>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-titulo-seccao font-bold text-primary">
+                    {n1(m.media)}
+                  </span>
+                  <span className="text-legenda text-cinza-500">
+                    média · {m.jogos} sessões
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Evolução por jogo */}
       {temEvolucaoJogos && (

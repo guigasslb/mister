@@ -158,6 +158,7 @@ vi.mock("@/lib/db", () => ({
     atletaEscalao: { count: vi.fn() },
     estatisticaAtleta: { upsert: vi.fn(), findMany: vi.fn() },
     valorMetrica: { upsert: vi.fn(), findMany: vi.fn() },
+    valorMetricaSessao: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
     metricaConfig: { findMany: vi.fn() },
     atleta: { findFirst: vi.fn() },
     sessao: { findMany: vi.fn() },
@@ -214,6 +215,7 @@ beforeEach(() => {
   p.estatisticaAtleta.upsert.mockResolvedValue({ id: "estat1" });
   p.metricaConfig.findMany.mockResolvedValue([]);
   p.valorMetrica.findMany.mockResolvedValue([]);
+  p.valorMetricaSessao.findMany.mockResolvedValue([]);
   p.$transaction.mockImplementation((arg: unknown) =>
     typeof arg === "function"
       ? (arg as (tx: unknown) => unknown)(prisma)

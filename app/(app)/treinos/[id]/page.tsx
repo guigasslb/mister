@@ -29,6 +29,8 @@ import {
 } from "@/lib/actions/mano-a-mano";
 import { nomeParticipanteMatch } from "@/lib/mano-a-mano-ui";
 import { BlocoManoManoSessao } from "@/components/mano-a-mano/BlocoManoManoSessao";
+import { listarMetricasSessao } from "@/lib/actions/metricas";
+import { GestorMetricasSessao } from "@/components/treinos/GestorMetricasSessao";
 
 function formatarDataHora(data: Date): string {
   return formatarDataHoraLisboa(data, {
@@ -53,12 +55,14 @@ export default async function DetalheSessaoPage({
 
   const s = res.dados;
 
-  const [resExercicios, resAtletas, epoca, resSubcategorias] = await Promise.all([
-    listarExercicios(),
-    listarAtletas(s.escalaoId),
-    obterEpocaAtiva(),
-    listarSubcategorias(),
-  ]);
+  const [resExercicios, resAtletas, epoca, resSubcategorias, resMetricas] =
+    await Promise.all([
+      listarExercicios(),
+      listarAtletas(s.escalaoId),
+      obterEpocaAtiva(),
+      listarSubcategorias(),
+      listarMetricasSessao(id),
+    ]);
 
   const biblioteca = resExercicios.sucesso ? resExercicios.dados : [];
   const atletas = resAtletas.sucesso ? resAtletas.dados : [];
@@ -166,6 +170,20 @@ export default async function DetalheSessaoPage({
   const presentesAtletaIds = s.presencas
     .filter((p) => p.estado === "PRESENTE" || p.estado === "ATRASADO")
     .map((p) => p.atletaId);
+
+  // §8.20 — métricas de treino + valores já registados; grelha só para presentes.
+  const metricasTreino = resMetricas.sucesso
+    ? resMetricas.dados.metricas.map((m) => ({ id: m.id, nome: m.nome, tipo: m.tipo }))
+    : [];
+  const valoresMetricasIniciais = resMetricas.sucesso ? resMetricas.dados.valores : {};
+  const presentesSet = new Set(presentesAtletaIds);
+  const atletasPresentes = atletas
+    .filter((a) => presentesSet.has(a.id))
+    .map((a) => ({
+      id: a.id,
+      nome: a.nome,
+      numero: a.participacaoContexto?.numero ?? s.numeroPorAtleta[a.id] ?? null,
+    }));
 
   return (
     <div className="space-y-6">
@@ -315,6 +333,17 @@ export default async function DetalheSessaoPage({
         <div id="carga-sessao">
           <RegistoRpeSessao sessaoId={s.id} rpeInicial={s.rpeSessao} />
         </div>
+      )}
+
+      {/* §8.20 — métricas de treino (empenho/desempenho) por atleta presente. */}
+      {metricasTreino.length > 0 && (
+        <GestorMetricasSessao
+          sessaoId={s.id}
+          metricas={metricasTreino}
+          atletas={atletasPresentes}
+          valoresIniciais={valoresMetricasIniciais}
+          fechado={s.fechado}
+        />
       )}
 
       {/* Melhoria 4.6 — notas sempre visíveis e editáveis inline. */}

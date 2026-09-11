@@ -555,6 +555,8 @@ model Atleta {
   rpesAtletas           RpeAtleta[]
   // Mano-a-Mano (§3.16): participações do atleta em competições de duelos 1×1.
   participacoesManoMano ParticipanteManoMano[]
+  // §8.20: valores de métricas configuráveis registados por sessão de treino.
+  valoresMetricasSessao ValorMetricaSessao[]
 
   @@index([clubeId])
   @@index([clubeId, ativo])
@@ -989,6 +991,8 @@ model Sessao {
   rpesAtletas    RpeAtleta[]
   // Mano-a-Mano (§3.16): duelos 1×1 disputados no âmbito desta sessão de treino.
   duelosManoMano MatchManoMano[]
+  // §8.20: valores de métricas configuráveis (empenho, desempenho, …) por atleta nesta sessão.
+  valoresMetricas ValorMetricaSessao[]
 
   fechado Boolean @default(false) // false = aberto (por fechar); true = fechado pelo treinador
 
@@ -1431,17 +1435,20 @@ enum BlocoTempo {
 // ─────────────────────────────────────────────
 
 model MetricaConfig {
-  id         String      @id @default(cuid())
+  id         String          @id @default(cuid())
   nome       String
-  tipo       TipoMetrica @default(NUMERO)
-  ativa      Boolean     @default(true)
-  ordem      Int         @default(0)
+  tipo       TipoMetrica     @default(NUMERO)
+  ativa      Boolean         @default(true)
+  ordem      Int             @default(0)
+  // §8.20: contexto onde a métrica é registada — jogo, treino, ou ambos.
+  contexto   ContextoMetrica @default(JOGO)
   // 🔁 v7 (§3.7): métrica pode ser específica de uma modalidade; null = ambas.
   modalidade Modalidade?
   clubeId    String
-  clube      Clube       @relation(fields: [clubeId], references: [id])
+  clube      Clube           @relation(fields: [clubeId], references: [id])
 
-  valores ValorMetrica[]
+  valores       ValorMetrica[]
+  valoresSessao ValorMetricaSessao[]
 
   @@index([clubeId])
 }
@@ -1450,6 +1457,14 @@ enum TipoMetrica {
   NUMERO
   BOOLEANO
   ESCALA // 1 a 5
+}
+
+// §8.20: onde a métrica configurável é registada. JOGO = grelha de estatísticas
+// do jogo; TREINO = grelha da sessão de treino; AMBOS = aparece nos dois sítios.
+enum ContextoMetrica {
+  JOGO
+  TREINO
+  AMBOS
 }
 
 model ValorMetrica {
@@ -1462,6 +1477,24 @@ model ValorMetrica {
 
   @@unique([metricaId, estatisticaId])
   @@index([estatisticaId])
+}
+
+// §8.20: valor de uma métrica configurável para um atleta numa sessão de treino
+// (ex.: empenho, desempenho). Análogo a ValorMetrica mas ligado à Sessao.
+model ValorMetricaSessao {
+  id        String        @id @default(cuid())
+  metricaId String
+  metrica   MetricaConfig @relation(fields: [metricaId], references: [id], onDelete: Cascade)
+  sessaoId  String
+  sessao    Sessao        @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
+  atletaId  String
+  atleta    Atleta        @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+  valor     Int
+
+  @@unique([metricaId, sessaoId, atletaId])
+  @@index([sessaoId])
+  @@index([atletaId])
+  @@index([metricaId])
 }
 
 // ─────────────────────────────────────────────

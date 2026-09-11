@@ -32,6 +32,7 @@ vi.mock("@/lib/db", () => ({
     habilidade: { count: vi.fn() },
     progressoHabilidade: { findMany: vi.fn() },
     valorMetrica: { findMany: vi.fn() },
+    valorMetricaSessao: { findMany: vi.fn() },
     relatorioPartilhado: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -111,6 +112,7 @@ beforeEach(() => {
   p.epoca.findFirst.mockResolvedValue({ id: EPOCA, nome: "2025/26" });
   // Métricas configuráveis: sem valores por omissão (cada teste pode sobrepor).
   p.valorMetrica.findMany.mockResolvedValue([]);
+  p.valorMetricaSessao.findMany.mockResolvedValue([]);
   // Participantes e convocatórias do escalão: vazios por omissão (cada teste sobrepõe).
   p.atletaEscalao.findMany.mockResolvedValue([]);
   p.convocatoria.groupBy.mockResolvedValue([]);

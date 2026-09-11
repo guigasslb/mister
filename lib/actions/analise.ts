@@ -291,6 +291,8 @@ export interface AnaliticoAtleta {
   comparacaoEquipa: ComparacaoEquipa | null;
   /** Métricas configuráveis do clube agregadas para o atleta (default `[]`). */
   metricas: MetricaAgregadaAtleta[];
+  /** Métricas de treino (§8.20) agregadas por sessão ao longo da época (default `[]`). */
+  metricasTreino: MetricaAgregadaAtleta[];
   /** Cartões acumulados na época (disciplina — §3.7; default `{0,0}`). */
   cartoes: CartoesAcumulados;
 }
@@ -428,6 +430,7 @@ export async function obterAnaliticoAtleta(
     totalHabilidades,
     progressos,
     valoresMetricas,
+    valoresMetricasTreino,
   ] = await Promise.all([
       prisma.convocatoria.count({
         where: { convocado: true, atletaId, jogo: filtroJogo },
@@ -481,6 +484,14 @@ export async function obterAnaliticoAtleta(
       // Métricas configuráveis registadas por jogo (bíblia §8.14) — surgem agregadas.
       prisma.valorMetrica.findMany({
         where: { estatistica: { atletaId, jogo: filtroJogo } },
+        select: {
+          valor: true,
+          metrica: { select: { id: true, nome: true, tipo: true, ordem: true } },
+        },
+      }),
+      // §8.20: métricas de treino registadas por sessão — agregadas ao longo da época.
+      prisma.valorMetricaSessao.findMany({
+        where: { atletaId, sessao: { epocaId: epoca.id, escalaoId: { in: escaloesCtx } } },
         select: {
           valor: true,
           metrica: { select: { id: true, nome: true, tipo: true, ordem: true } },
@@ -552,6 +563,7 @@ export async function obterAnaliticoAtleta(
     caderneta,
     comparacaoEquipa,
     metricas: agregarMetricasAtleta(valoresMetricas),
+    metricasTreino: agregarMetricasAtleta(valoresMetricasTreino),
     cartoes,
   });
 }
