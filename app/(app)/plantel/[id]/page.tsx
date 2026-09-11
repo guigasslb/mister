@@ -223,7 +223,7 @@ export default async function PerfilAtletaPage({
 
       {/* Cabeçalho de identidade */}
       <div className="flex items-center gap-5">
-        <AvatarAtleta nome={a.nome} tamanho="xl" fotoUrl={a.fotoUrl} />
+        <AvatarAtleta nome={a.nome} tamanho="xl" fotoUrl={a.fotoUrl} ampliar />
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="leading-tight">{a.nome}</h1>
