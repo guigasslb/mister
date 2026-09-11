@@ -32,10 +32,13 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
-  // Os relatórios de analíticos (Dossier do Treinador) são gerados como HTML
-  // imprimível no route handler `/api/pdf` (o browser converte em PDF via
-  // "Guardar como PDF"), sem motor nativo/WASM — 100% compatível com o runtime
-  // serverless da Vercel, logo sem necessidade de `serverExternalPackages`.
+  // `sharp` é um binário nativo (Linux x64 na Vercel). Marcá-lo como package
+  // externo do servidor impede o Next de o incluir no bundle e força o uso do
+  // binário nativo correto do runtime — sem isto o upload de foto (§8.5) falha
+  // em produção ("Não foi possível processar a imagem"). Os relatórios de
+  // analíticos (Dossier do Treinador) continuam a ser gerados como HTML
+  // imprimível no route handler `/api/pdf`, sem motor nativo/WASM.
+  serverExternalPackages: ["sharp"],
   experimental: {
     optimizePackageImports: ["lucide-react"],
     // Upload de foto do atleta (§8.5): o cliente comprime antes de enviar, mas o
