@@ -1,6 +1,5 @@
 /**
- * Seed do campeonato de Benjamins (época 2025/2026) para o treinador
- * `goncalo.pereira.1992@gmail.com`.
+ * Seed do campeonato de Benjamins. Email do utilizador via env SEED_USER_EMAIL.
  *
  * ESCREVE NA BD. Cria os 20 jogos de campeonato (modelo `Jogo`) do escalão
  * Benjamins do clube do utilizador, na sua época ativa.
@@ -23,7 +22,7 @@ import { PrismaClient, CasaFora, TipoJogo, type FormatoJogo } from "@prisma/clie
 
 const prisma = new PrismaClient();
 
-const EMAIL_ALVO = "goncalo.pereira.1992@gmail.com";
+const EMAIL_ALVO = process.env.SEED_USER_EMAIL ?? "";
 const HORA_JOGO_UTC = "10:00:00.000Z"; // hora convencional (dados de calendário sem hora)
 
 type LocalJogo = "CASA" | "FORA";
