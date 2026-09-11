@@ -15,6 +15,7 @@ vi.mock("@/lib/db", () => ({
     escalao: { create: vi.fn() },
     perfil: { create: vi.fn() },
     licenca: { create: vi.fn(), updateMany: vi.fn() },
+    carteira: { upsert: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -24,9 +25,19 @@ vi.mock("@/lib/biblioteca-arranque-instalar", () => ({
   instalarConteudoArranquePorModalidade: vi.fn(),
 }));
 
-import { criarClube } from "@/lib/actions/onboarding";
+// Email ao admin (§17.5): mockado para (a) assertar que é disparado no registo e
+// (b) não carregar a infra real (Resend/server-only) nos testes.
+vi.mock("@/lib/email/resend", () => ({ enviarEmail: vi.fn() }));
+vi.mock("@/lib/email/templates/novo-registo", () => ({
+  emailNovoRegisto: vi.fn(() => ({ assunto: "assunto", html: "html", texto: "texto" })),
+  obterEmailAdmin: vi.fn(() => "admin@mister.app"),
+}));
+
+import { Prisma } from "@prisma/client";
+import { criarClube, registar } from "@/lib/actions/onboarding";
 import { instalarConteudoArranquePorModalidade } from "@/lib/biblioteca-arranque-instalar";
-import { auth } from "@/lib/auth";
+import { enviarEmail } from "@/lib/email/resend";
+import { auth, signIn } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 const mocked = <T,>(fn: T) =>
@@ -60,6 +71,7 @@ beforeEach(() => {
   mocked(prisma.membroClube.create).mockResolvedValue({ id: "membro1" });
   mocked(prisma.licenca.create).mockResolvedValue({ id: "licenca1" });
   mocked(prisma.licenca.updateMany).mockResolvedValue({ count: 1 });
+  mocked(prisma.carteira.upsert).mockResolvedValue({ id: "carteira1", utilizadorId: "user1" });
   mocked(instalarConteudoArranquePorModalidade).mockResolvedValue({
     subcategorias: 0,
     exercicios: 0,
@@ -196,14 +208,16 @@ describe("criarClube — semeia época ativa + secção inicial (P1.6)", () => {
     expect(instalarConteudoArranquePorModalidade).toHaveBeenCalledWith("clube1", "FUTEBOL");
   });
 
-  it("regista a modalidade contratada na licença (se existir)", async () => {
+  it("NÃO grava modalidade na licença de Clube (fica null — §3.11/§17.1)", async () => {
     await criarClube({ nome: "Juventude SC", modalidade: "FUTEBOL", tier: "MEDIO" });
-    const arg = calls(prisma.licenca.updateMany)[0][0] as {
-      where: { clubeId: string };
-      data: { modalidade: string };
+    // A modalidade do clube deriva das secções, não da licença: a licença de Clube
+    // fica com modalidade null e nenhum updateMany de modalidade é disparado.
+    const arg = calls(prisma.licenca.create)[0][0] as {
+      data: { tipo: string; modalidade: string | null };
     };
-    expect(arg.where.clubeId).toBe("clube1");
-    expect(arg.data.modalidade).toBe("FUTEBOL");
+    expect(arg.data.tipo).toBe("CLUBE");
+    expect(arg.data.modalidade).toBeNull();
+    expect(prisma.licenca.updateMany).not.toHaveBeenCalled();
   });
 
   it("cria a licença PENDENTE com o tier escolhido no onboarding (§8.1 / §17.1)", async () => {
@@ -252,5 +266,242 @@ describe("criarClube — semeia época ativa + secção inicial (P1.6)", () => {
     const r = await criarClube({ nome: "Juventude SC", tier: "PEQUENO" });
     expect(r.sucesso).toBe(true);
     if (r.sucesso) expect(r.dados.clubeId).toBe("clube1");
+  });
+});
+
+// §8.1 / §17.5 — registo consolidado: conta + clube + licença PENDENTE numa só
+// transação (atómico). Não faz signIn (o formulário autentica a seguir).
+describe("registar — cria conta + clube + licença PENDENTE atomicamente (§8.1)", () => {
+  const REGISTO_VALIDO = {
+    nome: "Ana Treinadora",
+    email: "ana@clube.pt",
+    password: "password123",
+    nomeClube: "Juventude SC",
+    tier: "MEDIO" as const,
+    modalidade: "FUTEBOL" as const,
+  };
+
+  beforeEach(() => {
+    // Email livre (pré-check não encontra conta) e utilizador criado na transação.
+    mocked(prisma.utilizador.findUnique).mockResolvedValue(null);
+    mocked(prisma.utilizador.create).mockResolvedValue({ id: "user1" });
+  });
+
+  it("cria conta, clube, secção, época, membro e licença numa única transação", async () => {
+    const r = await registar(REGISTO_VALIDO);
+
+    expect(r.sucesso).toBe(true);
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(prisma.utilizador.create).toHaveBeenCalledOnce();
+    expect(prisma.clube.create).toHaveBeenCalledOnce();
+    expect(prisma.seccao.create).toHaveBeenCalledOnce();
+    expect(prisma.epoca.create).toHaveBeenCalledOnce();
+    expect(prisma.membroClube.create).toHaveBeenCalledOnce();
+    expect(prisma.licenca.create).toHaveBeenCalledOnce();
+    // Sem escalões semeados (o wizard trata disso).
+    expect(prisma.escalao.create).not.toHaveBeenCalled();
+  });
+
+  it("faz o hash bcrypt da password (nunca a guarda em claro)", async () => {
+    await registar(REGISTO_VALIDO);
+    const arg = calls(prisma.utilizador.create)[0][0] as {
+      data: { nome: string; email: string; passwordHash: string };
+    };
+    expect(arg.data.nome).toBe("Ana Treinadora");
+    expect(arg.data.email).toBe("ana@clube.pt");
+    expect(typeof arg.data.passwordHash).toBe("string");
+    expect(arg.data.passwordHash).not.toBe("password123");
+  });
+
+  it("torna o utilizador RECÉM-CRIADO o membro admin (não a sessão)", async () => {
+    await registar(REGISTO_VALIDO);
+    const arg = calls(prisma.membroClube.create)[0][0] as {
+      data: { utilizadorId: string; estado: string };
+    };
+    expect(arg.data.utilizadorId).toBe("user1");
+    expect(arg.data.estado).toBe("ATIVO");
+  });
+
+  it("cria a secção da modalidade escolhida e a licença PENDENTE do tier", async () => {
+    await registar(REGISTO_VALIDO);
+
+    const secArg = calls(prisma.seccao.create)[0][0] as {
+      data: { modalidade: string; nome: string };
+    };
+    expect(secArg.data).toMatchObject({ modalidade: "FUTEBOL", nome: "Futebol" });
+
+    const licArg = calls(prisma.licenca.create)[0][0] as {
+      data: { tipo: string; tier: string; estado: string; clubeId: string };
+    };
+    expect(licArg.data).toMatchObject({
+      tipo: "CLUBE",
+      tier: "MEDIO",
+      estado: "PENDENTE",
+      clubeId: "clube1",
+    });
+  });
+
+  it("NÃO faz signIn dentro da action (auth fica com o formulário)", async () => {
+    await registar(REGISTO_VALIDO);
+    expect(signIn).not.toHaveBeenCalled();
+  });
+
+  it("notifica o admin por email do novo registo (§17.5)", async () => {
+    await registar(REGISTO_VALIDO);
+    expect(enviarEmail).toHaveBeenCalledOnce();
+    const arg = calls(enviarEmail)[0][0] as { para: string };
+    expect(arg.para).toBe("admin@mister.app");
+  });
+
+  it("uma falha no email do admin NÃO parte o registo", async () => {
+    mocked(enviarEmail).mockImplementation(() => {
+      throw new Error("resend down");
+    });
+    const r = await registar(REGISTO_VALIDO);
+    expect(r.sucesso).toBe(true);
+  });
+
+  it("rejeita input inválido (modalidade em falta) sem tocar na base de dados", async () => {
+    const r = await registar({
+      nome: REGISTO_VALIDO.nome,
+      email: REGISTO_VALIDO.email,
+      password: REGISTO_VALIDO.password,
+      nomeClube: REGISTO_VALIDO.nomeClube,
+      tier: REGISTO_VALIDO.tier,
+    });
+    expect(r.sucesso).toBe(false);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejeita email já existente no pré-check (sem abrir transação)", async () => {
+    mocked(prisma.utilizador.findUnique).mockResolvedValue({ id: "existente" });
+    const r = await registar(REGISTO_VALIDO);
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/email/i);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("corrida TOCTOU no email (P2002 na transação) → erro limpo, sem propagar", async () => {
+    mocked(prisma.$transaction).mockImplementation(() => {
+      throw new Prisma.PrismaClientKnownRequestError("unique", {
+        code: "P2002",
+        clientVersion: "test",
+      });
+    });
+    const r = await registar(REGISTO_VALIDO);
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/email/i);
+  });
+});
+
+// §3.11 / §17.1 (Fase 4) — modo Individual materializado no modelo: clube técnico
+// (clubeTecnico=true), licença titulada pela PESSOA (utilizadorId), carteira criada
+// e UMA única secção. O ramo Clube não regride (clubeTecnico=false, licença no clube,
+// modalidade null).
+describe("registar/criarClube — ramo Individual (§3.11)", () => {
+  const INDIVIDUAL_VALIDO = {
+    nome: "Ana Treinadora",
+    email: "ana@clube.pt",
+    password: "password123",
+    nomeClube: "Escola do Ana",
+    tier: "INDIVIDUAL" as const,
+    modalidade: "FUTSAL" as const,
+  };
+
+  beforeEach(() => {
+    // Registo: email livre e utilizador criado com id "user1" na transação.
+    mocked(prisma.utilizador.findUnique).mockResolvedValue(null);
+    mocked(prisma.utilizador.create).mockResolvedValue({ id: "user1" });
+  });
+
+  it("cria o clube com clubeTecnico=true (single source of truth do modo Individual)", async () => {
+    const r = await registar(INDIVIDUAL_VALIDO);
+    expect(r.sucesso).toBe(true);
+
+    const arg = calls(prisma.clube.create)[0][0] as { data: { clubeTecnico: boolean } };
+    expect(arg.data.clubeTecnico).toBe(true);
+  });
+
+  it("cria a licença titulada pela PESSOA (utilizadorId), tipo INDIVIDUAL e modalidade registada", async () => {
+    await registar(INDIVIDUAL_VALIDO);
+
+    const arg = calls(prisma.licenca.create)[0][0] as {
+      data: {
+        tipo: string;
+        tier: string | null;
+        estado: string;
+        utilizadorId?: string;
+        clubeId?: string;
+        modalidade: string | null;
+      };
+    };
+    expect(arg.data.tipo).toBe("INDIVIDUAL");
+    expect(arg.data.tier).toBeNull();
+    expect(arg.data.estado).toBe("PENDENTE");
+    // Titular = utilizadorId; NUNCA clubeId (§3.11 — titular exclusivo).
+    expect(arg.data.utilizadorId).toBe("user1");
+    expect(arg.data).not.toHaveProperty("clubeId");
+    // A modalidade contratada fica registada na licença Individual.
+    expect(arg.data.modalidade).toBe("FUTSAL");
+  });
+
+  it("cria a Carteira do utilizador na mesma transação", async () => {
+    await registar(INDIVIDUAL_VALIDO);
+
+    expect(prisma.carteira.upsert).toHaveBeenCalledOnce();
+    const arg = calls(prisma.carteira.upsert)[0][0] as {
+      where: { utilizadorId: string };
+      create: { utilizadorId: string };
+    };
+    expect(arg.where.utilizadorId).toBe("user1");
+    expect(arg.create.utilizadorId).toBe("user1");
+  });
+
+  it("cria UMA única secção, da modalidade escolhida", async () => {
+    await registar(INDIVIDUAL_VALIDO);
+
+    expect(prisma.seccao.create).toHaveBeenCalledOnce();
+    const arg = calls(prisma.seccao.create)[0][0] as {
+      data: { modalidade: string; nome: string };
+    };
+    expect(arg.data).toMatchObject({ modalidade: "FUTSAL", nome: "Futsal" });
+  });
+
+  it("ramo Clube não regride: clubeTecnico=false, licença no clube, modalidade null, sem carteira", async () => {
+    const r = await registar({ ...INDIVIDUAL_VALIDO, tier: "MEDIO", modalidade: "FUTEBOL" });
+    expect(r.sucesso).toBe(true);
+
+    const clubeArg = calls(prisma.clube.create)[0][0] as { data: { clubeTecnico: boolean } };
+    expect(clubeArg.data.clubeTecnico).toBe(false);
+
+    const licArg = calls(prisma.licenca.create)[0][0] as {
+      data: { tipo: string; clubeId?: string; utilizadorId?: string; modalidade: string | null };
+    };
+    expect(licArg.data.tipo).toBe("CLUBE");
+    expect(licArg.data.clubeId).toBe("clube1");
+    expect(licArg.data).not.toHaveProperty("utilizadorId");
+    expect(licArg.data.modalidade).toBeNull();
+
+    // A carteira NÃO é materializada no ramo Clube (é um artefacto do modo Individual).
+    expect(prisma.carteira.upsert).not.toHaveBeenCalled();
+  });
+
+  it("via criarClube (utilizador autenticado) também materializa o modo Individual", async () => {
+    // criarClube valida que o utilizador da sessão existe (o beforeEach deste bloco
+    // deixa findUnique a null para o pré-check de email do registo — repor aqui).
+    mocked(prisma.utilizador.findUnique).mockResolvedValue({ id: "user1" });
+
+    const r = await criarClube({ nome: "Escola do Ana", tier: "INDIVIDUAL", modalidade: "FUTSAL" });
+    expect(r.sucesso).toBe(true);
+
+    const clubeArg = calls(prisma.clube.create)[0][0] as { data: { clubeTecnico: boolean } };
+    expect(clubeArg.data.clubeTecnico).toBe(true);
+    // Titular da licença = a sessão autenticada ("user1").
+    const licArg = calls(prisma.licenca.create)[0][0] as {
+      data: { utilizadorId?: string; clubeId?: string };
+    };
+    expect(licArg.data.utilizadorId).toBe("user1");
+    expect(licArg.data).not.toHaveProperty("clubeId");
+    expect(prisma.carteira.upsert).toHaveBeenCalledOnce();
   });
 });

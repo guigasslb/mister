@@ -18,6 +18,18 @@ export const AlterarEstadoLicencaSchema = z.object({
 export type AlterarEstadoLicencaInput = z.infer<typeof AlterarEstadoLicencaSchema>;
 
 /**
+ * Ativação de uma licença após confirmação de pagamento (`PENDENTE → ATIVA`,
+ * §17.5 / §21.2). Ação dedicada — além de mudar o estado, define `dataFim`
+ * (se ainda não estiver definida) e notifica o titular por email (best-effort).
+ * Só precisa do identificador da licença; o estado alvo é sempre `ATIVA`.
+ */
+export const AtivarLicencaSchema = z.object({
+  licencaId: z.string().cuid("Licença inválida"),
+});
+
+export type AtivarLicencaInput = z.infer<typeof AtivarLicencaSchema>;
+
+/**
  * Edição da data de fim de uma licença. `null` = sem expiração (licença
  * perpétua/aberta).
  */

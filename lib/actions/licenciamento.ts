@@ -1,10 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { obterMembroAtual } from "@/lib/permissoes";
-import type { Capacidade } from "@/lib/permissoes-catalogo";
-import { utilizadorIdSchema } from "@/lib/schemas/licenciamento";
 import { calcularPrecoLicenca, PRECO_INDIVIDUAL_CENTIMOS } from "@/lib/billing";
 import { ok, erro, type Resultado } from "@/lib/utils";
 import type { Carteira, Licenca, MovimentoCarteira, TierClube } from "@prisma/client";
@@ -12,8 +9,6 @@ import type { Carteira, Licenca, MovimentoCarteira, TierClube } from "@prisma/cl
 // F11 — Licenciamento, subscrição e carteira (§3.11 / §17).
 // Billing (Paddle) DEFERIDO: estas actions preparam a arquitetura de dados;
 // o enforcement de licença e o checkout entram numa fase posterior.
-
-const PATH = "/definicoes/licenca";
 
 /** Licença do clube com os dados da carteira do utilizador autenticado. */
 export type LicencaComCarteira = Licenca & { carteira: Carteira | null };
@@ -36,42 +31,29 @@ export type LicencaPendente = {
 };
 
 /**
- * Um membro é administrador se as suas capacidades efetivas incluírem a gestão
- * de utilizadores E de perfis (mesma definição usada em membros/utilizadores).
- */
-function eAdmin(capacidades: Capacidade[]): boolean {
-  return capacidades.includes("CLUBE_UTILIZADORES") && capacidades.includes("CLUBE_PERFIS");
-}
-
-/**
- * Cria a carteira do utilizador caso ainda não exista e devolve-a sempre.
- * Helper INTERNO (não é Server Action): não é exportado, pelo que a diretiva
- * "use server" deste ficheiro não o expõe ao cliente. É invocado por outras
- * actions do servidor (ex.: `criarLicencaDemostracao`).
- */
-async function garantirCarteira(utilizadorId: string): Promise<Carteira> {
-  const parsed = utilizadorIdSchema.parse(utilizadorId);
-
-  // upsert é idempotente: cria com saldo 0 na primeira vez, devolve a existente depois.
-  return prisma.carteira.upsert({
-    where: { utilizadorId: parsed },
-    update: {},
-    create: { utilizadorId: parsed, saldoCentimos: 0 },
-  });
-}
-
-/**
- * Licença ATIVA do clube do utilizador autenticado, com os dados da carteira
- * do próprio utilizador. Devolve `null` se não existir licença ativa
- * (ou se o utilizador não tiver clube ativo — modo individual sem clube).
+ * Licença ATIVA do utilizador autenticado, com os dados da sua carteira. Devolve
+ * `null` se não existir licença ativa.
+ *
+ * A licença ATIVA pode viver no clube (`clubeId`, licença de Clube) OU no próprio
+ * utilizador (`utilizadorId`, licença Individual suportada por um clube técnico —
+ * §3.11). O titular é exatamente um dos dois, mas resolvemos ambos para que
+ * Definições→Licença funcione em qualquer dos ramos. `clubeId` e `utilizadorId`
+ * são `@unique` em Licenca.
  */
 export async function obterLicenca(): Promise<Resultado<LicencaComCarteira | null>> {
   const ctx = await obterMembroAtual();
   if (!ctx) return erro("Sem acesso a este clube");
 
-  const licenca = await prisma.licenca.findFirst({
-    where: { clubeId: ctx.clube.id, estado: "ATIVA" },
-  });
+  const [licencaClube, licencaIndividual] = await Promise.all([
+    prisma.licenca.findUnique({ where: { clubeId: ctx.clube.id } }),
+    prisma.licenca.findUnique({ where: { utilizadorId: ctx.utilizadorId } }),
+  ]);
+
+  // Escolhe a licença efetivamente ATIVA (Clube tem precedência caso, por algum
+  // motivo, ambas existam ativas — cenário fora do modelo normal).
+  const licenca =
+    (licencaClube?.estado === "ATIVA" ? licencaClube : null) ??
+    (licencaIndividual?.estado === "ATIVA" ? licencaIndividual : null);
   if (!licenca) return ok(null);
 
   const carteira = await prisma.carteira.findUnique({
@@ -92,19 +74,29 @@ export async function obterLicenca(): Promise<Resultado<LicencaComCarteira | nul
  * devolve preço 0, por ser negociado — ver calcularPrecoLicenca).
  */
 export async function obterLicencaPendente(): Promise<LicencaPendente | null> {
-  // Segurança (IDOR): o clube deriva SEMPRE da sessão do utilizador autenticado,
+  // Segurança (IDOR): o titular deriva SEMPRE da sessão do utilizador autenticado,
   // nunca de um parâmetro externo — caso contrário qualquer utilizador poderia
-  // consultar o plano pendente de outro clube passando um clubeId arbitrário.
+  // consultar o plano pendente de outro clube/utilizador passando um id arbitrário.
   const ctx = await obterMembroAtual();
   if (!ctx) return null;
-  const clubeId = ctx.clube.id;
 
-  const licenca = await prisma.licenca.findUnique({
-    where: { clubeId },
-    select: { estado: true, tipo: true, tier: true, numSeccoes: true },
-  });
+  // O plano PENDENTE pode estar gravado na licença de Clube (clubeId) OU na
+  // licença Individual do próprio utilizador (utilizadorId) — §3.11. O titular é
+  // exatamente um dos dois, mas resolvemos ambos para que o paywall mostre o valor
+  // a transferir em qualquer dos ramos. `clubeId` e `utilizadorId` são @unique.
+  const campos = { estado: true, tipo: true, tier: true, numSeccoes: true } as const;
+  const [licencaClube, licencaIndividual] = await Promise.all([
+    prisma.licenca.findUnique({ where: { clubeId: ctx.clube.id }, select: campos }),
+    prisma.licenca.findUnique({ where: { utilizadorId: ctx.utilizadorId }, select: campos }),
+  ]);
 
-  if (!licenca || licenca.estado !== "PENDENTE") return null;
+  // Escolhe a licença que está efetivamente PENDENTE (Clube tem precedência caso,
+  // por algum motivo, ambas existam pendentes — cenário fora do modelo normal).
+  const licenca =
+    (licencaClube?.estado === "PENDENTE" ? licencaClube : null) ??
+    (licencaIndividual?.estado === "PENDENTE" ? licencaIndividual : null);
+
+  if (!licenca) return null;
 
   // Individual: preço fixo (uma modalidade), não usa o cálculo multi-secção.
   if (licenca.tipo === "INDIVIDUAL") {
@@ -143,43 +135,4 @@ export async function listarMovimentosCarteira(): Promise<Resultado<MovimentoCar
     orderBy: { criadoEm: "desc" },
   });
   return ok(movimentos);
-}
-
-/**
- * Cria uma licença de demonstração (tipo CLUBE, tier PEQUENO, estado ATIVA,
- * ciclo MENSAL) para o clube do utilizador autenticado, além de garantir a
- * carteira do próprio utilizador (saldo 0). Só administradores.
- *
- * Idempotente: se já existir licença para o clube, devolve-a sem a recriar.
- */
-export async function criarLicencaDemostracao(): Promise<Resultado<Licenca>> {
-  const ctx = await obterMembroAtual();
-  if (!ctx) return erro("Sem acesso a este clube");
-  if (!eAdmin(ctx.capacidades)) return erro("Sem permissão");
-
-  const clubeId = ctx.clube.id;
-
-  // Idempotência: clubeId é @unique em Licenca — no máximo uma por clube.
-  const existente = await prisma.licenca.findUnique({ where: { clubeId } });
-
-  // Garante a carteira do utilizador em qualquer caso (também idempotente).
-  await garantirCarteira(ctx.utilizadorId);
-
-  if (existente) {
-    revalidatePath(PATH);
-    return ok(existente);
-  }
-
-  const licenca = await prisma.licenca.create({
-    data: {
-      tipo: "CLUBE",
-      tier: "PEQUENO",
-      estado: "ATIVA",
-      ciclo: "MENSAL",
-      clubeId,
-    },
-  });
-
-  revalidatePath(PATH);
-  return ok(licenca);
 }

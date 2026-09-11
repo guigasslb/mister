@@ -28,6 +28,63 @@ const PASS_ADJUNTO = process.env.SEED_PASS_ADJUNTO || "futsal2026";
 const PASS_ADMIN = process.env.SEED_PASS_ADMIN;
 const BCRYPT_COST = 12;
 
+/**
+ * Garante — de forma idempotente e APENAS em desenvolvimento — que o clube de
+ * demonstração tem uma licença ATIVA (com `dataFim` a 1 ano) e uma carteira
+ * associada ao administrador. Sem isto, a guarda de licença (§3.11 / §17) atira
+ * o clube semeado para o paywall (/sem-licenca) e trava o desenvolvimento e os
+ * testes (chicken-and-egg: não há UI de billing para ativar em local).
+ *
+ * 🔒 Nunca em produção real: uma licença ATIVA "de borla" só pode existir num
+ * ambiente de desenvolvimento. O billing real (Paddle) é a única via legítima de
+ * ativar licenças em produção (§17.1/§17.2). Por isso guardamos atrás de
+ * NODE_ENV !== "production", à semelhança da proteção de passwords deste seed.
+ *
+ * Idempotente: usa `upsert` pela chave única do titular (`clubeId` na licença,
+ * `utilizadorId` na carteira), pelo que pode correr múltiplas vezes sem duplicar
+ * nem falhar — e reativa licenças de bases semeadas antes desta funcionalidade.
+ */
+async function garantirLicencaDemo(
+  clubeId: string,
+  adminUtilizadorId: string | null,
+): Promise<void> {
+  if (process.env.NODE_ENV === "production") {
+    console.log(
+      "Licença de demo NÃO semeada (NODE_ENV=production). Ativação apenas via billing real.",
+    );
+    return;
+  }
+
+  // Validade a 1 ano a contar de agora (trial/renovação válidos — ver lib/licenca.ts).
+  const dataFim = new Date();
+  dataFim.setFullYear(dataFim.getFullYear() + 1);
+
+  await prisma.licenca.upsert({
+    where: { clubeId },
+    update: { estado: "ATIVA", dataFim },
+    create: {
+      tipo: "CLUBE",
+      tier: "MEDIO",
+      estado: "ATIVA",
+      ciclo: "MENSAL",
+      clubeId,
+      dataFim,
+    },
+  });
+
+  // Carteira (wallet) do administrador do clube-demo. Modelada por utilizador, não
+  // por clube; só a criamos se o admin existir. Saldo zero (sem crédito de arranque).
+  if (adminUtilizadorId) {
+    await prisma.carteira.upsert({
+      where: { utilizadorId: adminUtilizadorId },
+      update: {},
+      create: { utilizadorId: adminUtilizadorId, saldoCentimos: 0 },
+    });
+  }
+
+  console.log("Licença de demonstração ATIVA garantida (dev-only) + carteira do admin.");
+}
+
 async function main() {
   // Utilizador admin de plataforma (backoffice /admin via `Utilizador.isAdmin`
   // na BD, independente de qualquer papel de clube). Upsert idempotente: corre
@@ -49,6 +106,14 @@ async function main() {
     where: { nome: "Juventude Sport Clube" },
   });
   if (jaExiste) {
+    // Mesmo com o clube já semeado, garante (dev-only, idempotente) a licença
+    // ATIVA + carteira de demonstração. Desbloqueia bases semeadas ANTES desta
+    // funcionalidade existir, que de outro modo ficariam presas no paywall.
+    const goncaloExistente = await prisma.utilizador.findUnique({
+      where: { email: "goncalo@jsc.pt" },
+      select: { id: true },
+    });
+    await garantirLicencaDemo(jaExiste.id, goncaloExistente?.id ?? null);
     console.log("Seed já aplicado (clube existente). A sair.");
     return;
   }
@@ -132,6 +197,11 @@ async function main() {
       atribuicoes: { create: [{ escalaoId: benjamins.id }] },
     },
   });
+
+  // 5.1 Licença ATIVA de demonstração + carteira (dev-only, idempotente).
+  // Necessária para o clube-demo passar a guarda de licença (§3.11/§17) e entrar
+  // na app sem cair no paywall. Nunca é semeada em produção (ver garantirLicencaDemo).
+  await garantirLicencaDemo(clube.id, goncalo.id);
 
   // 6. Métricas configuráveis exemplo
   await prisma.metricaConfig.createMany({

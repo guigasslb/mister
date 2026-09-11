@@ -13,11 +13,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { alterarEstadoLicenca } from "@/lib/actions/admin-licencas";
+import { alterarEstadoLicenca, ativarLicenca } from "@/lib/actions/admin-licencas";
 import type { LicencaAdmin } from "@/lib/actions/admin-licencas";
 import {
   LABEL_CICLO,
   LABEL_ESTADO_LICENCA,
+  LABEL_MODALIDADE,
   LABEL_TIER,
   LABEL_TIPO_LICENCA,
   formatarEuros,
@@ -38,20 +39,54 @@ const ESTILO_ESTADO: Record<EstadoLicenca, string> = {
   EXPIRADA: "bg-cinza-100 text-cinza-600 border-cinza-200",
 };
 
-/** Resolve o nome do titular: clube (Clube) ou email do utilizador (Individual). */
+/** Resolve o nome do titular: clube (Clube) ou nome/email do utilizador (Individual). */
 function titularDe(l: LicencaAdmin): string {
   if (l.tipo === "CLUBE") return l.clube?.nome ?? "Clube sem nome";
-  return l.utilizador?.email ?? "Utilizador sem email";
+  return l.utilizador?.nome ?? l.utilizador?.email ?? "Utilizador sem email";
 }
 
-/** Formata a data de fim em PT-PT, ou "Sem expiração" quando null. */
-function formatarDataFim(d: Date | null): string {
-  if (!d) return "Sem expiração";
+/** Email do titular (admin do clube ou utilizador individual), ou null. */
+function emailTitularDe(l: LicencaAdmin): string | null {
+  if (l.tipo === "CLUBE") return l.clube?.adminEmail ?? null;
+  return l.utilizador?.email ?? null;
+}
+
+/**
+ * Referência de pagamento a comunicar/confirmar (§17.5): nome do titular + email.
+ * Compõe-se na UI a partir do titular resolvido.
+ */
+function referenciaPagamentoDe(l: LicencaAdmin): string {
+  const email = emailTitularDe(l);
+  return email ? `${titularDe(l)} · ${email}` : titularDe(l);
+}
+
+/** Descreve o plano contratado: tier (Clube) ou modalidade (Individual) + nº de secções. */
+function planoDe(l: LicencaAdmin): string {
+  const base =
+    l.tipo === "CLUBE"
+      ? l.tier
+        ? `${LABEL_TIPO_LICENCA.CLUBE} · ${LABEL_TIER[l.tier]}`
+        : LABEL_TIPO_LICENCA.CLUBE
+      : l.modalidade
+        ? `${LABEL_TIPO_LICENCA.INDIVIDUAL} · ${LABEL_MODALIDADE[l.modalidade]}`
+        : LABEL_TIPO_LICENCA.INDIVIDUAL;
+  const seccoes = l.numSeccoes > 1 ? ` · ${l.numSeccoes} secções` : "";
+  return `${base}${seccoes}`;
+}
+
+/** Formata uma data em PT-PT (dd/mm/aaaa). */
+function formatarData(d: Date): string {
   return new Intl.DateTimeFormat("pt-PT", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   }).format(new Date(d));
+}
+
+/** Formata a data de fim em PT-PT, ou "Sem expiração" quando null. */
+function formatarDataFim(d: Date | null): string {
+  if (!d) return "Sem expiração";
+  return formatarData(d);
 }
 
 export function TabelaLicencas({ licencas }: { licencas: LicencaAdmin[] }) {
@@ -65,6 +100,20 @@ export function TabelaLicencas({ licencas }: { licencas: LicencaAdmin[] }) {
       const res = await alterarEstadoLicenca({ licencaId, estado });
       if (res.sucesso) {
         toast.success(`Licença ${LABEL_ESTADO_LICENCA[estado].toLowerCase()}`);
+        router.refresh();
+      } else {
+        toast.error(res.erro);
+      }
+    });
+  }
+
+  // Confirmação de pagamento (PENDENTE → ATIVA): usa a ação dedicada, que define
+  // `dataFim` por ciclo e notifica o titular por email (§17.5).
+  function ativar(licencaId: string) {
+    startTransition(async () => {
+      const res = await ativarLicenca({ licencaId });
+      if (res.sucesso) {
+        toast.success("Licença ativada e titular notificado por email");
         router.refresh();
       } else {
         toast.error(res.erro);
@@ -105,10 +154,20 @@ export function TabelaLicencas({ licencas }: { licencas: LicencaAdmin[] }) {
             // Só licenças de Clube com clube resolvido têm gestão de membros.
             const clubeId = l.tipo === "CLUBE" ? l.clube?.id ?? null : null;
             const estaExpandida = expandida === l.id;
+            // PENDENTE (aguarda confirmação de pagamento) recebe destaque visual e
+            // uma linha de contexto para o admin validar antes de ativar (§17.5).
+            const estaPendente = estado === "PENDENTE";
 
             return (
               <Fragment key={l.id}>
-              <tr className="border-b border-cinza-100 last:border-0 align-middle">
+              <tr
+                className={cn(
+                  "align-middle",
+                  estaPendente
+                    ? "border-l-4 border-l-ambar-500 bg-ambar-500/5"
+                    : "border-b border-cinza-100 last:border-0",
+                )}
+              >
                 <td className="px-4 py-3">
                   {l.tipo === "CLUBE" ? (
                     <div className="flex items-start gap-2">
@@ -143,9 +202,18 @@ export function TabelaLicencas({ licencas }: { licencas: LicencaAdmin[] }) {
                       </div>
                     </div>
                   ) : (
-                    <span className="font-medium text-cinza-900">
-                      {l.utilizador?.email ?? "Utilizador sem email"}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-cinza-900">
+                        {l.utilizador?.nome ??
+                          l.utilizador?.email ??
+                          "Utilizador sem nome"}
+                      </span>
+                      {l.utilizador?.nome && l.utilizador?.email && (
+                        <span className="text-legenda text-cinza-500">
+                          {l.utilizador.email}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </td>
                 <td className="px-4 py-3">
@@ -180,7 +248,7 @@ export function TabelaLicencas({ licencas }: { licencas: LicencaAdmin[] }) {
                         variant="outline"
                         size="sm"
                         disabled={pending}
-                        onClick={() => alterarEstado(l.id, "ATIVA")}
+                        onClick={() => ativar(l.id)}
                       >
                         <CheckCircle2 className="h-4 w-4" />
                         Ativar
@@ -229,6 +297,63 @@ export function TabelaLicencas({ licencas }: { licencas: LicencaAdmin[] }) {
                   </div>
                 </td>
               </tr>
+              {estaPendente && (
+                <tr className="border-b border-cinza-100 border-l-4 border-l-ambar-500 bg-ambar-500/5">
+                  <td colSpan={NUM_COLUNAS} className="px-4 pb-3">
+                    <div className="rounded-lg border border-ambar-500/30 bg-white/70 p-3">
+                      <p className="mb-2 text-legenda font-semibold uppercase tracking-wide text-ambar-600">
+                        Confirmar pagamento
+                      </p>
+                      <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-corpo-sec sm:grid-cols-2 lg:grid-cols-3">
+                        <div>
+                          <dt className="text-legenda text-cinza-500">
+                            Referência de pagamento
+                          </dt>
+                          <dd className="font-medium text-cinza-900">
+                            {referenciaPagamentoDe(l)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-legenda text-cinza-500">Plano</dt>
+                          <dd className="text-cinza-900">{planoDe(l)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-legenda text-cinza-500">
+                            Valor ({LABEL_CICLO[l.ciclo]})
+                          </dt>
+                          <dd className="text-cinza-900">
+                            {l.precoCentimos != null
+                              ? formatarEuros(l.precoCentimos)
+                              : "—"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-legenda text-cinza-500">Criada em</dt>
+                          <dd className="text-cinza-900">
+                            {formatarData(l.criadoEm)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-legenda text-cinza-500">
+                            Início da licença
+                          </dt>
+                          <dd className="text-cinza-900">
+                            {formatarData(l.dataInicio)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-legenda text-cinza-500">
+                            Fim da licença
+                          </dt>
+                          <dd className="text-cinza-900">
+                            {formatarDataFim(l.dataFim)}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </td>
+                </tr>
+              )}
               {estaExpandida && clubeId && (
                 <tr className="border-b border-cinza-100 bg-cinza-50/50">
                   <td colSpan={NUM_COLUNAS} className="px-4 py-3">

@@ -103,6 +103,16 @@ export async function convidarMembro(dados: unknown): Promise<Resultado<void>> {
   const perm = await exigirCapacidade("CLUBE_UTILIZADORES");
   if (!perm.ok) return erro(perm.erro);
 
+  // §3.11/§7.3 — defesa em profundidade: um clube técnico (licença Individual) é
+  // de utilizador único e NÃO pode ter mais treinadores/perfis. O frontend oculta
+  // esta UI a partir de `clube.clubeTecnico`, mas a ocultação é cosmética — o
+  // servidor tem de recusar o convite na mesma.
+  if (perm.ctx.clube.clubeTecnico) {
+    return erro(
+      "A licença Individual é de utilizador único e não permite convidar treinadores ou outros membros. Para gerir uma equipa técnica, muda para uma licença de Clube.",
+    );
+  }
+
   const parsed = convidarMembroSchema.safeParse(dados);
   if (!parsed.success) return erroDeValidacao(parsed.error);
 

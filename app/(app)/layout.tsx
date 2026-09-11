@@ -86,11 +86,13 @@ export default async function AppLayout({
     // licença válida → paywall (/sem-licenca), que vive fora deste grupo de
     // rotas (sem ciclo de redirect).
     //
-    // A validade é avaliada AQUI (server-side), mas a DECISÃO de bloquear é
-    // aplicada no cliente por <GuardaLicenca> (abaixo), porque depende da rota
-    // atual: o fluxo de /onboarding fica acessível sem licença para o utilizador
-    // concluir o setup antes do paywall. O pathname não está disponível de forma
-    // limpa num layout server-side sem alterar o middleware (intocável).
+    // A validade e o estado do onboarding são avaliados AQUI (server-side), mas a
+    // DECISÃO de encaminhar é aplicada no cliente por <GuardaLicenca> (abaixo),
+    // porque depende da rota atual. Fluxo v7 (§8.1): sem licença válida bloqueia
+    // SEMPRE (o wizard fica inacessível enquanto PENDENTE); com licença válida, o
+    // gating do onboarding leva ao wizard (por concluir) ou ao dashboard. O
+    // pathname não está disponível de forma limpa num layout server-side sem
+    // alterar o middleware (intocável).
     const [licencaOk, epocasResult, epocaAtiva, seccoesResult] = await Promise.all([
       temLicencaValida(membro.clube.id, membro.utilizadorId),
       listarEpocas(),
@@ -153,8 +155,16 @@ export default async function AppLayout({
       ...(hslClube ? { "--primary": hslClube, "--ring": hslClube } : {}),
     } as React.CSSProperties;
 
+    // Conta híbrida (§21.1): um admin de plataforma que TAMBÉM é membro de um
+    // clube não pode ficar preso no paywall se a licença do clube não for válida
+    // (ex.: PENDENTE) — de outro modo nunca chegaria ao atalho "Backoffice" (que
+    // vive dentro deste shell) e o backoffice deixaria de ser «sempre alcançável»
+    // (§21.1). A guarda de licença é de billing de clube/individual; um admin é
+    // operador da plataforma e fica isento dela. Rota/autorização — auth intocada.
+    const licencaOkOuAdmin = eAdmin || licencaOk;
+
     return (
-      <GuardaLicenca licencaOk={licencaOk}>
+      <GuardaLicenca licencaOk={licencaOkOuAdmin} onboardingConcluido={clube.onboardingConcluido}>
         <div className="flex min-h-screen flex-col" style={estiloClube}>
           {/* Propaga a cor do clube ao :root para que os portais do Radix
               (diálogos, selects) herdem `--cor-primaria`/`--cor-secundaria` —

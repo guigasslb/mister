@@ -13,18 +13,22 @@ type SeccaoDefinicoes = {
   descricao: string;
   icon: typeof Palette;
   caps?: Capacidade[];
+  // §8.1 — módulo de gestão de clube (branding, secções, equipa técnica,
+  // perfis). No modo Individual (clube técnico, §3.1) não existe estrutura de
+  // clube a gerir, pelo que estas entradas ficam ocultas.
+  ocultarIndividual?: boolean;
 };
 
 const SECCOES: SeccaoDefinicoes[] = [
-  { href: "/definicoes/clube", label: "Clube", descricao: "Nome, cores e logótipo do clube", icon: Palette, caps: ["CLUBE_BRANDING"] },
-  { href: "/definicoes/seccoes", label: "Secções", descricao: "Modalidades do clube e coordenadores de secção", icon: Layers, caps: ["CLUBE_ESCALOES", "CLUBE_UTILIZADORES"] },
+  { href: "/definicoes/clube", label: "Clube", descricao: "Nome, cores e logótipo do clube", icon: Palette, caps: ["CLUBE_BRANDING"], ocultarIndividual: true },
+  { href: "/definicoes/seccoes", label: "Secções", descricao: "Modalidades do clube e coordenadores de secção", icon: Layers, caps: ["CLUBE_ESCALOES", "CLUBE_UTILIZADORES"], ocultarIndividual: true },
   { href: "/definicoes/escaloes", label: "Escalões", descricao: "Criar e gerir os escalões do clube", icon: Users, caps: ["CLUBE_ESCALOES", "SECCAO_ESCALOES_GERIR"] },
   { href: "/definicoes/epocas", label: "Épocas", descricao: "Criar épocas e definir a época ativa", icon: CalendarRange, caps: ["CLUBE_EPOCAS"] },
   { href: "/definicoes/metricas", label: "Métricas", descricao: "Configurar métricas de estatísticas de jogo", icon: BarChart2, caps: ["CATALOGO_METRICAS"] },
   { href: "/definicoes/habilidades", label: "Habilidades", descricao: "Catálogo de habilidades para a caderneta", icon: BookOpen, caps: ["CATALOGO_HABILIDADES"] },
   { href: "/definicoes/subcategorias", label: "Subcategorias", descricao: "Classificação de exercícios customizável", icon: Tag, caps: ["EXERCICIOS_GERIR"] },
-  { href: "/definicoes/utilizadores", label: "Equipa técnica", descricao: "Treinadores do clube e atribuição a escalões", icon: UserCog, caps: ["CLUBE_UTILIZADORES"] },
-  { href: "/definicoes/perfis", label: "Perfis", descricao: "Perfis de permissões (configuráveis)", icon: ShieldCheck, caps: ["CLUBE_PERFIS"] },
+  { href: "/definicoes/utilizadores", label: "Equipa técnica", descricao: "Treinadores do clube e atribuição a escalões", icon: UserCog, caps: ["CLUBE_UTILIZADORES"], ocultarIndividual: true },
+  { href: "/definicoes/perfis", label: "Perfis", descricao: "Perfis de permissões (configuráveis)", icon: ShieldCheck, caps: ["CLUBE_PERFIS"], ocultarIndividual: true },
   { href: "/definicoes/licenca", label: "Licença", descricao: "Subscrição, carteira e histórico de movimentos", icon: CreditCard },
   { href: "/definicoes/integracao", label: "Integrações", descricao: "Sincronização com o Google Calendar", icon: Plug },
 ];
@@ -34,8 +38,13 @@ export const metadata: Metadata = { title: "Definições" };
 export default async function DefinicoesPage() {
   const membro = await obterMembroAtual();
   const capacidades = membro?.capacidades ?? [];
+  // Modo Individual = clube técnico invisível (§3.1). A gestão de clube não é
+  // apenas bloqueada, é OCULTA (§8.1): filtramos as entradas `ocultarIndividual`.
+  const individual = membro?.clube.clubeTecnico ?? false;
   const visiveis = SECCOES.filter(
-    (s) => !s.caps || s.caps.some((c) => capacidades.includes(c)),
+    (s) =>
+      (!s.caps || s.caps.some((c) => capacidades.includes(c))) &&
+      !(individual && s.ocultarIndividual),
   );
 
   return (

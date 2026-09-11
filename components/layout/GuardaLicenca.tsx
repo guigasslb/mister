@@ -2,37 +2,42 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { deveBloquearPorLicenca } from "@/lib/guarda-licenca";
+import { deveBloquearPorLicenca, destinoOnboarding } from "@/lib/guarda-licenca";
 
 /**
- * Guarda de licença dependente da rota (§3.11 / §8.1).
+ * Guarda de licença + gating do onboarding, dependente da rota (§3.11 / §8.1).
  *
- * A validade da licença é avaliada server-side no layout e chega aqui via
- * `licencaOk`. Esta guarda apenas DECIDE, no cliente, se deve bloquear com base
- * na rota atual — necessário porque o pathname não está disponível de forma
- * limpa num layout server-side sem alterar o middleware (intocável).
+ * A validade da licença e o estado do onboarding são avaliados server-side no
+ * layout e chegam aqui via `licencaOk`/`onboardingConcluido`. Esta guarda apenas
+ * DECIDE, no cliente, o destino com base na rota atual — necessário porque o
+ * pathname não está disponível de forma limpa num layout server-side sem alterar
+ * o middleware (intocável).
  *
- * O fluxo de `/onboarding` fica sempre acessível (mesmo sem licença) para o
- * utilizador poder concluir o setup do clube antes do paywall.
+ * Fluxo v7 (§8.1): sem licença válida → paywall (/sem-licenca), SEM exceção (o
+ * wizard fica bloqueado enquanto PENDENTE). Com licença válida, o gating do
+ * onboarding encaminha para o wizard (setup por concluir) ou dashboard.
  *
- * Quando bloqueia, NÃO renderiza os filhos (evita flash de conteúdo protegido)
- * e redireciona para /sem-licenca.
+ * Quando redireciona, NÃO renderiza os filhos (evita flash de conteúdo indevido).
  */
 export function GuardaLicenca({
   licencaOk,
+  onboardingConcluido,
   children,
 }: {
   licencaOk: boolean;
+  onboardingConcluido: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const bloquear = deveBloquearPorLicenca(licencaOk, pathname);
+  const destino = deveBloquearPorLicenca(licencaOk)
+    ? "/sem-licenca"
+    : destinoOnboarding(onboardingConcluido, pathname);
 
   useEffect(() => {
-    if (bloquear) router.replace("/sem-licenca");
-  }, [bloquear, router]);
+    if (destino) router.replace(destino);
+  }, [destino, router]);
 
-  if (bloquear) return null;
+  if (destino) return null;
   return <>{children}</>;
 }

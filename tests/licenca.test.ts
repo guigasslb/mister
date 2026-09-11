@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { licencaValida, type LicencaAvaliavel } from "@/lib/licenca";
-import { deveBloquearPorLicenca } from "@/lib/guarda-licenca";
+import { deveBloquearPorLicenca, destinoOnboarding } from "@/lib/guarda-licenca";
 
 // §3.11 — validade de licença (guarda de acesso à plataforma). Função pura.
 
@@ -47,35 +47,53 @@ describe("licencaValida (§3.11)", () => {
   });
 });
 
-// §3.11 / §8.1 — decisão da guarda dependente da rota. O onboarding fica sempre
-// acessível (mesmo sem licença) para o utilizador concluir o setup antes do paywall.
+// §3.11 / §8.1 (v7) — guarda de licença agora INDEPENDENTE da rota: o wizard de
+// onboarding deixou de ser exceção e fica bloqueado enquanto a licença não for
+// válida (PENDENTE/expirada). Sem licença válida → paywall, sempre.
 describe("deveBloquearPorLicenca (§3.11 / §8.1)", () => {
-  it("licença válida → nunca bloqueia (independente da rota)", () => {
-    expect(deveBloquearPorLicenca(true, "/dashboard")).toBe(false);
-    expect(deveBloquearPorLicenca(true, "/onboarding")).toBe(false);
-    expect(deveBloquearPorLicenca(true, null)).toBe(false);
+  it("licença válida → nunca bloqueia", () => {
+    expect(deveBloquearPorLicenca(true)).toBe(false);
   });
 
-  it("sem licença + rota protegida → bloqueia", () => {
-    expect(deveBloquearPorLicenca(false, "/dashboard")).toBe(true);
-    expect(deveBloquearPorLicenca(false, "/plantel")).toBe(true);
-    expect(deveBloquearPorLicenca(false, "/")).toBe(true);
+  it("sem licença válida → bloqueia (inclui o wizard de onboarding)", () => {
+    expect(deveBloquearPorLicenca(false)).toBe(true);
+  });
+});
+
+// §8.1 (v7) — gating do onboarding, aplicado só quando a licença já é válida.
+// Testa a tabela de decisão de routing sem loops (idempotência nas rotas-destino).
+describe("destinoOnboarding (§8.1)", () => {
+  it("setup por concluir + fora do wizard → força /onboarding", () => {
+    expect(destinoOnboarding(false, "/dashboard")).toBe("/onboarding");
+    expect(destinoOnboarding(false, "/plantel")).toBe("/onboarding");
+    expect(destinoOnboarding(false, "/")).toBe("/onboarding");
   });
 
-  it("sem licença + /onboarding (exato) → não bloqueia", () => {
-    expect(deveBloquearPorLicenca(false, "/onboarding")).toBe(false);
+  it("setup por concluir + já no wizard → não redireciona (evita loop)", () => {
+    expect(destinoOnboarding(false, "/onboarding")).toBeNull();
+    expect(destinoOnboarding(false, "/onboarding/escaloes")).toBeNull();
   });
 
-  it("sem licença + sub-rota de /onboarding → não bloqueia", () => {
-    expect(deveBloquearPorLicenca(false, "/onboarding/escaloes")).toBe(false);
+  it("setup concluído + no wizard → encaminha para /dashboard", () => {
+    expect(destinoOnboarding(true, "/onboarding")).toBe("/dashboard");
+    expect(destinoOnboarding(true, "/onboarding/escaloes")).toBe("/dashboard");
   });
 
-  it("sem licença + rota que só começa por 'onboarding' (falso positivo) → bloqueia", () => {
-    expect(deveBloquearPorLicenca(false, "/onboarding-extra")).toBe(true);
+  it("setup concluído + noutra rota → não redireciona (renderiza)", () => {
+    expect(destinoOnboarding(true, "/dashboard")).toBeNull();
+    expect(destinoOnboarding(true, "/plantel")).toBeNull();
   });
 
-  it("sem licença + pathname null/undefined (SSR) → bloqueia (fail-safe)", () => {
-    expect(deveBloquearPorLicenca(false, null)).toBe(true);
-    expect(deveBloquearPorLicenca(false, undefined)).toBe(true);
+  it("rota que só começa por 'onboarding' (falso positivo) não conta como wizard", () => {
+    // Setup por concluir: como NÃO está no wizard, força /onboarding.
+    expect(destinoOnboarding(false, "/onboarding-extra")).toBe("/onboarding");
+    // Setup concluído: não está no wizard, logo não encaminha para dashboard.
+    expect(destinoOnboarding(true, "/onboarding-extra")).toBeNull();
+  });
+
+  it("pathname null/undefined (SSR) → tratado como fora do wizard", () => {
+    expect(destinoOnboarding(false, null)).toBe("/onboarding");
+    expect(destinoOnboarding(false, undefined)).toBe("/onboarding");
+    expect(destinoOnboarding(true, null)).toBeNull();
   });
 });

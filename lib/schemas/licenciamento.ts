@@ -1,19 +1,14 @@
-import { z } from "zod";
 import type {
   CicloFaturacao,
   EstadoLicenca,
+  Modalidade,
   TierClube,
   TipoLicenca,
   TipoMovimento,
 } from "@prisma/client";
 
-// Schemas Zod do licenciamento (F11, §3.11 / §17).
+// Schemas/rótulos do licenciamento (F11, §3.11 / §17).
 // Fonte única partilhada cliente/servidor (convenção do projeto).
-
-// Identificador de utilizador (cuid) — usado por `garantirCarteira`.
-export const utilizadorIdSchema = z.string().cuid("Utilizador inválido");
-
-export type UtilizadorIdInput = z.infer<typeof utilizadorIdSchema>;
 
 // ─────────────────────────────────────────────
 // Rótulos PT-PT (fonte única cliente/servidor)
@@ -42,6 +37,11 @@ export const LABEL_ESTADO_LICENCA: Record<EstadoLicenca, string> = {
 export const LABEL_CICLO: Record<CicloFaturacao, string> = {
   MENSAL: "Mensal",
   ANUAL: "Anual",
+};
+
+export const LABEL_MODALIDADE: Record<Modalidade, string> = {
+  FUTSAL: "Futsal",
+  FUTEBOL: "Futebol",
 };
 
 export const LABEL_TIPO_MOVIMENTO: Record<TipoMovimento, string> = {

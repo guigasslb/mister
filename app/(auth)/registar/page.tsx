@@ -15,7 +15,7 @@ export default async function RegistarPage() {
   if (session?.user) redirect("/dashboard");
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-md">
       <CardHeader className="text-center">
         <CardTitle className="text-titulo-pagina">Criar conta</CardTitle>
         <CardDescription>Regista-te para começares a usar o Mister</CardDescription>

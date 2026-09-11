@@ -7,6 +7,17 @@ import { TabelaLicencas } from "@/components/admin/TabelaLicencas";
 export default async function AdminLicencasPage() {
   const res = await listarTodasLicencas();
 
+  // PENDENTE (aguardam confirmação de pagamento) primeiro, preservando a ordem
+  // por criação vinda do servidor (Array.sort é estável). Também contamos para o
+  // destaque no topo. Ordenação só na apresentação — não altera a query.
+  const licencas = res.sucesso
+    ? [...res.dados].sort(
+        (a, b) =>
+          (a.estado === "PENDENTE" ? 0 : 1) - (b.estado === "PENDENTE" ? 0 : 1),
+      )
+    : [];
+  const numPendentes = licencas.filter((l) => l.estado === "PENDENTE").length;
+
   return (
     <section className="space-y-6">
       <div>
@@ -18,8 +29,19 @@ export default async function AdminLicencasPage() {
         </p>
       </div>
 
+      {res.sucesso && numPendentes > 0 && (
+        <p
+          role="status"
+          className="rounded-lg border border-ambar-500/30 bg-ambar-500/10 px-4 py-3 text-corpo-sec font-medium text-ambar-600"
+        >
+          {numPendentes === 1
+            ? "1 licença pendente de confirmação de pagamento."
+            : `${numPendentes} licenças pendentes de confirmação de pagamento.`}
+        </p>
+      )}
+
       {res.sucesso ? (
-        <TabelaLicencas licencas={res.dados} />
+        <TabelaLicencas licencas={licencas} />
       ) : (
         <p
           role="alert"

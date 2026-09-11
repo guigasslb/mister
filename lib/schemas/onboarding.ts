@@ -4,10 +4,19 @@ const corHex = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, "Cor inválida (ex: #1A2FD4)");
 
+// 🔁 v7 (§8.1): contrato de registo ÚNICO. O registo passa a recolher, num só
+// passo, a conta (nome/email/password) + o clube (nomeClube) + o plano (tier) +
+// a modalidade — e cria atomicamente conta + clube + licença PENDENTE (§17.5).
+// A `modalidade` é EXIGIDA explicitamente (sem `default("FUTSAL")` silencioso):
+// é uma escolha de primeira classe do utilizador, não um fallback. Literal
+// (não `z.nativeEnum`) para não puxar @prisma/client ao bundle cliente.
 export const registarSchema = z.object({
   nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(100),
   email: z.string().email("Email inválido").toLowerCase(),
   password: z.string().min(8, "A password deve ter pelo menos 8 caracteres"),
+  nomeClube: z.string().min(2, "Nome do clube obrigatório").max(100),
+  tier: z.enum(["INDIVIDUAL", "PEQUENO", "MEDIO", "GRANDE"]),
+  modalidade: z.enum(["FUTSAL", "FUTEBOL"]),
 });
 
 export const criarClubeSchema = z.object({

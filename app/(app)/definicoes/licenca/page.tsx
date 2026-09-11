@@ -19,7 +19,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
-import { ActivarDemoButton } from "@/components/licenciamento/ActivarDemoButton";
 import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 import type { EstadoLicenca } from "@prisma/client";
 
@@ -76,10 +75,9 @@ export default async function LicencaPage() {
           titulo="Sem licença ativa"
           descricao={
             eAdmin
-              ? "Ative uma licença de demonstração para explorar o produto."
+              ? "Este clube ainda não tem uma licença ativa. A ativação é feita pela equipa da plataforma após confirmação do pagamento."
               : "Este clube ainda não tem uma licença ativa. Contacte um administrador."
           }
-          acao={eAdmin ? <ActivarDemoButton /> : undefined}
         />
       ) : (
         <div className="space-y-4">

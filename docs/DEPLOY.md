@@ -7,7 +7,7 @@ Complemento operacional da bíblia (`Mister_Spec_v7.md`, secção 15). Passos pa
 1. Criar conta em **vercel.com** com "Continue with GitHub".
 2. **Add New → Project** → importar o repo `guigasslb/futsal-manager` (branch `main`).
 3. Vercel deteta Next.js automaticamente (build `npm run build`, que corre `prisma generate && next build`).
-4. **Environment Variables** — adicionar (secção 1): `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST=true`.
+4. **Environment Variables** — adicionar (secção 1): `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST=true`. Para o fluxo de registo/licenças, adicionar também as variáveis da secção 1.3 — em especial `NEXT_PUBLIC_IBAN` (**blocker**) e `RESEND_API_KEY`.
 5. **Deploy**. No fim, a app fica em `https://<projeto>.vercel.app`.
 6. Migrações: a BD Supabase já tem o schema aplicado (`prisma migrate deploy` já corrido em dev). Numa BD nova, correr `npx prisma migrate deploy` com o `DATABASE_URL` de produção antes do primeiro acesso.
 
@@ -53,6 +53,23 @@ O Supabase expõe a BD por dois caminhos, e o Prisma usa cada um para fins difer
 Regra prática: **a app fala pelo 6543; as migrações falam pelo 5432.** O Prisma faz este encaminhamento automaticamente — ao correr qualquer comando `prisma migrate ...` ou `prisma db push`, usa o `directUrl` (5432) sem configuração extra; em runtime o Prisma Client usa o `url` (6543). Por isso os scripts npm **não** precisam de passar `DIRECT_URL` explicitamente.
 
 > Se `DIRECT_URL` faltar quando o pooler está em uso, as migrações podem falhar com erros de *prepared statement* / *pooler* — daí ambas serem obrigatórias.
+
+### 1.3 Fluxo de registo/licenças — pagamento e email
+
+O rework de registo/licenças (bíblia §17) introduziu um **fluxo de pagamento interino** (transferência bancária + ativação manual pelo admin) e **emails transacionais**. Um deploy sem estas variáveis **parte o fluxo**: sem IBAN o paywall não mostra dados de pagamento; sem Resend os emails não são enviados.
+
+| Variável | Obrigatória em produção? | Onde é lida | Impacto se faltar |
+|----------|:---:|-------------|-------------------|
+| `NEXT_PUBLIC_IBAN` | **SIM — blocker** | `app/sem-licenca/page.tsx` | ⛔ A linha do IBAN é **ocultada** do paywall `/sem-licenca`. O utilizador fica **sem dados para pagar** e não consegue ativar a licença. **Bloqueia o lançamento.** |
+| `RESEND_API_KEY` | **SIM** (recomendada) | `lib/email/resend.ts`, `lib/email.ts` | Emails **não são enviados**. O registo (→ admin) e a ativação (→ utilizador) degradam graciosamente (best-effort, registam aviso no log e seguem sem crash), mas ninguém é notificado. A reposição de password (`lib/email.ts`) **lança erro** em produção sem transporte configurado. |
+| `EMAIL_FROM` | Recomendada | `lib/email/resend.ts`, `lib/email.ts` | Remetente dos emails. Sem ela usa-se o fallback `Mister <no-reply@mister.app>` (tem de ser um domínio verificado na Resend para o envio não ser recusado). |
+| `ADMIN_EMAIL` | Recomendada | `lib/email/templates/novo-registo.ts` | Destinatário da notificação de **novo registo** (o admin que ativa licenças). Sem ela usa-se o fallback documentado `goncalo.pereira.1992@gmail.com`. |
+
+> **⛔ Blocker de lançamento — `NEXT_PUBLIC_IBAN`.** É a variável mais crítica deste fluxo: sem ela o paywall não mostra o IBAN e **nenhum cliente consegue pagar**. Confirmar que está definida **antes** de abrir o registo ao público. Como tem prefixo `NEXT_PUBLIC_`, é embutida no bundle em *build time* — **alterá-la exige um novo deploy** (não basta mudar o secret e reiniciar).
+
+**Emails transacionais — como escolhe o transporte.** A app tenta, por ordem: **Resend** (`RESEND_API_KEY`, via API HTTP — recomendada em serverless/Vercel) → **SMTP** (`EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, via nodemailer) → em desenvolvimento, apenas imprime no log. Configurar **uma** das duas opções em produção. O link do email de ativação é composto a partir de `NEXTAUTH_URL` (ver §1), pelo que esta também tem de apontar para a URL pública real.
+
+> **Segurança:** `RESEND_API_KEY`, `EMAIL_PASS` e afins são secrets — injetar via variáveis de ambiente do host, nunca commitar. O `NEXT_PUBLIC_IBAN` não é secreto (é mostrado ao utilizador), mas continua a ser configuração de ambiente.
 
 ## 2. Migrações da base de dados
 
