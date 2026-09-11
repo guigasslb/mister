@@ -1,10 +1,10 @@
-// Route Handler — seed do campeonato de Benjamins (época 2025/2026) do treinador
+// Route Handler — seed do campeonato de Benjamins (época 2026/2027) do treinador
 // `goncalo.pereira.1992@gmail.com`, invocável no servidor (Vercel) via browser.
 //
-// Réplica fiel da lógica de `scripts/seed-campeonato-benjamins.ts` (que NÃO é
-// alterado): resolve utilizador → clube (adesão ATIVA) → escalão "benjamins" →
-// época ativa e cria os 20 jogos de campeonato de forma IDEMPOTENTE (dedupe por
-// escalão/época + adversário + dia). Correr 2x não duplica.
+// Operação de RESET: resolve utilizador → clube (adesão ATIVA) → escalão
+// "benjamins" → época ativa, APAGA os jogos previamente criados (por escalão/época
+// + adversário na lista abaixo) via `deleteMany` e RECRIA os 20 jogos com as datas
+// corrigidas (época 2026/2027). Não é idempotente: cada execução apaga e recria.
 //
 // PROTEÇÃO: só responde se o query param `secret` for igual à env `SEED_SECRET`;
 // caso contrário devolve 401. Usa o Prisma client partilhado da app (@/lib/db),
@@ -26,28 +26,28 @@ const HORA_JOGO_UTC = "10:00:00.000Z"; // hora convencional (calendário sem hor
 type LocalJogo = "CASA" | "FORA";
 type JogoSeed = { data: string; adversario: string; local: LocalJogo };
 
-// Plano anual de época 2025-2026 — campeonato de Benjamins.
+// Plano anual de época 2026-2027 — campeonato de Benjamins.
 const jogos: JogoSeed[] = [
-  { data: "2025-10-26", adversario: "GDC Baronia", local: "CASA" },
-  { data: "2025-11-02", adversario: "TIS", local: "CASA" },
-  { data: "2025-11-09", adversario: "Internacional SC", local: "FORA" },
-  { data: "2025-11-16", adversario: "Fund. Salesianos Col. Évora", local: "CASA" },
-  { data: "2025-11-23", adversario: "Lusitano GC", local: "FORA" },
-  { data: "2025-11-30", adversario: "Mourão FC", local: "CASA" },
-  { data: "2025-12-07", adversario: "NS de Moura", local: "FORA" },
-  { data: "2025-12-14", adversario: "NS de Moura", local: "CASA" },
-  { data: "2026-01-11", adversario: "GDC Baronia", local: "FORA" },
-  { data: "2026-01-17", adversario: "TIS", local: "FORA" },
-  { data: "2026-02-03", adversario: "Internacional SC", local: "CASA" },
-  { data: "2026-02-14", adversario: "GDC Baronia", local: "FORA" },
-  { data: "2026-02-22", adversario: "Lusitano GC", local: "CASA" },
-  { data: "2026-02-24", adversario: "Fund. Salesianos Col. Évora", local: "FORA" },
-  { data: "2026-03-01", adversario: "Mourão FC", local: "FORA" },
-  { data: "2026-03-21", adversario: "Fund. Salesianos Col. Évora", local: "CASA" },
-  { data: "2026-03-29", adversario: "GDC Baronia", local: "FORA" },
-  { data: "2026-04-11", adversario: "NS de Moura", local: "FORA" },
-  { data: "2026-04-14", adversario: "Internacional SC", local: "CASA" },
-  { data: "2026-05-26", adversario: "Lusitano GC", local: "FORA" },
+  { data: "2026-10-26", adversario: "GDC Baronia", local: "CASA" },
+  { data: "2026-11-02", adversario: "TIS", local: "CASA" },
+  { data: "2026-11-09", adversario: "Internacional SC", local: "FORA" },
+  { data: "2026-11-16", adversario: "Fund. Salesianos Col. Évora", local: "CASA" },
+  { data: "2026-11-23", adversario: "Lusitano GC", local: "FORA" },
+  { data: "2026-11-30", adversario: "Mourão FC", local: "CASA" },
+  { data: "2026-12-07", adversario: "NS de Moura", local: "FORA" },
+  { data: "2026-12-14", adversario: "NS de Moura", local: "CASA" },
+  { data: "2027-01-11", adversario: "GDC Baronia", local: "FORA" },
+  { data: "2027-01-17", adversario: "TIS", local: "FORA" },
+  { data: "2027-02-03", adversario: "Internacional SC", local: "CASA" },
+  { data: "2027-02-14", adversario: "GDC Baronia", local: "FORA" },
+  { data: "2027-02-22", adversario: "Lusitano GC", local: "CASA" },
+  { data: "2027-02-24", adversario: "Fund. Salesianos Col. Évora", local: "FORA" },
+  { data: "2027-03-01", adversario: "Mourão FC", local: "FORA" },
+  { data: "2027-03-21", adversario: "Fund. Salesianos Col. Évora", local: "CASA" },
+  { data: "2027-03-29", adversario: "GDC Baronia", local: "FORA" },
+  { data: "2027-04-11", adversario: "NS de Moura", local: "FORA" },
+  { data: "2027-04-14", adversario: "Internacional SC", local: "CASA" },
+  { data: "2027-05-26", adversario: "Lusitano GC", local: "FORA" },
 ];
 
 export async function GET(req: NextRequest) {
@@ -123,29 +123,22 @@ export async function GET(req: NextRequest) {
     const formato: FormatoJogo | null =
       escalao.seccao?.modalidade === "FUTSAL" ? "FUTSAL_5" : null;
 
-    // 5. Criar jogos (idempotente: dedupe por escalão/época + adversário + dia).
+    // 5. RESET: apagar os jogos previamente criados (escalão/época + adversário
+    // na lista) e recriar os 20 com as datas corrigidas.
+    const adversarios = Array.from(new Set(jogos.map((j) => j.adversario)));
+
+    const { count: apagados } = await prisma.jogo.deleteMany({
+      where: {
+        escalaoId: escalao.id,
+        epocaId: epoca.id,
+        adversario: { in: adversarios },
+      },
+    });
+
     let criados = 0;
-    let existentes = 0;
 
     for (const j of jogos) {
       const dataJogo = new Date(`${j.data}T${HORA_JOGO_UTC}`);
-      const inicioDia = new Date(`${j.data}T00:00:00.000Z`);
-      const fimDia = new Date(`${j.data}T23:59:59.999Z`);
-
-      const existente = await prisma.jogo.findFirst({
-        where: {
-          escalaoId: escalao.id,
-          epocaId: epoca.id,
-          adversario: j.adversario,
-          data: { gte: inicioDia, lte: fimDia },
-        },
-        select: { id: true },
-      });
-
-      if (existente) {
-        existentes++;
-        continue;
-      }
 
       await prisma.jogo.create({
         data: {
@@ -163,9 +156,8 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
+      apagados,
       criados,
-      existentes,
-      total: jogos.length,
     });
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "Erro desconhecido.";
