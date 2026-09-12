@@ -23,6 +23,7 @@ import {
   type AnaliticoAtleta,
   type EpocaResumoAtleta,
 } from "@/lib/actions/analise";
+import { SeccaoDesenvolvimentoGR } from "./SeccaoDesenvolvimentoGR";
 import type { EstatisticasAgregadas } from "@/lib/estatisticas";
 import { LABEL_POSICAO } from "@/lib/schemas/atleta";
 import {
@@ -71,6 +72,9 @@ export function PainelAtleta({
     metricasTreino = [],
     // Cartões acumulados (disciplina — §3.7); default para snapshots antigos.
     cartoes = { amarelos: 0, vermelhos: 0 },
+    // §8.24.5: séries temporais das métricas técnicas de GR (default [] para
+    // relatórios antigos, tal como as restantes métricas acima).
+    metricasGR = [],
   } = dados;
   const eGR = atleta.eGR;
 
@@ -266,6 +270,18 @@ export function PainelAtleta({
             <span>🟥 {cartoes.vermelhos} {cartoes.vermelhos === 1 ? "vermelho" : "vermelhos"}</span>
           )}
         </p>
+      )}
+
+      {/* §8.24.5 — Desenvolvimento do guarda-redes (só para atletas GR). */}
+      {eGR && (
+        <SeccaoDesenvolvimentoGR
+          metricasGR={metricasGR}
+          nucleo={{
+            defesas: agregado.totalDefesas ?? 0,
+            golosSofridos: agregado.totalGolosSofridos ?? 0,
+            defesasPorJogo,
+          }}
+        />
       )}
 
       {/* Comparação directa com um colega de equipa (M4 — §10.1) */}

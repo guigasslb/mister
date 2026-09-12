@@ -12,6 +12,7 @@ import { listarSubcategorias } from "@/lib/actions/subcategorias";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { obterEpocaAtiva } from "@/lib/epoca-context";
 import { GestorExercicios } from "@/components/treinos/GestorExercicios";
+import { BlocoGuardaRedes } from "@/components/treinos/BlocoGuardaRedes";
 import { resolverExercicioSessao } from "@/lib/snapshot-exercicio";
 import { mostrarCargaTreino } from "@/lib/utils";
 import { formatarDataHoraLisboa } from "@/lib/utils-datas";
@@ -351,6 +352,12 @@ export default async function DetalheSessaoPage({
           descricao: b.descricao,
           objetivo: b.objetivo,
         }))}
+      />
+
+      {/* §8.24.2 — Bloco de Guarda-redes (só quando há exercícios de GR). */}
+      <BlocoGuardaRedes
+        exercicios={exerciciosGR}
+        guardaRedes={guardaRedesPresentes}
       />
 
       {/* §3.16 — duelos Mano-a-Mano agendados/ad-hoc nesta sessão. */}

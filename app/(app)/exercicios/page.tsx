@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus, Clock, Backpack, Landmark, Sparkles, LayoutTemplate, BarChart3 } from "lucide-react";
+import { Plus, Clock, Backpack, Landmark, Sparkles, LayoutTemplate, BarChart3, Hand } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { listarExercicios } from "@/lib/actions/exercicios";
@@ -235,6 +235,26 @@ export default async function ExerciciosPage({
             <CampoPesquisa placeholder="Pesquisar exercício por nome…" />
           </div>
           <MostrarFavoritosToggle />
+        </div>
+
+        {/* §8.24.1 — chip de atalho para exercícios de guarda-redes
+            (equivale a categoria=GUARDA_REDES, combinável com os filtros). */}
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={href(aba, {
+              ...filtros,
+              categoria: categoria === "GUARDA_REDES" ? undefined : "GUARDA_REDES",
+            })}
+            aria-pressed={categoria === "GUARDA_REDES"}
+            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-4 py-1.5 text-corpo-sec font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              categoria === "GUARDA_REDES"
+                ? "border-primary bg-primary text-white"
+                : "border-cinza-200 bg-white text-cinza-700 hover:border-primary/40 hover:text-primary"
+            }`}
+          >
+            <Hand className="h-4 w-4" />
+            Guarda-redes
+          </Link>
         </div>
 
         {lista.length === 0 ? (

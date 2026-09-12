@@ -13,6 +13,7 @@ import {
   CalendarPlus,
   CheckCircle2,
   CircleAlert,
+  Hand,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listarSessoes, type SessaoLista } from "@/lib/actions/treinos";
@@ -223,6 +224,12 @@ export default async function TreinosPage({
             <Link href="/treinos/planos">
               <CalendarClock className="h-4 w-4" />
               Planos semanais
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/treinos/externa-gr/nova">
+              <Hand className="h-4 w-4" />
+              Sessão externa de GR
             </Link>
           </Button>
           <AjudaPlaneamento />
@@ -449,6 +456,13 @@ export default async function TreinosPage({
                                     }`}
                                   >
                                     {LABEL_MOMENTO_SEMANA[momento]}
+                                  </span>
+                                )}
+                                {/* §8.24.6 — sessão externa de guarda-redes. */}
+                                {s.tipoSessao === "EXTERNA_GR" && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-azul-300/50 bg-azul-50 px-2 py-0.5 text-legenda font-medium text-azul-700">
+                                    <Hand className="h-3 w-3" />
+                                    Externa
                                   </span>
                                 )}
                                 {!escalaoId && (

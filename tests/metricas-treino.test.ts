@@ -62,10 +62,13 @@ beforeEach(() => {
     fechado: false,
   });
   p.metricaConfig.findMany.mockResolvedValue([
-    { id: METRICA_A, nome: "Empenho", tipo: "ESCALA", ordem: 0 },
-    { id: METRICA_B, nome: "Desempenho", tipo: "ESCALA", ordem: 1 },
+    { id: METRICA_A, nome: "Empenho", tipo: "ESCALA", ordem: 0, aplicaSoGuardaRedes: false },
+    { id: METRICA_B, nome: "Desempenho", tipo: "ESCALA", ordem: 1, aplicaSoGuardaRedes: false },
   ]);
-  p.atleta.findMany.mockResolvedValue([{ id: ATLETA_1 }, { id: ATLETA_2 }]);
+  p.atleta.findMany.mockResolvedValue([
+    { id: ATLETA_1, posicoes: ["FIXO"] },
+    { id: ATLETA_2, posicoes: ["GUARDA_REDES"] },
+  ]);
   p.valorMetricaSessao.findMany.mockResolvedValue([]);
 });
 
@@ -155,6 +158,35 @@ describe("guardarMetricasSessao", () => {
     // Só a métrica de treino válida é criada.
     expect(p.valorMetricaSessao.createMany).toHaveBeenCalledWith({
       data: [{ metricaId: METRICA_A, sessaoId: SESSAO, atletaId: ATLETA_1, valor: 4 }],
+    });
+  });
+
+  it("§8.24.3 (RN-GR-2): rejeita métrica de GR num atleta não-GR", async () => {
+    // METRICA_A passa a ser exclusiva de GR; ATLETA_1 não é GR (FIXO).
+    p.metricaConfig.findMany.mockResolvedValue([
+      { id: METRICA_A, nome: "Reflexos", tipo: "ESCALA", ordem: 0, aplicaSoGuardaRedes: true },
+      { id: METRICA_B, nome: "Desempenho", tipo: "ESCALA", ordem: 1, aplicaSoGuardaRedes: false },
+    ]);
+    const r = await guardarMetricasSessao(SESSAO, [
+      { atletaId: ATLETA_1, valores: [{ metricaId: METRICA_A, valor: 4 }] },
+    ]);
+    expect(r.sucesso).toBe(false);
+    // Não deve escrever nada quando rejeita.
+    expect(p.valorMetricaSessao.deleteMany).not.toHaveBeenCalled();
+    expect(p.valorMetricaSessao.createMany).not.toHaveBeenCalled();
+  });
+
+  it("§8.24.3: aceita métrica de GR num guarda-redes", async () => {
+    p.metricaConfig.findMany.mockResolvedValue([
+      { id: METRICA_A, nome: "Reflexos", tipo: "ESCALA", ordem: 0, aplicaSoGuardaRedes: true },
+    ]);
+    // ATLETA_2 é GUARDA_REDES no mock do beforeEach.
+    const r = await guardarMetricasSessao(SESSAO, [
+      { atletaId: ATLETA_2, valores: [{ metricaId: METRICA_A, valor: 5 }] },
+    ]);
+    expect(r.sucesso).toBe(true);
+    expect(p.valorMetricaSessao.createMany).toHaveBeenCalledWith({
+      data: [{ metricaId: METRICA_A, sessaoId: SESSAO, atletaId: ATLETA_2, valor: 5 }],
     });
   });
 
