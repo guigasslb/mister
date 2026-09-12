@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, ChevronUp, ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,8 +13,17 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -22,28 +31,54 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { criarMetrica, alternarMetrica, moverMetrica } from "@/lib/actions/metricas";
+import {
+  criarMetrica,
+  editarMetrica,
+  eliminarMetrica,
+  alternarMetrica,
+  moverMetrica,
+} from "@/lib/actions/metricas";
 import { LABEL_TIPO, LABEL_CONTEXTO } from "@/lib/schemas/metrica";
 import type { MetricaConfig, TipoMetrica, ContextoMetrica } from "@prisma/client";
 
-function CriarMetricaDialog() {
-  const [aberto, setAberto] = useState(false);
+/**
+ * Diálogo de formulário partilhado por criação e edição. Quando `metrica` é
+ * passada, edita-a (reusa `metricaSchema` via `editarMetrica`); caso contrário
+ * cria uma nova. O estado de abertura é controlado pelo componente-pai.
+ */
+function MetricaFormDialog({
+  metrica,
+  aberto,
+  onOpenChange,
+}: {
+  metrica?: MetricaConfig;
+  aberto: boolean;
+  onOpenChange: (aberto: boolean) => void;
+}) {
+  const editar = Boolean(metrica);
   const [pending, startTransition] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
-  const [tipo, setTipo] = useState<TipoMetrica>("NUMERO");
-  const [contexto, setContexto] = useState<ContextoMetrica>("JOGO");
+  const [tipo, setTipo] = useState<TipoMetrica>(metrica?.tipo ?? "NUMERO");
+  const [contexto, setContexto] = useState<ContextoMetrica>(
+    metrica?.contexto ?? "JOGO",
+  );
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     setErro(null);
     startTransition(async () => {
-      const res = await criarMetrica({ nome: fd.get("nome"), tipo, contexto });
+      const dados = { nome: fd.get("nome"), tipo, contexto };
+      const res = metrica
+        ? await editarMetrica(metrica.id, dados)
+        : await criarMetrica(dados);
       if (res.sucesso) {
-        toast.success("Métrica criada");
-        setAberto(false);
-        setTipo("NUMERO");
-        setContexto("JOGO");
+        toast.success(editar ? "Métrica atualizada" : "Métrica criada");
+        onOpenChange(false);
+        if (!editar) {
+          setTipo("NUMERO");
+          setContexto("JOGO");
+        }
       } else {
         setErro(res.erro);
       }
@@ -51,22 +86,23 @@ function CriarMetricaDialog() {
   }
 
   return (
-    <Dialog open={aberto} onOpenChange={setAberto}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4" />
-          Nova métrica
-        </Button>
-      </DialogTrigger>
+    <Dialog open={aberto} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nova métrica</DialogTitle>
+          <DialogTitle>{editar ? "Editar métrica" : "Nova métrica"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {erro && <p className="text-corpo-sec text-vermelho-600">{erro}</p>}
           <div className="space-y-1.5">
             <Label htmlFor="nome">Nome *</Label>
-            <Input id="nome" name="nome" required maxLength={60} placeholder="ex: Dribles completados" />
+            <Input
+              id="nome"
+              name="nome"
+              required
+              maxLength={60}
+              defaultValue={metrica?.nome ?? ""}
+              placeholder="ex: Dribles completados"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Tipo</Label>
@@ -100,7 +136,13 @@ function CriarMetricaDialog() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="submit" disabled={pending}>
-              {pending ? "A criar…" : "Criar métrica"}
+              {pending
+                ? editar
+                  ? "A guardar…"
+                  : "A criar…"
+                : editar
+                  ? "Guardar alterações"
+                  : "Criar métrica"}
             </Button>
           </div>
         </form>
@@ -117,6 +159,9 @@ export function MetricasLista({
   podeGerir?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const [criarAberto, setCriarAberto] = useState(false);
+  const [aEditar, setAEditar] = useState<MetricaConfig | null>(null);
+  const [aEliminar, setAEliminar] = useState<MetricaConfig | null>(null);
 
   function alternar(id: string, ativa: boolean) {
     startTransition(async () => {
@@ -132,6 +177,18 @@ export function MetricasLista({
     });
   }
 
+  function eliminar(id: string) {
+    startTransition(async () => {
+      const res = await eliminarMetrica(id);
+      if (res.sucesso) {
+        toast.success("Métrica eliminada");
+        setAEliminar(null);
+      } else {
+        toast.error(res.erro);
+      }
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -142,7 +199,12 @@ export function MetricasLista({
             treinos, conforme o contexto escolhido.
           </p>
         </div>
-        {podeGerir && <CriarMetricaDialog />}
+        {podeGerir && (
+          <Button onClick={() => setCriarAberto(true)}>
+            <Plus className="h-4 w-4" />
+            Nova métrica
+          </Button>
+        )}
       </div>
 
       {metricas.length === 0 ? (
@@ -206,9 +268,82 @@ export function MetricasLista({
                   aria-label={m.ativa ? "Desativar métrica" : "Ativar métrica"}
                 />
               )}
+
+              {/* Editar / Eliminar */}
+              {podeGerir && (
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => setAEditar(m)}
+                    disabled={pending}
+                    className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                    aria-label={`Editar ${m.nome}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setAEliminar(m)}
+                    disabled={pending}
+                    className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-vermelho-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                    aria-label={`Eliminar ${m.nome}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Criar */}
+      {podeGerir && (
+        <MetricaFormDialog aberto={criarAberto} onOpenChange={setCriarAberto} />
+      )}
+
+      {/* Editar */}
+      {podeGerir && aEditar && (
+        <MetricaFormDialog
+          key={aEditar.id}
+          metrica={aEditar}
+          aberto={Boolean(aEditar)}
+          onOpenChange={(aberto) => {
+            if (!aberto) setAEditar(null);
+          }}
+        />
+      )}
+
+      {/* Eliminar */}
+      {podeGerir && (
+        <AlertDialog
+          open={Boolean(aEliminar)}
+          onOpenChange={(aberto) => {
+            if (!aberto) setAEliminar(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Eliminar métrica?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Vais eliminar a métrica «{aEliminar?.nome}». Esta ação não pode
+                ser anulada. Se a métrica já tiver valores registados em jogos ou
+                treinos, não é possível apagá-la — desativa-a em vez de a apagar
+                para preservar o histórico.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={pending}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (aEliminar) eliminar(aEliminar.id);
+                }}
+              >
+                Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   );

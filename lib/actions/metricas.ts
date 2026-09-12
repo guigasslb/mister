@@ -55,6 +55,68 @@ export async function criarMetrica(dados: unknown): Promise<Resultado<MetricaCon
   return ok(metrica);
 }
 
+/**
+ * Edita uma métrica existente do clube. Permite alterar `nome`, `tipo` e
+ * `contexto` (§8.4). O `id`, a `ordem` e o estado `ativa` mantêm-se. Reusa
+ * `metricaSchema` (mesma validação da criação).
+ */
+export async function editarMetrica(
+  id: string,
+  dados: unknown,
+): Promise<Resultado<MetricaConfig>> {
+  const perm = await exigirCapacidade("CATALOGO_METRICAS");
+  if (!perm.ok) return erro(perm.erro);
+
+  const existe = await prisma.metricaConfig.findFirst({
+    where: { id, clubeId: perm.ctx.clube.id },
+    select: { id: true },
+  });
+  if (!existe) return erro("Métrica não encontrada");
+
+  const parsed = metricaSchema.safeParse(dados);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const metrica = await prisma.metricaConfig.update({
+    where: { id },
+    data: {
+      nome: parsed.data.nome,
+      tipo: parsed.data.tipo,
+      contexto: parsed.data.contexto,
+    },
+  });
+  revalidatePath(PATH);
+  return ok(metrica);
+}
+
+/**
+ * Elimina uma métrica do clube. Se existirem valores históricos associados
+ * (jogo — `ValorMetrica` — ou treino — `ValorMetricaSessao`), a eliminação é
+ * recusada para preservar o histórico (§9: «Nunca apagar ValorMetrica»); nesse
+ * caso o utilizador deve desativar a métrica em vez de a apagar.
+ */
+export async function eliminarMetrica(id: string): Promise<Resultado<void>> {
+  const perm = await exigirCapacidade("CATALOGO_METRICAS");
+  if (!perm.ok) return erro(perm.erro);
+
+  const existe = await prisma.metricaConfig.findFirst({
+    where: { id, clubeId: perm.ctx.clube.id },
+    select: { id: true },
+  });
+  if (!existe) return erro("Métrica não encontrada");
+
+  const [emJogos, emTreinos] = await Promise.all([
+    prisma.valorMetrica.count({ where: { metricaId: id } }),
+    prisma.valorMetricaSessao.count({ where: { metricaId: id } }),
+  ]);
+  if (emJogos + emTreinos > 0) {
+    return erro("Métrica em uso — desativa em vez de apagar.");
+  }
+
+  await prisma.metricaConfig.delete({ where: { id } });
+  revalidatePath(PATH);
+  return ok(undefined);
+}
+
 export async function alternarMetrica(id: string, ativa: boolean): Promise<Resultado<void>> {
   const perm = await exigirCapacidade("CATALOGO_METRICAS");
   if (!perm.ok) return erro(perm.erro);

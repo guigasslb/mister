@@ -24,7 +24,7 @@ A **v7** expande o Mister de plataforma dedicada ao **futsal** para plataforma *
 6. **Taxonomia de posições de futebol** (secção 3.2): defesa central, laterais, médios (defensivo/centro/ofensivo), extremos e avançado, acrescentados ao enum `Posicao` (partilhando `GUARDA_REDES` e `UNIVERSAL`).
 7. **Estatísticas de futebol** (secção 10.8): mesmo princípio do futsal — **núcleo fixo** (golos, assistências, defesas GR, remates, cantos, foras-de-jogo, desarmes) + **customizável** por cima via `MetricaConfig`. `faltas1aParte`/`faltas2aParte` só visíveis em FUTSAL.
 8. **Campo de futebol SVG** (secção 11.5) — todos os formatos, no mesmo editor/formato de diagrama do futsal.
-9. **Atleta multi-desporto** (secção 3.2, 9): um único `Atleta` por pessoa no clube, com participações (`AtletaEscalao`) em escalões de secções diferentes; estatísticas/caderneta segmentadas por modalidade/secção na UI.
+9. **Atleta multi-desporto** (secção 3.2, 9): um único `Atleta` por pessoa no clube, com participações (`AtletaEscalao`) em escalões de secções diferentes; estatísticas segmentadas por modalidade/secção na UI.
 10. **Licenciamento multi-secção** (secção 17): Individual = **uma modalidade ou a outra** (nunca as duas), preço mantém-se; Clube = **uma ou várias secções**, preço escala por secção/modalidade.
 11. **Nova secção 20** — Arquitetura multi-desporto e extensibilidade (camadas agnóstica/parametrizável/específica; registry `ConfigModalidade`; como adicionar um novo desporto no futuro).
 12. **Apêndices A, B, C** — Configuração de Futsal, Configuração de Futebol (todos os formatos), Matriz de migração v6→v7 (aditiva, backfill).
@@ -61,6 +61,7 @@ A **v7** expande o Mister de plataforma dedicada ao **futsal** para plataforma *
 20. [Arquitetura multi-desporto e extensibilidade](#20-arquitetura-multi-desporto-e-extensibilidade)
 21. [Backoffice Interno (Admin)](#21-backoffice-interno-admin)
 22. [Mano-a-Mano (duelos 1×1)](#22-mano-a-mano-duelos-11)
+23. [Competições — âmbito externo e competições próprias](#23-competições--âmbito-externo-e-competições-próprias)
 - [Apêndice A — Configuração de Futsal](#apêndice-a--configuração-de-futsal)
 - [Apêndice B — Configuração de Futebol (todos os formatos)](#apêndice-b--configuração-de-futebol-todos-os-formatos)
 - [Apêndice C — Matriz de migração v6→v7](#apêndice-c--matriz-de-migração-v6v7)
@@ -70,7 +71,7 @@ A **v7** expande o Mister de plataforma dedicada ao **futsal** para plataforma *
 ## 1. Visão, âmbito e princípios
 
 ### 1.1 O que é
-O **Mister** (marca **Mister**) é uma aplicação **web (PWA)** de gestão de treino e de clube dedicada ao **desporto de formação** — **futsal e futebol** —, em português de Portugal. Permite a um treinador planear e conduzir a época — plantel, periodização, treinos, exercícios com diagramas de campo animados, presenças, jogos com estatísticas, convocatórias, caderneta de desenvolvimento do atleta, modelo de jogo, scouting, comunicação com pais/staff e reuniões — e permite a um **clube** organizar várias **secções (modalidades)**, vários escalões e treinadores num único ecossistema com permissões, analytics transversais e relatórios profissionais.
+O **Mister** (marca **Mister**) é uma aplicação **web (PWA)** de gestão de treino e de clube dedicada ao **desporto de formação** — **futsal e futebol** —, em português de Portugal. Permite a um treinador planear e conduzir a época — plantel, periodização, treinos, exercícios com diagramas de campo animados, presenças, jogos com estatísticas, convocatórias, modelo de jogo, scouting, comunicação com pais/staff e reuniões — e permite a um **clube** organizar várias **secções (modalidades)**, vários escalões e treinadores num único ecossistema com permissões, analytics transversais e relatórios profissionais.
 
 > **🔁 Nota de modalidade (v7):** onde a v6 dizia "dedicada ao futsal", a v7 mantém o rigor específico do futsal **e** acrescenta o futebol com a mesma seriedade (dimensões de campo corretas, formatos 3×3 a 11×11, posições e estatísticas próprias). A modalidade é ancorada pela **Secção** (secção 3.1.1). Um treinador ou clube que só use futsal **não vê nenhuma complexidade nova** — a modalidade futsal é o comportamento por omissão.
 
@@ -95,12 +96,12 @@ O **`Clube` é sempre o tenant de topo**, mesmo na licença Individual. Consequ�
 - **Go-to-market:** vídeo demonstrativo público; reunião de demonstração a pedido para clubes; primeiros clubes como **parceiros fundadores** (patrocínio mútuo, visibilidade cruzada, referência comercial); suporte via **WhatsApp** para utilizadores individuais.
 
 ### 1.4 Princípios de design (inquebráveis)
-1. **Útil primeiro, mas visualmente e experiencialmente interessante.** Cada esforço pedido ao treinador devolve algo visual e satisfatório (marcar presenças → ver a taxa subir; registar um golo → ver o gráfico crescer; desbloquear uma habilidade → celebração).
+1. **Útil primeiro, mas visualmente e experiencialmente interessante.** Cada esforço pedido ao treinador devolve algo visual e satisfatório (marcar presenças → ver a taxa subir; registar um golo → ver o gráfico crescer).
 2. **Valor acumulado sem trabalho extra.** Os dados entram naturalmente pelo uso quotidiano (presenças, sessões, jogos, stats); a app transforma-os em analytics e relatórios automaticamente. **Analytics é um pilar** (secção 10).
 3. **O mais barato possível de operar.** Sem custos recorrentes de IA no núcleo. Só alojamento + base de dados + storage. A IA fica fora do núcleo (quando muito, plugin pago futuro).
 4. **Desporto a sério, não adaptações.** ⚽ **Futsal a sério** (não futebol adaptado): campo com dimensões corretas, terminologia FPF, estatísticas específicas (faltas acumuladas por parte, rotações/quintetos, power play/GR-jogador, tempos de jogo por blocos). 🥅 **Futebol a sério** (não futsal esticado): campo e formatos corretos (3×3 a 11×11), posições próprias, estatísticas próprias (remates, cantos, foras-de-jogo, desarmes), **sem** as regras específicas de futsal (faltas acumuladas por parte não se aplicam).
 5. **Beira-campo real:** o "modo jornada" tem de funcionar com rede fraca (PWA + offline) e poucos toques.
-6. **Desenvolvimento do atleta como alma:** a caderneta e o tracking de evolução por jogador são o coração emocional e o argumento de venda aos pais.
+6. **Desenvolvimento do atleta como alma:** o tracking de evolução por jogador é o coração emocional e o argumento de venda aos pais.
 7. **O editor de campo é um diferenciador central** (interativo, com animações) — a sua qualidade e validação são prioritárias antes de escalar a biblioteca. Serve **futsal e futebol** (secção 11.5).
 8. **Português de Portugal**, terminologia do glossário (secção 2).
 9. **Documentação sempre atualizada** (regra de ouro no topo).
@@ -119,7 +120,6 @@ O **`Clube` é sempre o tenant de topo**, mesmo na licença Individual. Consequ�
 - Jogos (amigável/competição): convocatória + estatísticas (**futsal e futebol**) + **tempos de jogo por blocos** + **registo ao vivo ou pós-jogo** + relatório + vídeo por link YouTube + **vista de dia de jogo** + **scouting do adversário no próprio jogo**.
 - **Calendário + competições + tabelas de classificação** (a partir de resultados inseridos manualmente).
 - **Comunicação (gerador de conteúdo para WhatsApp)** + **reuniões** (escalão/clube, ata exposta) + **sincronização Google Calendar**.
-- **Caderneta de habilidades.**
 - **Analytics em 3 níveis (atleta/equipa/clube)** — com **filtro por secção/modalidade** — e **relatório de fim de época partilhável** (PDF + vista web com link, sem IA).
 - **Relatórios PDF** profissionais.
 - **Onboarding com vitória rápida** (criação em massa do plantel, primeira sessão de template, primeira convocatória).
@@ -145,7 +145,7 @@ O **`Clube` é sempre o tenant de topo**, mesmo na licença Individual. Consequ�
 
 **1.7.2 Um clube, várias modalidades.** Um clube pode ter **secções de FUTSAL e de FUTEBOL em simultâneo** (`@@unique([clubeId, modalidade])` — no máximo uma por modalidade). Cada secção é um universo visual e organizacional próprio: "Benjamins Futsal" e "Benjamins Futebol" nunca se confundem porque vivem em secções separadas (secção 8.1.1).
 
-**1.7.3 Uma pessoa, um atleta.** Há **um único `Atleta` por pessoa** no clube, independentemente de quantas modalidades pratica. O mesmo miúdo pode ter participações (`AtletaEscalao`) em "Benjamins Futsal" e "Benjamins Futebol" — dados pessoais partilhados, estatísticas e caderneta **segmentadas por modalidade/secção** na UI (secção 9, 10.8).
+**1.7.3 Uma pessoa, um atleta.** Há **um único `Atleta` por pessoa** no clube, independentemente de quantas modalidades pratica. O mesmo miúdo pode ter participações (`AtletaEscalao`) em "Benjamins Futsal" e "Benjamins Futebol" — dados pessoais partilhados, estatísticas **segmentadas por modalidade/secção** na UI (secção 9, 10.8).
 
 **1.7.4 Individual = uma modalidade.** A licença Individual dá acesso a **uma** modalidade (a escolhida na compra). Não é possível gerir futsal e futebol na mesma licença Individual — para isso existe a licença de Clube com múltiplas secções (secção 17.1).
 
@@ -154,7 +154,7 @@ O **`Clube` é sempre o tenant de topo**, mesmo na licença Individual. Consequ�
 **1.7.5 Transparência para quem não precisa.** Um treinador ou clube que só faça uma modalidade **não vê complexidade nova**: a secção é criada automaticamente ao criar o primeiro escalão (secção 8.1.1) e a UI não mostra seletor de secção quando só existe uma. A camada multi-desporto é **invisível por omissão** e **explícita só quando há mais do que uma secção**.
 
 **1.7.6 Três camadas de conhecimento de modalidade** (detalhe em 20.1):
-- **Agnóstica** — não sabe nada de modalidade (contas, permissões, épocas, presenças, comunicação, caderneta, lembretes, reuniões).
+- **Agnóstica** — não sabe nada de modalidade (contas, permissões, épocas, presenças, comunicação, lembretes, reuniões).
 - **Parametrizável** — comporta-se conforme a modalidade via configuração (estatísticas, posições, formato de jogo, campo do editor, biblioteca curada).
 - **Específica** — regras que só existem numa modalidade (faltas acumuladas por parte e power play só em futsal; foras-de-jogo e cantos como núcleo em futebol).
 
@@ -225,8 +225,6 @@ Interface 100% em **português de Portugal**, terminologia FPF (futsal e futebol
 - **Lembrete / tarefa (`Lembrete`)** — item de to-do ligado ao contexto da equipa: **pessoal** (só o próprio vê) ou de **equipa** (DT/Admin atribui a treinadores específicos ou a toda a equipa técnica), com deadline opcional; aparece no dashboard dos destinatários.
 
 **Desenvolvimento e análise**
-- **Caderneta** — sistema de habilidades que o atleta desbloqueia ao longo da época.
-- **Habilidade** — "move" técnico, por nível (Básico/Intermédio/Avançado).
 - **Analytics** — três níveis: **atleta**, **equipa**, **clube (transversal)** — com filtro por **secção/modalidade** e por escalão.
 - **Relatório de fim de época** — síntese por equipa/atleta/clube, a partir dos dados; exportável em PDF e partilhável por link web.
 
@@ -300,7 +298,6 @@ model Clube {
   seccoes         Seccao[]              // 🔁 v7: secções (modalidades) do clube
   escaloes        Escalao[]
   atletas         Atleta[]              // atletas pertencem ao clube (não à época nem à modalidade)
-  habilidades     Habilidade[]
   metricas        MetricaConfig[]
   subcategorias   SubcategoriaExercicio[]
   competicoes     Competicao[]
@@ -427,7 +424,6 @@ model Epoca {
   participacoes AtletaEscalao[]
   sessoes       Sessao[]
   jogos         Jogo[]
-  progressos    ProgressoHabilidade[]
   planeamentos  Planeamento[]
   competicoes   Competicao[]
 }
@@ -498,7 +494,6 @@ model Atleta {
   presencas      Presenca[]
   convocatorias  Convocatoria[]
   estatisticas   EstatisticaAtleta[]
-  progressos     ProgressoHabilidade[]
   consentimentos Consentimento[]
 
   @@index([clubeId])
@@ -633,6 +628,9 @@ model PartilhaExercicioClube {
   @@unique([exercicioId, clubeId])
 }
 ```
+
+> Ver §8.24.1 para a biblioteca de exercícios GR e subcategorias curadas.
+
 **Preservação de histórico:** quando um exercício **do treinador** (`proprietario = TREINADOR`) é usado numa sessão do clube, o clube retém um **snapshot só-de-leitura** desse exercício (mecanismo em **4.2.1**; campos `snap*` do `SessaoExercicio`, secção 3.5).
 
 **Duplicar (DEVE — UX-P3-06):** qualquer exercício **visível** (🎒 pessoal próprio, 🎒 pessoal de um treinador com quem partilha ≥1 escalão — §3.3 — ou 🏛️ da biblioteca do clube) pode ser duplicado via `duplicarExercicio(id)` (§7.3). A cópia é **sempre 🎒 pessoal** do utilizador que duplica (`proprietario = TREINADOR`, sem partilha no clube, `origemSeed = false`), com o nome sufixado por **" (cópia)"** — serve para partir de um exercício existente (mesmo curado ou do clube) e adaptá-lo sem alterar o original. Exige `EXERCICIOS_GERIR`.
@@ -1121,40 +1119,9 @@ model ObservacaoJogadorAdversario {
 
 > **🔁 Derivação do formato (DEVE):** ao criar um `Jogo`, o `formato` é **pré-preenchido** a partir da modalidade da secção do escalão (`FUTSAL_5` para futsal; para futebol, o formato por defeito do escalão — configurável, ver Apêndice B) e permanece **editável** (um escalão pode disputar amigáveis noutro formato). O `formato` determina o campo do editor (secção 11.5) e que estatísticas de núcleo são exibidas (secção 10.8).
 
-### 3.8 Caderneta de habilidades (🏛️ clube)
+### 3.8 (removido) — Caderneta de habilidades
 
-```prisma
-model Habilidade {
-  id        String          @id @default(cuid())
-  clubeId   String
-  clube     Clube           @relation(fields: [clubeId], references: [id])
-  nome      String
-  descricao String?
-  nivel     NivelHabilidade @default(BASICO) // BASICO | INTERMEDIO | AVANCADO
-  ordem     Int             @default(0)
-  // 🔁 v7 (DEVERIA): uma habilidade pode ser específica de uma modalidade ou transversal.
-  modalidade Modalidade?    // null = transversal (aplica-se às duas)
-  criadoEm  DateTime        @default(now())
-
-  progressos ProgressoHabilidade[]
-}
-
-enum NivelHabilidade { BASICO INTERMEDIO AVANCADO }
-
-model ProgressoHabilidade {
-  id              String           @id @default(cuid())
-  atletaId        String
-  habilidadeId    String
-  epocaId         String
-  estado          EstadoHabilidade @default(NAO_INICIADO)
-  dataDesbloqueio DateTime?
-  notas           String?
-
-  @@unique([atletaId, habilidadeId, epocaId])
-}
-
-enum EstadoHabilidade { NAO_INICIADO EM_PROGRESSO DESBLOQUEADO }
-```
+> **Removido em 2026-09-12** (changelog §19). As features **Habilidades** e **Caderneta** foram removidas do produto: os modelos `Habilidade` e `ProgressoHabilidade` e os enums `NivelHabilidade`/`EstadoHabilidade` deixaram de existir, tal como as capacidades `CATALOGO_HABILIDADES` e `CADERNETA_GERIR`. O número de secção mantém-se para não invalidar referências históricas. **Nota:** as *subcategorias* de exercícios (§8.6, `SubcategoriaExercicio`) são uma feature distinta e permanecem.
 
 ### 3.9 Reuniões e comunicação (🏛️ clube)
 `Reuniao` (com `ambito CLUBE | ESCALAO`, `ordemTrabalhos`, `ata`, `googleEventId`, criador `SetNull`), `ModeloComunicacao` (7 tipos, globais via `clubeId = null` + variante do clube), placeholders `{{campo}}` e `gerarTextoComunicacao` — conforme v6 §3.9. (Os placeholders de `RESULTADO`/`CONVOCATORIA` são agnósticos à modalidade; ver 8.12.) **🔁 v7 — `Reuniao` ganha `afixada Boolean @default(false)`** — indica se a reunião está afixada no dashboard/Início; controla a apresentação descrita em §8.13 (afixadas surgem sempre no dashboard, independentemente da data). Alteração **aditiva** (default `false`).
@@ -1266,7 +1233,7 @@ Sem alteração de arquitetura na v7. Geração server-side (`next/og`, rota `GE
 
 ### 4.1 Princípio
 Há três tipos de dados:
-- **Operacionais/competitivos** → sempre do **clube** (ficam quando o treinador sai): atletas e participações, jogos, estatísticas, eventos, presenças, convocatórias, caderneta, **secções**, escalões, épocas, competições, classificações, reuniões, comunicação, scouting, consentimentos.
+- **Operacionais/competitivos** → sempre do **clube** (ficam quando o treinador sai): atletas e participações, jogos, estatísticas, eventos, presenças, convocatórias, **secções**, escalões, épocas, competições, classificações, reuniões, comunicação, scouting, consentimentos.
 - **Conteúdo metodológico** (exercícios, templates de sessão, modelos de jogo) → a propriedade é **decidida pelo treinador no momento da criação** (toggle pessoal vs clube), **não** por quem paga a licença (ver 4.2). Cada treinador tem sempre uma **biblioteca pessoal** (portátil); a **biblioteca do clube** representa a filosofia/identidade do clube.
 - **Histórico de carreira** (`RegistoCarreira`) e **carteira** (`Carteira`) → sempre do **treinador** (viajam com ele).
 
@@ -1307,7 +1274,6 @@ A coluna **«Porta com o treinador?»** indica se o treinador **retém uma cópi
 | Resultados de jogos (marcador, adversário) | 🏛️ CLUBE | ✅ Sim — o treinador dirigiu os jogos |
 | Relatórios de sessões (estrutura, exercícios usados) | 🎒 TREINADOR | ✅ Sim |
 | Estatísticas individuais de atletas (golos, cartões, RPE, remates, desarmes…) | 🏛️ CLUBE | ❌ Não |
-| Caderneta de habilidades dos atletas | 🏛️ CLUBE | ❌ Não |
 | Exercícios criados pelo treinador (futsal **e** futebol) | 🎒 TREINADOR (toggle) | ✅ Sim (se `proprietario = TREINADOR`) |
 | Modelos táticos criados pelo treinador | 🎒 TREINADOR (toggle) | ✅ Sim (se `proprietario = TREINADOR`) |
 | Planeamentos / semanas criadas pelo treinador | 🎒 TREINADOR | ✅ Sim — como templates (semana-tipo) |
@@ -1385,14 +1351,13 @@ Chaves usadas em `Perfil.capacidades` e nos overrides de membro:
 - `CLUBE_UTILIZADORES` — convidar/gerir membros, repor passwords, overrides.
 - `CLUBE_PERFIS` — criar/editar perfis e atribuir.
 - `CATALOGO_METRICAS` — gerir métricas configuráveis.
-- `CATALOGO_HABILIDADES` — gerir o catálogo de habilidades.
 - `FATURACAO_GERIR` — **FUTURO** (billing/subscrição; só o Admin).
 
 **Secção (âmbito `SECCAO`) — 🔁 novo v7:**
 - `SECCAO_ESCALOES_GERIR` — criar/editar/apagar escalões e definir visibilidade **dentro da(s) secção(ões) coordenada(s)** (`MembroSeccao`). É a capacidade dedicada do Coordenador de Secção para gerir os escalões da sua modalidade, sem conceder o `CLUBE_ESCALOES` (que é sempre de nível clube). Não permite gerir escalões de outras secções.
 
 **Dados de equipa (conforme o `ambito`):**
-- `PLANTEL_GERIR` · `PROMOVER_ATLETAS` · `TREINOS_GERIR` · `PRESENCAS_MARCAR` · `PERIODIZACAO_GERIR` · `MODELO_JOGO_GERIR` · `JOGOS_GERIR` (variante `gerir_jogos_todos` = âmbito `TODO_CLUBE`) · `CONVOCATORIA_GERIR` · `ESTATISTICAS_GERIR` · `COMPETICOES_GERIR` · `MANOAMANO_GERIR` · `SCOUTING_GERIR` · `CADERNETA_GERIR` · `REUNIOES_GERIR` · `COMUNICACOES_GERIR` · `LEMBRETES_EQUIPA_GERIR` · `EXERCICIOS_GERIR` · `RELATORIOS_VER`.
+- `PLANTEL_GERIR` · `PROMOVER_ATLETAS` · `TREINOS_GERIR` · `PRESENCAS_MARCAR` · `PERIODIZACAO_GERIR` · `MODELO_JOGO_GERIR` · `JOGOS_GERIR` (variante `gerir_jogos_todos` = âmbito `TODO_CLUBE`) · `CONVOCATORIA_GERIR` · `ESTATISTICAS_GERIR` · `COMPETICOES_GERIR` · `MANOAMANO_GERIR` · `SCOUTING_GERIR` · `REUNIOES_GERIR` · `COMUNICACOES_GERIR` · `LEMBRETES_EQUIPA_GERIR` · `EXERCICIOS_GERIR` · `RELATORIOS_VER`.
 
 - `MANOAMANO_GERIR` — **(novo)** criar/editar/apagar **competições Mano-a-Mano** (ligas e torneios 1×1), gerir participantes e clubes externos, gerar fixtures/brackets, agendar e registar resultados de duelos (secção 22). O registo de resultados de um duelo **dentro de uma sessão de treino** (bloco Mano-a-Mano do detalhe da sessão — 22.7) é adicionalmente coberto por **`TREINOS_GERIR`**, para que um adjunto que conduz o treino possa registar duelos sem gerir a competição.
 
@@ -1426,7 +1391,7 @@ A **escrita** continua a exigir capacidade + âmbito (§6.7), independentemente 
 - **Diretor Técnico** — `TODO_CLUBE`, todas as capacidades de **dados de equipa** + `CATALOGO_*` + `RELATORIOS_VER` + **`CLUBE_UTILIZADORES`** (convidar e gerir treinadores/membros — §8.2) + `PROMOVER_ATLETAS` + `COMUNICACOES_GERIR` + `LEMBRETES_EQUIPA_GERIR`. **NÃO** tem `CLUBE_PERFIS` (definição de perfis de permissão continua do Administrador, tal como o estatuto de admin que exige `CLUBE_UTILIZADORES` **e** `CLUBE_PERFIS`) e **NÃO** gere billing nem restante estrutura/configuração de infra da conta.
 - **Coordenador de Secção** — 🔁 **(novo v7):** `SECCAO`, todas as capacidades de **dados de equipa** dos escalões da(s) sua(s) secção(ões) + `EXERCICIOS_GERIR` + `RELATORIOS_VER` + `COMUNICACOES_GERIR` + `PROMOVER_ATLETAS` (dentro da secção) + **`SECCAO_ESCALOES_GERIR`** (gestão de escalões da sua secção — ver 6.9). **NÃO** tem `CLUBE_ESCALOES` (nível clube) e **NÃO** gere billing, branding, perfis, épocas nem outras secções.
 - **Treinador Principal** — `PROPRIOS_ESCALOES`, capacidades de dados de equipa dos seus escalões + `EXERCICIOS_GERIR` + `RELATORIOS_VER` + `COMUNICACOES_GERIR`. `PROMOVER_ATLETAS` desligada por defeito.
-- **Adjunto** — `PROPRIOS_ESCALOES`, capacidades operacionais (`TREINOS_GERIR`, `PRESENCAS_MARCAR`, `ESTATISTICAS_GERIR`, `CADERNETA_GERIR`, `EXERCICIOS_GERIR`). **NÃO** recebe `MANOAMANO_GERIR` (não gere competições 1×1), mas **pode registar resultados de duelos no bloco Mano-a-Mano da sessão de treino** por via de `TREINOS_GERIR` (secção 22.7).
+- **Adjunto** — `PROPRIOS_ESCALOES`, capacidades operacionais (`TREINOS_GERIR`, `PRESENCAS_MARCAR`, `ESTATISTICAS_GERIR`, `EXERCICIOS_GERIR`). **NÃO** recebe `MANOAMANO_GERIR` (não gere competições 1×1), mas **pode registar resultados de duelos no bloco Mano-a-Mano da sessão de treino** por via de `TREINOS_GERIR` (secção 22.7).
 
 > **Distribuição de `MANOAMANO_GERIR` (novo — secção 22):** incluído por defeito no **Administrador** (todas as capacidades), no **Diretor Técnico** e no **Coordenador de Secção** (todas as capacidades de dados de equipa) e no **Treinador Principal** (capacidades de dados de equipa dos seus escalões). O **Adjunto** não o recebe; regista duelos em treino via `TREINOS_GERIR`. O **Presidente** (leitura) não gere competições 1×1, mas vê a classificação/campeão nos relatórios via `RELATORIOS_VER`.
 - **Presidente** — `TODO_CLUBE`, perfil de **leitura** para a direção do clube: apenas `RELATORIOS_VER` (analíticos e relatórios). A **licença** é visível a qualquer membro (não é gated por capacidade); a **configuração do clube** fica em leitura pela **ausência** das capacidades `CLUBE_*` (que só permitem editar). **NÃO** tem nenhuma capacidade `_GERIR`: não gere membros, perfis, treinos, jogos nem plantel.
@@ -1528,7 +1493,6 @@ criarEscalao({ nome, seccaoId?, modalidade?, ... }) // 🔁 v7: cria/garante a S
 atualizarEscalao/apagarEscalao/moverEscalao/listarEscaloes(seccaoId?)/definirVisibilidadeEscalao
 criarEpoca/listarEpocas/definirEpocaAtiva/selecionarEpoca
 criarMetrica({ ..., modalidade? })/listarMetricas(modalidade?)/alternarMetrica/moverMetrica
-criarHabilidade({ ..., modalidade? })/atualizarHabilidade/apagarHabilidade/moverHabilidade/listarHabilidades(modalidade?)
 ```
 > **🔁 `criarEscalao` (DEVE):** recebe `seccaoId` **ou** `modalidade`. Com `modalidade`, chama `garantirSeccaoParaModalidade` (cria a secção se ainda não existir — onboarding transparente, secção 8.1.1) e liga o escalão. Com `seccaoId`, valida que a secção pertence ao clube.
 > **🔁 Bloqueio Individual = uma modalidade (DEVE):** se o clube for técnico Individual (`Clube.clubeTecnico && Licenca.tipo == INDIVIDUAL`), rejeitar com erro de validação se já existe uma `Secção` de modalidade diferente. O helper `garantirSeccaoParaModalidade` verifica esta condição antes de criar (mensagem sugere a licença de Clube — §17.1).
@@ -1655,19 +1619,18 @@ Cada módulo define **conteúdo**, **ações**, **estado vazio** e **regras**. E
 - **🔁 Secções** (`CLUBE_SECCOES`): listar, criar (por modalidade; idempotente por `@@unique[clubeId, modalidade]`), renomear, atribuir/remover coordenadores, apagar (bloqueado se tiver escalões). Ver 8.22.
 - **Escalões** (`CLUBE_ESCALOES`): CRUD + reordenar + visibilidade; **cada escalão pertence a uma secção** (selecionada ou derivada da modalidade). Apagar bloqueado se tiver participações/atletas.
 - **Épocas** (`CLUBE_EPOCAS`): criar, listar, definir ativa; **wizard «Nova Época»** (8.21).
-- **Métricas** (`CATALOGO_METRICAS`): CRUD + tipo + ativar/desativar + reordenar; **🔁 opcionalmente por modalidade** (só aparecem nessa modalidade; null = ambas); **🔁 v7 (2026-09-11): `contexto`** (`JOGO`/`TREINO`/`AMBOS`, default `JOGO`) — define se a métrica se regista na grelha de estatísticas do jogo, na grelha da sessão de treino (§8.20.1), ou nos dois.
-- **Habilidades** (`CATALOGO_HABILIDADES`): CRUD por nível + reordenar; **🔁 opcionalmente por modalidade**.
+- **Métricas** (`CATALOGO_METRICAS`): CRUD + tipo + ativar/desativar + reordenar; **🔁 opcionalmente por modalidade** (só aparecem nessa modalidade; null = ambas); **🔁 v7 (2026-09-11): `contexto`** (`JOGO`/`TREINO`/`AMBOS`, default `JOGO`) — define se a métrica se regista na grelha de estatísticas do jogo, na grelha da sessão de treino (§8.20.1), ou nos dois. **Editar** (`editarMetrica`) altera `nome`, `tipo` e `contexto` (o `id`, a `ordem` e o estado `ativa` mantêm-se) e reusa a validação de criação (`metricaSchema`). **Eliminar** (`eliminarMetrica`) só é permitida quando **não** existem valores históricos associados (`ValorMetrica` de jogo ou `ValorMetricaSessao` de treino); se houver, é **recusada** com «Métrica em uso — desativa em vez de apagar.» (§9 — nunca apagar `ValorMetrica`). Na UI cada linha tem botão de **editar** (lápis, abre diálogo) e de **eliminar** (lixo, com confirmação `AlertDialog`).
 - **Subcategorias de exercício:** CRUD (seed instala predefinidas).
 - **Templates de comunicação** (`COMUNICACOES_GERIR`): ver/editar variantes.
 
-> **🔁 Modo Individual — ocultação na página de Definições (DEVE; Fase 4, 2026-09-11):** num clube técnico (`clube.clubeTecnico === true`) a **página de Definições** oculta as entradas de gestão de clube — **Clube/Branding, Secções, Equipa técnica e Perfis** — via flag **`ocultarIndividual`** (derivada de `clubeTecnico`). **Permanecem visíveis** ao Individual: **Escalões, Épocas, Métricas, Habilidades, Subcategorias, Licença e Integrações**. A navegação de topo não muda (estes módulos são sub-entradas de Definições, não itens de nav — §8). A ocultação é **cosmética**; os guards de servidor (§7.3) são a defesa real (recusa de convite de membros e de 2ª modalidade em clube técnico).
+> **🔁 Modo Individual — ocultação na página de Definições (DEVE; Fase 4, 2026-09-11):** num clube técnico (`clube.clubeTecnico === true`) a **página de Definições** oculta as entradas de gestão de clube — **Clube/Branding, Secções, Equipa técnica e Perfis** — via flag **`ocultarIndividual`** (derivada de `clubeTecnico`). **Permanecem visíveis** ao Individual: **Escalões, Épocas, Métricas, Subcategorias, Licença e Integrações**. A navegação de topo não muda (estes módulos são sub-entradas de Definições, não itens de nav — §8). A ocultação é **cosmética**; os guards de servidor (§7.3) são a defesa real (recusa de convite de membros e de 2ª modalidade em clube técnico).
 
 ### 8.5 Plantel e participações (`PLANTEL_GERIR`, `PROMOVER_ATLETAS`)
 - **Atleta ao nível do clube** (transversal às modalidades — 1.7.3). Lista: **agrupada por secção quando >1** 🔁, tabs por escalão (participações ativas na época) + pesquisa; cartões (avatar, nome, **número do escalão**, posições da modalidade). **Aviso de número duplicado** entre participações ativas do mesmo escalão.
 - **Participações (N-N):** um atleta tem uma **participação PRINCIPAL por modalidade** 🔁 e pode ter simultâneas/ocasionais noutros escalões (mesma ou outra modalidade). Ações: **associar** (tipo + número), **transferir** (transição permanente muda o principal da modalidade), **editar tipo** (mudar entre principal/simultânea/ocasional numa participação ativa), **terminar**. Histórico preservado.
 - **Editar tipo de participação 🔁 novo 2026-08-26:** na aba **Participações**, cada participação **ativa da época atual** tem um botão **«Editar»** (dialog com select de tipo) além de «Terminar». A ação `editarTipoParticipacao` respeita o invariante do principal **por modalidade** (§9): ao passar uma participação a **PRINCIPAL**, o principal anterior da mesma modalidade é **despromovido automaticamente a SIMULTANEA** na mesma transação Serializable; tentar despromover o **único** principal da modalidade é **recusado** (participação principal obrigatória — transferir/promover outro escalão primeiro). Um principal de **outra** modalidade nunca é tocado.
 - **Gating de UI (6.7):** associar/transferir só com `PLANTEL_GERIR`; editar tipo/terminar só com `PROMOVER_ATLETAS`. Os escalões oferecidos limitam-se aos **geríveis** (todos se `TODO_CLUBE`; da secção se `SECCAO`; os atribuídos se `PROPRIOS_ESCALOES`).
-- **Perfil do atleta:** cabeçalho + abas **Estatísticas** (vista conjunta na época **segmentada por modalidade/secção** 🔁 + vista por escalão), **Analytics**, **Caderneta**, **Participações** (histórico de escalões, indicando modalidade), **Carreira** (percurso, com modalidade). 🔁 **2026-09-04:** a antiga aba **«Dados»** foi **removida**; as suas ações (switch de estado `ativo` e zona de perigo «Apagar definitivamente») migraram para o **formulário de edição do atleta** (ver 8.5 «Novo/Editar»). Os dados pessoais consultam-se/editam-se no próprio formulário de edição.
+- **Perfil do atleta:** cabeçalho + abas **Estatísticas** (vista conjunta na época **segmentada por modalidade/secção** 🔁 + vista por escalão), **Analytics**, **Participações** (histórico de escalões, indicando modalidade), **Carreira** (percurso, com modalidade). 🔁 **2026-09-04:** a antiga aba **«Dados»** foi **removida**; as suas ações (switch de estado `ativo` e zona de perigo «Apagar definitivamente») migraram para o **formulário de edição do atleta** (ver 8.5 «Novo/Editar»). Os dados pessoais consultam-se/editam-se no próprio formulário de edição.
 - **Novo/Editar:** nome (obrigatório), posições (filtradas pela modalidade do contexto, mas o atleta pode acumular de ambas), data de nascimento, **foto (upload com compressão; URL externo legado continua a renderizar)**, **estado de inscrição** (switch «Inscrito»), encarregado de educação; **escalão + número** na participação.
 - **Fotografia (upload) 🔁 novo 2026-09-10:** o campo de foto é um **avatar editável** (`FotoUpload`, ícone de câmara em cima da foto) em vez de um input de URL. Fluxo: **picker de ficheiro** (aceita `image/jpeg,image/png,image/webp`) → **compressão no browser** (`browser-image-compression`, alvo `maxWidthOrHeight 512`, `maxSizeMB 2`) → **upload imediato** via Server Action `uploadFotoAtleta(atletaId, formData)` (não espera pelo submit do formulário; o servidor faz o re-encode final para **256×256 WebP** e devolve o `fotoUrl` já persistido) → **pré-visualização** (object URL revogado no cleanup). Botão **«Remover foto»** limpa o estado local (o save do formulário trata da remoção na BD). O `fotoUrl` viaja no formulário num input escondido, para o save preservar/remover a foto. **Só disponível em edição** — na criação mostra-se «Guarda primeiro o atleta para adicionar uma fotografia» (o upload precisa de `atletaId`). Um `fotoUrl` **externo legado** (não Supabase) continua a renderizar e pode ser substituído por upload. O `AvatarAtleta` faz **fallback para as iniciais** se a imagem não carregar. UI 100% pt-PT, alvos de toque ≥44px.
 - **Estado de inscrição (`inscrito`) 🔁 novo 2026-08-26:** campo booleano **`inscrito`** (default `false`) que distingue quem já está **formalmente inscrito** (na federação/no clube) de quem falta inscrever. É **independente de `ativo`** — um atleta ativo no plantel pode ainda estar por inscrever. Gravado na criação (`inscrito ?? false`) e editável no formulário do atleta; em `atualizarAtleta` só é escrito quando fornecido. **Na UI:** uma etiqueta pequena (`BadgeInscricao`, informação secundária) mostra **«Inscrito»** (verde) / **«Por inscrever»** (âmbar) nos **cartões** do plantel (junto ao «Inativo») e no **cabeçalho do perfil**. A página do plantel oferece um **seletor de vista** (Cartões ↔ Inscrições, estado em `?vista=inscricoes`, preservando os restantes filtros); a vista **Inscrições** é uma lista responsiva com **nome, idade + data de nascimento, encarregado (nome + contacto) e estado de inscrição**, cada linha ligada ao perfil.
@@ -1842,12 +1805,12 @@ A **Agenda** (`/agenda`) é a **vista central de eventos** do clube, unificando 
 - **Ligações a partir dos módulos:** as listas de **Treinos** (§8.8) e **Jogos** (§8.11) têm um atalho **«Ver na Agenda»** que abre a Agenda em modo lista já filtrada pelo tipo (`/agenda?vista=lista&tipo=TREINO` / `...&tipo=JOGO`).
 - **Modelo de dados (`obterAgendaClube`, `lib/actions/agenda.ts`):** o tipo `EventoAgenda` é um discriminado por `tipo` (`"TREINO" | "JOGO" | "REUNIAO"`) e expõe, além dos campos comuns (data, título, escalão), os específicos por tipo — `tipoSessao?`, `tipoJogo?`, `casaFora?`, `descricao?`. As reuniões são integradas na agregação a par de treinos e jogos (`Promise.all`), com o mesmo filtro de âmbito (clube + escalões legíveis).
 
-### 8.14 Caderneta (`CADERNETA_GERIR`)
-Habilidades por nível, com estado/data/notas. Progresso + celebração ao desbloquear. **🔁 v7:** as habilidades podem ser específicas de modalidade (`Habilidade.modalidade`); a caderneta de um atleta multi-desporto mostra as habilidades da modalidade em contexto (secção/escalão) e agrega por modalidade na vista conjunta.
+### 8.14 (removido) — Caderneta
+> **Removido em 2026-09-12** (changelog §19). As features **Habilidades** e **Caderneta** foram removidas do produto. O número de secção mantém-se para não invalidar referências históricas.
 
 ### 8.15 Analytics, relatórios e PDF (`RELATORIOS_VER`) — **pilar do produto**
 > Três níveis, agora com **filtro por secção/modalidade** 🔁:
-- **Atleta:** evolução de presenças, tempo de jogo acumulado (blocos), golos/estatísticas por jogo, caderneta, comparação com a média da equipa — **segmentado por modalidade** quando o atleta é multi-desporto (10.8).
+- **Atleta:** evolução de presenças, tempo de jogo acumulado (blocos), golos/estatísticas por jogo, comparação com a média da equipa — **segmentado por modalidade** quando o atleta é multi-desporto (10.8).
 - **Equipa:** evolução de resultados, golos, assiduidade, mais utilizados, top scorers, **núcleo estatístico da modalidade** (10.8).
 - **Clube (transversal):** comparação entre escalões e **entre secções/modalidades** 🔁; assiduidade global; KPIs. Visível a Admin/DT; Coordenador vê a **sua secção** (6.9); configurável para treinadores.
 - **Relatório de fim de época:** por atleta/equipa/clube — PDF + vista web partilhável (`RelatorioPartilhado`) com identidade do clube. Snapshot imutável.
@@ -1885,10 +1848,12 @@ Conforme v6 §8.20: RPE da sessão (`Sessao.rpeSessao` 1-10) e individual (`RpeA
 
 **Análise (DEVE):** as métricas de treino surgem **agregadas por atleta** no painel do atleta (`obterAnaliticoAtleta` → `metricasTreino`), com **média por sessão** ao longo da época (secção «Métricas de treino» do `PainelAtleta`). Reutiliza o agregador das métricas de jogo (BOOLEANO conta registos ≠ 0; NUMERO/ESCALA somam).
 
+> Ver §8.24.3 para métricas técnicas específicas de GR (`aplicaSoGuardaRedes`).
+
 ### 8.21 Wizard «Nova Época» (`CLUBE_EPOCAS`)
 Conforme v6 §8.21 (cenários A/B/C/D), com uma extensão multi-desporto:
 - **🔁 v7 (DEVE):** os passos de plantel/escalões/promoções respeitam a **secção**. Ao transitar escalões de várias secções, o wizard agrupa por secção; as promoções por idade são sugeridas **dentro da mesma modalidade** (um atleta de futsal transita para o escalão de futsal seguinte; se também joga futebol, essa participação é tratada na secção de futebol). O invariante "principal único" é aplicado **por modalidade** (§9).
-- Herança automática (conteúdo portátil, métricas, caderneta, modo de semana) e reset (estatísticas/presenças/jogos/convocatórias/planeamentos) — inalterados.
+- Herança automática (conteúdo portátil, métricas, modo de semana) e reset (estatísticas/presenças/jogos/convocatórias/planeamentos) — inalterados.
 
 ### 8.22 Gestão de secções (`CLUBE_SECCOES`) — 🔁 novo v7
 - **Rota `/definicoes/seccoes`** (só clube real): lista das secções (modalidade, nome, nº de escalões, coordenadores).
@@ -2016,10 +1981,94 @@ Gráficos SVG com `--cor-primaria`, carregados via `next/dynamic` (`ssr:false`).
 
 ---
 
+### 8.24 Treino específico de Guarda-Redes (`TREINOS_GERIR`, `EXERCICIOS_GERIR`, `RELATORIOS_VER`) — 🔁🥅⚽ novo
+
+> **Estatuto:** nova funcionalidade. Camada dedicada ao **guarda-redes** sobre a infraestrutura existente de exercícios, treinos e métricas de treino — **reuse-first**, aditiva. Transversal às modalidades (futsal e futebol partilham `GUARDA_REDES`), com subcategorias e métricas próprias de cada uma. **Atleta de GR** = atleta cujas `posicoes` incluem `GUARDA_REDES`.
+
+**Motivação.** O treinador (ou treinador de guarda-redes) quer (1) criar/usar exercícios específicos de GR distintos dos de campo, (2) planear treino técnico de GR (reflexos, saídas, jogo com os pés, 1×1, bolas paradas), (3) acompanhar o desenvolvimento técnico do GR ao longo da época, e (4) registar sessões externas (estágios, clínicas) no histórico do atleta.
+
+#### 8.24.1 Exercícios de GR (biblioteca)
+
+Reutilizam `Exercicio` com `categoriaPrincipal = GUARDA_REDES` (§3.3) — sem entidade nova. A biblioteca `/exercicios` ganha um **chip de atalho "Guarda-redes"** (equivale a `categoria=GUARDA_REDES`), combinável com os filtros de parte do treino/modalidade/pesquisa já existentes.
+
+As **subcategorias GR** são curadas e seeded por modalidade (`instalarConteudoArranqueGR`, em `lib/biblioteca-arranque-gr.ts`; instalador idempotente por clube, invocado pelo seed), `categoria=GUARDA_REDES`, `sistema=true`. `SubcategoriaExercicio` não tem coluna `modalidade` — a especificidade de modalidade das subcategorias exclusivas fica expressa no próprio nome:
+- **Comuns (futsal + futebol):** Reflexos e reação · Posicionamento e ângulos · Jogo com os pés / construção · Frente-a-frente (1×1) · Bolas paradas – defesa.
+- **Futsal ⚽:** Saídas em bloco baixo · GR-jogador / power play · Reposição rápida / pontapé de baliza.
+- **Futebol 🥅:** Saídas ao cruzamento / bola aérea · Defesa de penálti · Distribuição longa / pontapé de baliza.
+
+O editor de campo usa os elementos já existentes (`baliza`, jogador com `posicao:"GR"`, setas). Propriedade 🎒/🏛️, duplicação e partilha no clube inalteradas (§3.3, §4.2).
+
+#### 8.24.2 Planeamento de treino de GR
+
+Dois modos, ambos por reutilização:
+
+- **Templates de sessão de GR** (`ModeloSessao`, §3.4): seed de templates por modalidade — "Treino de GR – Reflexos e saídas (45 min)" (futsal) e "Treino de GR – Reflexos e saídas (60 min)" (futebol). Seeded como esqueleto (nome, duração, objetivo tático), sem exercícios pré-associados — a biblioteca curada de arranque ainda não tem exercícios de GR suficientes nas duas modalidades; o treinador preenche a partir da sua biblioteca. "Criar sessão a partir de template" copia exercícios/durações como qualquer template.
+- **Bloco de Guarda-redes numa sessão de equipa** (§8.8.2): no detalhe `/treinos/[id]`, os exercícios de `categoriaPrincipal=GUARDA_REDES` são **agrupados e rotulados "Bloco de Guarda-redes"**; a apresentação do bloco lista **apenas os guarda-redes presentes** na sessão (`Presenca` = `PRESENTE`/`ATRASADO` e `posicoes` inclui `GUARDA_REDES`). O modo de condução (§8.8.2) percorre estes exercícios na ordem canónica das fases, sem alterações. O agrupamento é **derivado da categoria** — sem flag nova em `SessaoExercicio`.
+
+#### 8.24.3 Métricas técnicas de GR por sessão (DEVE)
+
+Estende as métricas de treino (§8.20.1):
+
+- `MetricaConfig` ganha **`aplicaSoGuardaRedes Boolean @default(false)`**. Quando `true`, a métrica só surge (grelha e agregações) para atletas cujas `posicoes` incluem `GUARDA_REDES`; nas linhas dos restantes atletas o input aparece **desativado ("—")**.
+- Em `Definições → Métricas`, o formulário ganha o toggle **"Aplica só a guarda-redes"** (visível quando contexto é Treino/Ambos).
+- Seed de métricas GR (`contexto=TREINO`, `aplicaSoGuardaRedes=true`, `tipo=ESCALA` 1–5; editáveis): **Reflexos · Saídas · Jogo com os pés · Posicionamento · Comunicação/Concentração**. `MetricaConfig` não tem coluna de descrição — as descrições de cada métrica ficam documentadas em `lib/biblioteca-arranque-gr.ts` (não persistidas).
+- Persistência reutiliza `ValorMetricaSessao` (§8.20.1); `guardarMetricasSessao` **rejeita** valores de métricas `aplicaSoGuardaRedes=true` para atletas não-GR (validação no servidor). Sessão fechada ⇒ grelha só-leitura.
+
+#### 8.24.4 (removido) — Caderneta de GR
+
+> **Removido em 2026-09-12** (changelog §19). Com a remoção das features Habilidades e Caderneta, deixa de existir caderneta específica de GR. As **subcategorias** e **métricas** técnicas de GR (§8.24.2/§8.24.3) mantêm-se.
+
+#### 8.24.5 Análise — "Desenvolvimento do guarda-redes"
+
+Em `/plantel/[id]`, para atletas com posição GR, secção dedicada que combina duas fontes existentes:
+- **Evolução técnica:** média por sessão de cada métrica GR ao longo da época (gráfico de linhas por métrica, `components/graficos/`), via `obterAnaliticoAtleta → metricasTreino` filtrado a `aplicaSoGuardaRedes`.
+- **Núcleo de jogo:** defesas, golos sofridos com o GR em campo, defesas/jogo (§10.4 M1).
+
+#### 8.24.6 Sessão de treino externa de GR
+
+Terceiro modo de registo: sessão **não gerida pela app** (estágio externo, clínica de GR, outro treinador) que fica no histórico de desenvolvimento do atleta GR. Usa `TipoSessao.EXTERNA_GR` e campo `Sessao.entidadeExterna String?` — zero entidades novas, retrocompatível.
+
+**Campos (`Sessao`):**
+- `data` (DEVE) · `duracaoMin` (DEVERIA) · `local` (DEVERIA — morada/pavilhão) · `entidadeExterna` (DEVERIA — organizador, ex.: "Estágio FPF") · `objetivo`/`notas` (DEVERIA).
+- `escalaoId` + `epocaId` (DEVE); `tipoSessao = EXTERNA_GR` (DEVE).
+- `planeamentoId`, `planoSemanalId`, `planoSemanalDiaId` **DEVEM** ser nulos.
+- `rpeSessao` não se aplica (DEVE ficar nulo).
+- **Participantes** → `Presenca` (uma linha `PRESENTE` por GR participante).
+- **Métricas (opcionais)** → `ValorMetricaSessao`, restrito a `MetricaConfig.aplicaSoGuardaRedes=true` e `contexto ∈ {TREINO, AMBOS}`.
+
+**Fluxo do treinador:**
+1. "Registar sessão externa de GR" (em `/treinos` ou separador GR).
+2. Preenche metadados: data, duração, local, entidade, objetivo/notas.
+3. Seleciona GRs participantes (lista pré-filtrada por `posicoes` inclui `GUARDA_REDES`).
+4. Pontua métricas técnicas GR (opcional).
+5. Grava — aparece com badge **"Externa"** no histórico e na timeline de desenvolvimento do atleta.
+
+**Exclusões automáticas por `EXTERNA_GR ≠ NORMAL`:** taxa de assiduidade (§10.1), carga semanal sRPE/ACWR (§8.20), geração de sessões do plano semanal (§8.8.1), periodização.
+
+**Regras de negócio:**
+- **RN-GR-1** — Exercício de GR = `categoriaPrincipal=GUARDA_REDES`; não requer atleta associado.
+- **RN-GR-2** — Métrica com `aplicaSoGuardaRedes=true` só é gravável para atletas com `GUARDA_REDES` nas posições; o servidor valida.
+- **RN-GR-3** — "Bloco de Guarda-redes" na sessão é derivado por categoria; se não houver exercícios GR, o bloco não aparece.
+- **RN-GR-4** — Subcategorias GR seeded são `sistema=true` (não apagáveis); métricas GR seeded são editáveis/desativáveis.
+- **RN-GR-5** — Sessão `EXTERNA_GR`: DEVE ter ≥1 participante GR. DEVE NÃO ter exercícios geridos, ligações a periodização ou plano semanal. Não conta para assiduidade.
+- **RN-GR-6** — Propriedade 🎒/🏛️ dos exercícios/templates de GR segue §4.2.
+
+**Casos-limite:**
+- Sessão **sem GR presentes** → grelha de métricas GR vazia (estado "Sem guarda-redes presentes nesta sessão").
+- Atleta que **deixa de ter** posição GR → métricas passadas mantêm-se; deixa de aparecer em grelhas GR futuras.
+- Atleta **multi-desporto GR** → métricas GR seguem a modalidade em contexto.
+- Sessão externa **só com presença, sem métricas** → válida.
+- **Hard-delete de atleta (RGPD)** → `Presenca` e `ValorMetricaSessao` removidos por cascade; se sessão ficar sem participantes, DEVERIA ser sinalizada.
+
+**Definição de pronto (Fase 36):** build verde; migração `gr_treino_especifico` aplicada (`MetricaConfig.aplicaSoGuardaRedes`, `TipoSessao.EXTERNA_GR`, `Sessao.entidadeExterna` — todas retrocompatíveis); seed instala subcategorias/métricas GR (futsal + futebol); chip "Guarda-redes" e "Bloco de Guarda-redes" funcionais; grelha de métricas GR só aceita GRs (validado no servidor); CRUD de sessão externa GR operacional; secção "Desenvolvimento do guarda-redes" renderiza com dados reais e estado vazio correto; testes unitários das funções puras (filtro GR por posição, agregação de métricas GR) e de permissão/isolamento de `guardarMetricasSessao`; `typecheck`/`lint`/`test` limpos; bíblia atualizada.
+
+---
+
 ## 9. Regras de negócio transversais e casos-limite
 
 **Herdados do MVP/v6 (mantêm-se):**
 - **Métrica desativada com valores históricos:** valores mantêm-se; novos não a pedem. Nunca apagar `ValorMetrica`.
+- **Eliminar métrica com valores históricos:** a eliminação (`eliminarMetrica`) é **recusada** quando existem `ValorMetrica` (jogo) ou `ValorMetricaSessao` (treino) associados — mensagem «Métrica em uso — desativa em vez de apagar.». Só métricas sem qualquer valor registado podem ser apagadas; as restantes desativam-se (preserva o histórico).
 - **Mudança de posição do atleta:** jogos passados mantêm os dados registados.
 - **Atleta que entra a meio da época:** taxa de presença usa como divisor as sessões **já realizadas** do escalão desde a `dataIngresso` (sessões executadas, `data < agora` — nunca as programadas futuras; BUG-P1-08).
 - **Convocatória alterada com estatísticas:** remover convocado com estatísticas pede confirmação e apaga-as.
@@ -2141,7 +2190,7 @@ Os `EventoJogo` agregam para `EstatisticaAtleta`. **🔁 v7:** os tipos de event
 
 **Vistas do painel do atleta — comparação directa (M4) e evolução multi-época (M5) (UI — 2026-08-31).** As Server Actions `obterResumoAtletaParaComparacao` (M4) e `obterEvolucaoMultiEpoca` (M5) (changelog 2026-08-31) alimentam duas vistas no `PainelAtleta` (`components/analiticos/`, aba **Analytics** do perfil do atleta):
 - **Comparação directa (M4):** dentro do contexto de um escalão (quando há `escalaoContexto` **e** colegas na mesma época), o painel oferece um seletor «Comparar com…» com os colegas do mesmo escalão/época (lista carregada na página via `AtletaEscalao` com `estado: "ATIVO"`, excluindo o próprio, ordenada por nome). Ao escolher um colega, chama `obterResumoAtletaParaComparacao(colegaId, escalaoContexto.id, epoca.id)` client-side e mostra uma tabela lado-a-lado (Golos · Jogos · Presenças · Golos/jogo) do atleta atual vs. o colega, com botão «Limpar». Coexiste com a «Comparação com a média da equipa». Sem colegas (ou fora de contexto de escalão) a secção não aparece.
-- **Evolução por época (M5):** secção «Evolução por época» no fim do painel, **só quando há ≥2 épocas** com histórico. Tabela por época (Época · Escalão · Golos · Jogos · Presenças % · Habilidades desbloqueadas/total), ordenada da mais antiga para a mais recente (ordem da própria action, por `dataInicio` ASC), com a **época atual destacada**.
+- **Evolução por época (M5):** secção «Evolução por época» no fim do painel, **só quando há ≥2 épocas** com histórico. Tabela por época (Época · Escalão · Golos · Jogos · Presenças %), ordenada da mais antiga para a mais recente (ordem da própria action, por `dataInicio` ASC), com a **época atual destacada**.
 
 Ambas as props (`atletasEscalao`, `evolucaoEpocas`) do `PainelAtleta` são **opcionais** — sem elas o painel funciona como antes (zero regressão nas vistas que não as passam).
 
@@ -2150,7 +2199,7 @@ Ambas as props (`atletasEscalao`, `evolucaoEpocas`) do `PainelAtleta` são **opc
 - Tempo por atleta por **blocos** (rotações); quintetos/rotações e power play derivados dos eventos de substituição.
 
 ### 10.6 Relatório de fim de época e partilha (sem IA)
-Conforme v6 §10.6: agregados (10.1–10.3, 10.8), evoluções, rankings, caderneta; PDF (via impressão do browser) + link web (`RelatorioPartilhado`, snapshot imutável). **🔁 v7:** o snapshot pode ser segmentado por secção/modalidade; o relatório de clube compara secções.
+Conforme v6 §10.6: agregados (10.1–10.3, 10.8), evoluções, rankings; PDF (via impressão do browser) + link web (`RelatorioPartilhado`, snapshot imutável). **🔁 v7:** o snapshot pode ser segmentado por secção/modalidade; o relatório de clube compara secções.
 
 ### 10.7 Onde aparecem
 Perfil do atleta, Dashboard, Analytics/Relatórios, vista de clube (com filtro de secção). Gráficos SVG próprios (`components/graficos/`) com a cor do clube.
@@ -2484,6 +2533,20 @@ Resumo: **1** Esqueleto · **2** Reconversão de módulos · **3** Periodizaçã
 5. UI: `components/plantel/FotoUpload.tsx` (compressão no browser + upload imediato) e `AvatarAtleta` com fallback para iniciais (frontend).
 **Pronto quando:** build verde; `uploadFotoAtleta` valida magic bytes e tamanho com código real (não mocado); mime inválido e ficheiro grande rejeitados; hard-delete tenta apagar o ficheiro do Storage; `typecheck`/`lint`/`test` limpos + bíblia atualizada (§3.2, §5.5, §5.6, §8.5, §15.1). **Não toca em auth.**
 
+#### Fase 36 — Treino específico de Guarda-Redes (§8.24)
+
+**Dependências:** Exercícios (Fases 5–6), Treinos/Presenças (Fases 7–8), Métricas de treino (§8.20.1), Caderneta (Fase 12), Analítica de atleta (§8.15).
+**Schema:** `MetricaConfig.aplicaSoGuardaRedes Boolean @default(false)` (DEVE); `Habilidade.aplicaSoGuardaRedes Boolean @default(false)` (DEVERIA); `TipoSessao.EXTERNA_GR` (DEVE); `Sessao.entidadeExterna String?` (DEVE). Migração aditiva `gr_treino_especifico`.
+**Entregas:**
+1. Seed de subcategorias/métricas/habilidades GR por modalidade
+2. Chip "Guarda-redes" em `/exercicios`
+3. Toggle "Aplica só a GR" em Definições → Métricas + filtro na grelha + validação servidor
+4. "Bloco de Guarda-redes" no detalhe da sessão
+5. Templates de sessão de GR
+6. CRUD de sessão externa GR (`EXTERNA_GR`)
+7. Secção "Desenvolvimento do guarda-redes" no painel do atleta
+**Pronto quando:** ver §8.24 Definição de pronto.
+
 ---
 
 ## 17. Modelo de negócio e licenciamento
@@ -2564,6 +2627,11 @@ Decidida pelo treinador na criação (toggle pessoal vs clube). O pagamento não
 
 Do mais recente para o mais antigo.
 
+- **2026-09-12** — **§23 (nova) / §3.7 / §8.11 / §10.9 / Índice / Apêndice C** — **Competições: âmbito externo (seguimento) e competições próprias.** Proposta de spec funcional que **evolui aditivamente** o modelo de competições de §3.7 (sem o repetir). Nova secção **§23**: âmbito **`EXTERNA`** (só seguimento — registar resultados de jogos entre quaisquer clubes para ver a classificação distrital) vs **`PROPRIA`** (liga/torneio gerido pelo clube, com equipas convidadas via o wizard de 3 passos de §8.11). **Decisões de modelação:** **reutiliza** `ResultadoCompeticao` como "jogo de competição" (**não** cria `JogoCompeticao`) e mantém a **classificação calculada, não persistida** (DTO `LinhaClassificacao[]`; **não** cria `ClassificacaoCompeticao`), coerente com `obterClassificacao` (§10.9) e `obterClassificacaoManoMano` (§22). **Deltas de schema (aditivos, nullable/default + backfill):** enum `AmbitoCompeticao { EXTERNA PROPRIA }`; `Competicao.ambito` (default `PROPRIA`), `pontosVitoria/pontosEmpate/pontosDerrota` (3/1/0, **pontos por vitória configuráveis 3 ou 2**), `golosWalkover` (3); enum `TipoParticipanteCompeticao { PROPRIO CLUBE_MISTER EXTERNO }` (nome distinto do `TipoParticipante` do Mano-a-Mano); `EquipaCompeticao.tipo` + `clubeVinculadoId?` + `escalaoVinculadoId?` (participante = próprio escalão, outro clube Mister como metadados — convite real = FUTURO —, ou externo só nome); `EstadoResultado` ganha **`CANCELADO`** e **`WALKOVER`**; `ResultadoCompeticao.equipaCasaId?/equipaForaId?` (FK a `EquipaCompeticao`, integridade; texto legado mantido como fallback) + `walkoverVencedor CasaFora?`; `Jogo.resultadoCompeticaoId? @unique` (liga jogo detalhado ao confronto — DEVERIA). **Classificação (§23.5):** só conta `REALIZADO`+`WALKOVER` (ignora `AGENDADO`/`CANCELADO`); WO = resultado regulamentar `golosWalkover`–0; desempate pontos → DG → GM → confronto direto → nome. **Regras:** edição por `COMPETICOES_GERIR` no âmbito do escalão; isolamento multi-tenant (vínculo `CLUBE_MISTER` não dá acesso cross-tenant); **multi-época** = uma competição por época. **Casos-limite:** cancelado, walkover, pontos configuráveis, remoção de equipa bloqueada com jogos realizados. Actions: `registarResultadoConfronto` (evolução de `registarResultadoExterno`), `definirEstadoConfronto`, `ligarJogoAConfronto`, `obterClassificacao` evoluída. **Só documentação (bíblia) — sem alteração de código, schema aplicado ou auth; migração/backfill descritos para implementação futura (Apêndice C).**
+
+- **2026-09-12** — **§8.4 / §9** — **Métricas configuráveis — editar e eliminar.** Completado o CRUD das métricas (`CATALOGO_METRICAS`), que só tinha criar/listar/ativar-desativar/reordenar. **(1) Server Actions (`lib/actions/metricas.ts`):** nova **`editarMetrica(id, dados)`** — valida com `metricaSchema` (mesma da criação), confirma a posse pelo clube (`exigirCapacidade("CATALOGO_METRICAS")` + filtro `clubeId`), altera `nome`/`tipo`/`contexto` (mantém `id`, `ordem` e `ativa`), `revalidatePath("/definicoes/metricas")`; nova **`eliminarMetrica(id)`** — confirma a posse pelo clube e **recusa** a eliminação quando existem valores históricos associados (`ValorMetrica` de jogo ou `ValorMetricaSessao` de treino, contados em paralelo) com «Métrica em uso — desativa em vez de apagar.» (§9 — nunca apagar `ValorMetrica`); só apaga métricas sem qualquer valor registado. **(2) UI (`components/definicoes/MetricasLista.tsx`):** o formulário de criação foi refatorado num diálogo partilhado `MetricaFormDialog` (reutilizado por criação e edição); cada linha ganha botão de **editar** (ícone lápis, abre o diálogo pré-preenchido) e de **eliminar** (ícone lixo, com confirmação `AlertDialog` que explica a regra de histórico). UI 100% pt-PT, TypeScript strict (zero `any`). **Não toca em auth.**
+- **2026-09-12** — **§3.3 / §3.8 / §8.20.1 / §8.24 / §16** — **Treino específico de Guarda-Redes.** Nova camada GR reuse-first: exercícios via `categoriaPrincipal=GUARDA_REDES` + subcategorias curadas por modalidade (seed); templates de sessão de GR; "Bloco de Guarda-redes" derivado por categoria no detalhe da sessão; métricas técnicas de GR por sessão via `ValorMetricaSessao` com `MetricaConfig.aplicaSoGuardaRedes` (default false, retrocompatível — validado no servidor); caderneta de GR (`Habilidade.aplicaSoGuardaRedes`, DEVERIA); sessão externa de GR (`TipoSessao.EXTERNA_GR` + `Sessao.entidadeExterna`) para registo histórico de estágios/clínicas externas; vista "Desenvolvimento do guarda-redes" no painel do atleta. Migração aditiva `gr_treino_especifico`.
+- **2026-09-12** — **§8.24 / Apêndice C** — **Treino específico de GR (Fase 36) — schema + seed.** Aplicada a **migração aditiva `gr_treino_especifico`** (`20260912152729`), retrocompatível e sem backfill: `TipoSessao` ganha o valor **`EXTERNA_GR`** (§8.24.6); `Sessao` ganha **`entidadeExterna String?`** (§8.24.6); `MetricaConfig` e `Habilidade` ganham **`aplicaSoGuardaRedes Boolean @default(false)`** (§8.24.3/§8.24.4). Novo módulo **`lib/biblioteca-arranque-gr.ts`** com o conteúdo curado de GR e instaladores **idempotentes por clube** (diff por nome, no padrão de `lib/biblioteca-arranque-futebol.ts`): **11 subcategorias** `categoria=GUARDA_REDES`/`sistema=true` (5 comuns + 3 de futsal + 3 de futebol — `SubcategoriaExercicio` não tem coluna `modalidade`, a especificidade fica no nome), **5 métricas** (`contexto=TREINO`, `tipo=ESCALA` 1–5, `aplicaSoGuardaRedes=true`) e **2 templates de sessão** (`ModeloSessao`, futsal 45 min / futebol 60 min, `origemSeed=true`, sem exercícios pré-associados). `prisma/seed.ts` invoca `instalarConteudoArranqueGR` **nos dois caminhos** (clube novo e re-run com clube já semeado), pelo que bases anteriores recebem o conteúdo de GR. A coluna `Habilidade.aplicaSoGuardaRedes` foi criada pela migração, mas o **seed de habilidades de GR (§8.24.4) NÃO foi entregue** — em paralelo decorre a remoção do módulo de habilidades/caderneta, pelo que §8.24.4 fica **por reconciliar** com essa decisão. Acrescentado `LABEL_TIPO_SESSAO_TODOS` (`lib/schemas/treino.ts`) e rótulo "Externa (GR)" nos mapas exaustivos de `TipoSessao` (agenda, analíticos, impressão); **`EXTERNA_GR` fica deliberadamente fora de `TIPOS_SESSAO`** (não é oferecido no seletor de criação de treino nem no plano semanal — tem fluxo próprio, §8.24.6). Notas de modelação registadas em §8.24.1/§8.24.2/§8.24.3. Apenas schema + seed — **UI, actions e validações de §8.24 ficam para os passos seguintes**. **Não toca em auth.**
 - **2026-09-11** — **§8.8.2** — **Correção (BUG) — permitir fechar a sessão de treino no próprio dia.** O detalhe da sessão (`app/(app)/treinos/[id]/page.tsx`) só apresentava o botão **"Fechar sessão"** quando o treino estava **`concluido`** (`treinoConcluido` — data **estritamente anterior** ao dia de hoje), pelo que o treinador **só conseguia fechar a partir do dia seguinte**, mesmo tendo marcado presenças e validado tudo no próprio dia. **Correção — só o gate de apresentação do botão, sem alteração de schema, migração, dados de negócio, das actions `fecharSessao`/`reabrirSessao` (que já não tinham restrição de data) ou auth.** **(1) `lib/semana.ts`:** novo helper puro **`treinoFechavel(data, agora?)`** — verdadeiro quando o **dia do treino é hoje ou anterior** (`inicioDoDia(data) <= inicioDoDia(hoje)`), falso para treinos futuros. Distinto de `treinoConcluido` (estritamente passado), que se **mantém inalterado** e continua a governar apenas o tratamento visual (badge "Concluído", CTA "Ver treino", confirmação ao editar, estilo esbatido na lista) — **zero regressão** nesses usos. **(2) `app/(app)/treinos/[id]/page.tsx`:** o bloco do `FecharSessaoButton` passa a ser gated por `podeFechar = treinoFechavel(s.data)` em vez de `concluido`; os restantes usos de `concluido` ficam intactos. **(3) Testes:** `tests/semana.test.ts` — novo teste de `treinoFechavel` (ontem/hoje-manhã/hoje-noite fecháveis; amanhã não). UI 100% pt-PT, TypeScript strict (zero `any`). `npm run typecheck` limpo · `npm run lint` limpo · **1548 testes verdes**. **Não toca em auth.**
 - **2026-09-11** — **§3.11 / §17.5 / §19 / Apêndice C.3** — **Saneamento textual pós-Fase 6 (revisão de coerência do rework de registo/licenças).** Removidos resíduos de decisões já consolidadas: §3.11 (estado `PENDENTE`) — tier escolhido «no onboarding» → «no registo (§8.1)»; Apêndice C.3 (`Licenca.modalidade`) — removido o `⚠️` e a alternativa rejeitada «derivar da secção do clube técnico», alinhado com §3.11/§17.2 (persistida na criação; só Individual; `null` em Clube); §19 bloco-resumo v7, item (I) — removido o `⚠️` de `Licenca.modalidade`; §17.5 (templates transacionais) — «prontos a consumir por fases futuras» → «consumidos no registo (Fase 3, → admin) e na ativação (Fase 5, → utilizador)». Acrescentada nota em §17.5 a clarificar o comportamento deliberado: `obterLicenca` mostra por `estado === "ATIVA"` (sem `dataFim`), a guarda avalia `(estado, dataFim)` — mostrar o registo vs. autorizar acesso são critérios distintos. **Só texto — sem alteração de código, schema ou auth.**
 - **2026-09-11** — **§12 / §17.5 / §21.1 / §21.2** — **Rework de registo/licenças (Fase 5) — ativação manual + acesso de conta híbrida.** Nova Server Action cross-tenant **`ativarLicenca`** (`lib/actions/admin-licencas.ts`, gate `exigirAdminPlataforma()`): **`PENDENTE → ATIVA`**, define **`dataFim` por ciclo se ausente** (MENSAL +1 mês / ANUAL +1 ano) e **notifica o titular** (Clube via admin do clube por capacidades efetivas; Individual via utilizador) com o email **«conta ativada»** em modo **best-effort** — distinta de `alterarEstadoLicenca` (que mantém Suspender/Cancelar). **Correção de acesso:** o admin de plataforma passa a ser **isento da guarda de licença** no layout `(app)` (`eAdmin || licencaOk`), pelo que uma **conta híbrida com licença `PENDENTE`** deixa de ficar presa no paywall e alcança sempre o "Backoffice" (§21.1) — a isenção afeta **só a guarda de billing**, não relaxa autorização nem isolamento multi-tenant. **Backoffice (§21.2):** registos `PENDENTE` ganham **destaque** (borda/fundo âmbar) e **painel de confirmação de pagamento** (referência = nome do titular · email, plano, valor por ciclo, datas/estado), **contagem** e **ordenação PENDENTE-primeiro** (apresentação — a query não muda), titular **Individual** com **nome + email**. **§12:** padrão de destaque «aguarda ação» (borda esquerda + fundo âmbar `ambar-500`/`ambar-600` AA, banner `role="status"`). +11 testes. **Não toca em auth-core.**
@@ -3295,6 +3363,213 @@ listarClubesExternos()
 
 ---
 
+## 23. Competições — âmbito externo e competições próprias
+
+> **Estatuto:** evolução **aditiva** do modelo de competições já descrito em **§3.7** (entidades `Competicao`, `EquipaCompeticao`, `ResultadoCompeticao`, `Jogo`), do módulo **§8.11** (wizard de 3 passos, quadro competitivo) e do cálculo em **§10.9** (`obterClassificacao`). Esta secção **não repete** esse modelo; **acrescenta** o conceito de **âmbito** (competição só de **seguimento** vs. competição **gerida pelo clube**), os **pontos por vitória configuráveis**, os **casos-limite** (jogo cancelado, walkover) e a **identidade estável dos participantes** (equipa própria, outro clube Mister, ou equipa externa só com nome). Todas as alterações de schema são **aditivas e retrocompatíveis** (colunas/tabelas novas, nullable ou com default, mais backfill — Apêndice C).
+
+### 23.1 Visão e âmbito
+
+Duas necessidades reais do treinador/clube, ambas assentes no **mesmo** modelo de dados de §3.7:
+
+1. **Seguimento de competição externa** (`ambito = EXTERNA`) — ex.: *Campeonato Distrital de Benjamins*. O clube **não organiza** a prova, mas quer ver a **classificação atualizada**. Para isso, regista **resultados de jogos entre quaisquer duas equipas** (não só os da sua equipa), e a tabela é **calculada automaticamente**. É essencialmente o que §3.7 já permite via `ResultadoCompeticao`; esta secção formaliza-o como **âmbito próprio** (sem geração de quadro obrigatória, sem convite de equipas, foco na tabela).
+2. **Competição própria** (`ambito = PROPRIA`) — ex.: *Torneio de Páscoa do Juventude SC*. O clube **cria e gere** a prova (**LIGA** todos-contra-todos ou **TORNEIO/TAÇA** eliminatório), **convida equipas** (do próprio clube, de outros clubes Mister, ou externas só com nome) e regista resultados. Reutiliza integralmente o **wizard de 3 passos** e a **geração de quadro** de §8.11.
+
+**O que esta secção acrescenta ao modelo de §3.7 (resumo dos deltas):**
+
+| Delta | Onde | Natureza |
+|---|---|---|
+| Enum `AmbitoCompeticao { EXTERNA PROPRIA }` | novo | aditivo |
+| `Competicao.ambito` (default `PROPRIA`) | §3.7 | coluna nova c/ default |
+| `Competicao.pontosVitoria`/`pontosEmpate`/`pontosDerrota` | §3.7 | colunas novas c/ default (3/1/0) |
+| `Competicao.golosWalkover` (default 3) | §3.7 | coluna nova c/ default |
+| Enum `TipoParticipanteCompeticao { PROPRIO CLUBE_MISTER EXTERNO }` | novo | aditivo |
+| `EquipaCompeticao.tipo` + `clubeVinculadoId?` + `escalaoVinculadoId?` | §3.7 | colunas novas nullable |
+| `EstadoResultado` ganha `CANCELADO` e `WALKOVER` | §3.7 | valores de enum novos |
+| `ResultadoCompeticao.equipaCasaId?`/`equipaForaId?` (FK a `EquipaCompeticao`) + `walkoverVencedor?` | §3.7 | colunas novas nullable |
+| `Jogo.resultadoCompeticaoId?` (liga o jogo detalhado ao confronto do quadro) | §3.7 | coluna nova nullable (DEVERIA) |
+| **Classificação** `obterClassificacao` — pontos configuráveis + WO + estados ignorados | §10.9 | evolução da função (sem tabela nova) |
+
+> **Decisão de modelação (importante):** **não** se cria a entidade `JogoCompeticao` nem a entidade persistida `ClassificacaoCompeticao` sugeridas no pedido. **`ResultadoCompeticao` é o "jogo de competição"** (confronto entre dois participantes, com estado e agendamento — §3.7) e é **reutilizado**; a **classificação é calculada, não persistida** (DTO `LinhaClassificacao[]`, §23.5), seguindo o mesmo princípio já adotado em `obterClassificacao` (§10.9) e em `obterClassificacaoManoMano` (§22.6/§3.7 nota). Isto evita uma tabela derivada que teria de ser mantida em sincronia a cada resultado.
+
+### 23.2 Glossário da feature (acrescenta a §2.1)
+
+- **Âmbito da competição** — **Externa** (só seguimento; o clube regista resultados de terceiros para ver a tabela) ou **Própria** (gerida pelo clube: liga ou torneio com equipas convidadas).
+- **Participante** — equipa inscrita numa competição (`EquipaCompeticao`). Pode ser **Própria** (um escalão do próprio clube), **Clube Mister** (outro clube da plataforma — vínculo de metadados; convite/gestão cruzada real = **FUTURO**) ou **Externa** (só nome, texto livre).
+- **Confronto** — jogo da competição entre dois participantes (`ResultadoCompeticao`); tem **ronda**, **data/hora** (agendável), **estado** e, quando realizado, **golos**.
+- **Walkover (WO)** — confronto ganho por falta de comparência do adversário; conta para a classificação com o **resultado regulamentar** (`golosWalkover`–0, por defeito **3–0**).
+
+### 23.3 Modelo de dados (deltas aditivos a §3.7)
+
+> Só se mostram as **alterações**; os campos e relações não citados **mantêm-se exatamente** como em §3.7.
+
+```prisma
+// 🔁 novo — âmbito da competição
+enum AmbitoCompeticao {
+  EXTERNA   // só seguimento: registar resultados de terceiros para ver a tabela
+  PROPRIA   // gerida pelo clube (liga/torneio com equipas convidadas)
+}
+
+// 🔁 novo — natureza do participante (nome distinto de `TipoParticipante` do Mano-a-Mano, §22.3)
+enum TipoParticipanteCompeticao {
+  PROPRIO       // um escalão do próprio clube (escalaoVinculadoId preenchido)
+  CLUBE_MISTER  // outro clube da plataforma (clubeVinculadoId como metadados; convite real = FUTURO)
+  EXTERNO       // equipa externa, identificada só por nome (default)
+}
+
+// Competicao — acrescenta ambito + pontuação configurável + golos de walkover
+model Competicao {
+  // ... campos existentes de §3.7 (id, clubeId, escalaoId, epocaId, nome, tipo,
+  //     formato FormatoCompeticao, formatoJogo, criadoEm, jogos, resultados, equipas) ...
+  ambito         AmbitoCompeticao @default(PROPRIA) // 🔁 novo; backfill = PROPRIA (ver Apêndice C)
+  pontosVitoria  Int @default(3)  // 🔁 novo; configurável (tipicamente 3 ou 2)
+  pontosEmpate   Int @default(1)  // 🔁 novo
+  pontosDerrota  Int @default(0)  // 🔁 novo
+  golosWalkover  Int @default(3)  // 🔁 novo; resultado regulamentar de WO (golosWalkover–0)
+}
+
+// EquipaCompeticao (= "participante") — acrescenta tipo + vínculos opcionais
+model EquipaCompeticao {
+  // ... campos existentes de §3.7 (id, competicaoId, nome, posicao, criadoEm,
+  //     competicao, @@unique([competicaoId, nome]), @@index([competicaoId])) ...
+  tipo               TipoParticipanteCompeticao @default(EXTERNO) // 🔁 novo; backfill = EXTERNO
+  clubeVinculadoId   String?  // 🔁 novo; preenchido em PROPRIO (o próprio clube) ou CLUBE_MISTER
+  escalaoVinculadoId String?  // 🔁 novo; preenchido em PROPRIO (o escalão do próprio clube)
+}
+
+// EstadoResultado — acrescenta CANCELADO e WALKOVER
+enum EstadoResultado {
+  AGENDADO   // sem resultado (por realizar)
+  REALIZADO  // resultado inserido
+  CANCELADO  // 🔁 novo — não conta para a classificação (como AGENDADO, mas explicitamente anulado)
+  WALKOVER   // 🔁 novo — falta de comparência; conta com resultado regulamentar (ver walkoverVencedor)
+}
+
+// ResultadoCompeticao — identidade estável dos intervenientes + vencedor de WO
+model ResultadoCompeticao {
+  // ... campos existentes de §3.7 (id, competicaoId, competicao, data, equipaCasa,
+  //     equipaFora, golosCasa?, golosFora?, ronda?, dataHora?, estado, criadoEm, @@index) ...
+  equipaCasaId    String?   // 🔁 novo; FK a EquipaCompeticao (integridade; backfill por nome)
+  equipaForaId    String?   // 🔁 novo; FK a EquipaCompeticao (idem)
+  walkoverVencedor CasaFora? // 🔁 novo; obrigatório sse estado = WALKOVER (CASA | FORA)
+  equipaCasaRef   EquipaCompeticao? @relation("ConfrontoCasa", fields: [equipaCasaId], references: [id], onDelete: SetNull)
+  equipaForaRef   EquipaCompeticao? @relation("ConfrontoFora", fields: [equipaForaId], references: [id], onDelete: SetNull)
+  jogoDetalhado   Jogo?     @relation("JogoDoConfronto") // 🔁 novo; jogo próprio ligado a este confronto (opcional)
+}
+
+// Jogo — ligação opcional do jogo detalhado ao confronto do quadro (DEVERIA)
+model Jogo {
+  // ... campos existentes de §3.7 ...
+  resultadoCompeticaoId String? @unique // 🔁 novo; liga o Jogo (convocatória/estatísticas) ao ResultadoCompeticao
+  resultadoCompeticao   ResultadoCompeticao? @relation("JogoDoConfronto", fields: [resultadoCompeticaoId], references: [id], onDelete: SetNull)
+}
+```
+
+> **Notas de integridade:**
+> - Os campos de texto `equipaCasa`/`equipaFora` de §3.7 **mantêm-se** (legado e fallback de apresentação); as novas FKs `equipaCasaId`/`equipaForaId` são a **fonte de verdade** para confrontos novos. O backfill (Apêndice C) associa os textos legados ao `EquipaCompeticao.id` correspondente **por nome dentro da mesma competição**; onde não houver correspondência, as FKs ficam `null` e a classificação usa o nome (comportamento atual).
+> - `Competicao.escalaoId`, `clubeId`, `epocaId` **não mudam**: uma competição continua a pertencer a **um escalão de uma época** do clube (logo, a uma modalidade — §3.7). O seguimento **multi-época** faz-se criando **uma competição por época** (§23.6).
+> - `resultadoCompeticaoId` em `Jogo` é **`@unique`** (1 jogo detalhado por confronto) e **opcional** — a maioria dos confrontos de terceiros nunca tem `Jogo` associado.
+
+### 23.4 Fluxos principais
+
+**Fluxo A — Associar/criar uma competição num escalão/época.** Em `/jogos` › **Competições** (`COMPETICOES_GERIR`, âmbito do escalão), botão **«Nova competição»**:
+- Passo 1 (base): `nome`, `ambito` (**Externa** | **Própria**), `formato` (LIGA | TORNEIO | TAÇA), `formatoJogo` (pré-preenchido pela secção, editável — §3.7), `tipo` (OFICIAL | AMIGAVEL), **pontos por vitória** (default 3; alternativa 2), escalão e época (contexto atual). A época **ativa** é o default.
+- Se **Externa**: os passos 2/3 do wizard (equipas + gerar quadro) são **opcionais** — o treinador pode simplesmente ir **acrescentando confrontos** à medida que os resultados saem (Fluxo B). As equipas são criadas **on-the-fly** ao registar confrontos (autocompletar por nome dentro da competição).
+- Se **Própria**: segue o **wizard de 3 passos** de §8.11 (equipas participantes → gerar quadro → agendar), inalterado, agora com o campo `ambito = PROPRIA` e a pontuação configurável.
+
+**Fluxo B — Registar o resultado de um confronto entre quaisquer dois participantes** (`registarResultadoConfronto`, evolução de `registarResultadoExterno` de §3.7):
+1. Escolher/introduzir **equipa casa** e **equipa fora** (autocompletar sobre `EquipaCompeticao`; nome novo cria participante `EXTERNO` automaticamente).
+2. Introduzir **golos casa/fora**, **ronda** (jornada/fase, opcional) e **data** (opcional).
+3. Ao guardar, o confronto passa a **`estado = REALIZADO`**; a **classificação recalcula** na leitura seguinte (§23.5). Não é preciso ser um jogo da equipa do clube — é exatamente assim que a tabela de uma competição **externa** se mantém correta.
+4. **Confronto próprio (opcional):** se o confronto envolver o escalão do clube e o treinador quiser convocatória/estatísticas detalhadas, liga-se um `Jogo` (§3.7) via `resultadoCompeticaoId`; ao guardar as estatísticas do `Jogo`, o resultado do confronto pode ser **sincronizado** (DEVERIA — §23.6).
+
+**Fluxo C — Cálculo automático da classificação** — ver §23.5.
+
+**Fluxo D — Criar competição própria e convidar equipas** (`ambito = PROPRIA`):
+1. Wizard §8.11, Passo 2 — **Equipas participantes**. Cada participante é `EXTERNO` (só nome) por defeito. O próprio escalão é adicionado automaticamente e marcado **`PROPRIO`** (`escalaoVinculadoId` = escalão da competição). Opcionalmente, um participante pode ser **vinculado a outro clube Mister** (`CLUBE_MISTER`, `clubeVinculadoId`) — **apenas como metadados/identidade** nesta versão; o **convite formal e a gestão partilhada pelo outro clube são FUTURO** (§18), à semelhança do tratamento de clubes externos no Mano-a-Mano (§22).
+2. Passo 3 — **Gerar quadro** (`gerarQuadroCompeticao`, §8.11): LIGA (todos-contra-todos, opção 2 mãos) ou TORNEIO/TAÇA (bracket com byes). Confrontos nascem `AGENDADO`.
+3. Guardar transacionalmente (`criarCompeticaoCompleta`, §8.11).
+
+**Fluxo E — Ver a tabela classificativa.** Separador **Classificação** da competição: tabela ordenada (§23.5) com **destaque visual da equipa própria** (`tipo = PROPRIO`); em TORNEIO/TAÇA mostra-se o **quadro/bracket** (progressão por ronda) em vez de tabela de pontos. Estado vazio: "Ainda sem jogos realizados."
+
+### 23.5 Cálculo da classificação (evolução de §10.9)
+
+`obterClassificacao(competicaoId)` devolve `LinhaClassificacao[]` **calculado**, nunca persistido:
+
+```ts
+type LinhaClassificacao = {
+  participanteId: string | null // EquipaCompeticao.id (null só p/ confrontos legados sem FK)
+  nome: string
+  ehProprio: boolean            // tipo === PROPRIO → destaque na UI
+  jogos: number                 // J  (confrontos que contam)
+  vitorias: number              // V
+  empates: number               // E
+  derrotas: number              // D
+  golosPro: number              // GM
+  golosContra: number           // GS
+  diferenca: number             // DG = GM − GS
+  pontos: number                // P
+  posicao: number               // 1..N após ordenação
+}
+```
+
+**Regras de cálculo:**
+- **Confrontos considerados:** apenas `estado ∈ { REALIZADO, WALKOVER }`. **`AGENDADO` e `CANCELADO` são ignorados** (evolução do filtro de §10.9, que só considerava `REALIZADO`).
+- **Golos:** `REALIZADO` usa `golosCasa`/`golosFora`; **`WALKOVER`** usa o resultado regulamentar `golosWalkover`–0 a favor de `walkoverVencedor` (default **3–0**).
+- **Pontos:** vitória = `Competicao.pontosVitoria` (default **3**, alternativa **2**), empate = `pontosEmpate` (**1**), derrota = `pontosDerrota` (**0**). Um WO nunca é empate.
+- **Desempate (por ordem):** `pontos` desc → **diferença de golos** desc → **golos marcados** desc → **confronto direto** (pontos nos jogos entre os empatados) → **nome** asc. (Alinha com a ordem já usada no Mano-a-Mano, §22.5, adaptada a competições.)
+- **Aplicabilidade:** a tabela de pontos aplica-se a **`formato = LIGA`**. Em **TORNEIO/TAÇA**, a "classificação" é a **progressão do bracket** por ronda (§8.11); `obterClassificacao` pode devolver uma vista agregada opcional, mas a UI mostra o quadro.
+
+### 23.6 Regras de negócio
+
+- **Quem pode editar (DEVE):** criar/editar/apagar competições, participantes e confrontos exige **`COMPETICOES_GERIR`** com **âmbito que cubra o escalão** da competição (perfil por escalão, coordenador de secção para a sua secção, ou TODO_CLUBE) — §6. O padrão de action de §7.1 aplica-se (Zod → `auth()` → época via `obterEpocaAtiva()` → isolamento por **clube** → `Resultado<T>` → `revalidatePath`).
+- **Isolamento multi-tenant (DEVE):** toda a competição pertence ao **clube em contexto**; queries filtram sempre por `clubeId` (e por escalão/época quando aplicável). O vínculo `CLUBE_MISTER` **não** concede a outro clube qualquer acesso nesta versão (é metadado local) — evita fuga cross-tenant.
+- **Visibilidade (DEVE):** a competição e a sua classificação são visíveis a quem tem leitura do escalão (§6.5); membros só-de-leitura veem sem os botões de edição. **Externa** e **Própria** têm a mesma regra de visibilidade.
+- **Multi-época (DEVE):** a competição é **por época** (`epocaId`). O seguimento da mesma prova externa em épocas diferentes faz-se com **uma competição por época** (a época ativa filtra a lista; épocas anteriores continuam consultáveis). Não há "competição plurianual" única — decisão consistente com todo o modelo de §3.7.
+- **Sincronização jogo↔confronto (DEVERIA):** quando um `Jogo` está ligado a um `ResultadoCompeticao` (`resultadoCompeticaoId`), guardar o resultado do `Jogo` **propõe/atualiza** os golos do confronto e marca-o `REALIZADO`; a fonte de verdade da classificação é sempre o `ResultadoCompeticao` (o `Jogo` alimenta-o, não o substitui).
+- **Formato de jogo:** herdado de `Competicao.formatoJogo`/`Jogo.formato` (§3.7) — sem alteração.
+
+### 23.7 Casos-limite
+
+- **Jogo cancelado:** `estado = CANCELADO` — **não conta** para a classificação (nem golos, nem jogos, nem pontos); permanece visível no quadro com selo "Cancelado". Reversível para `AGENDADO`/`REALIZADO`.
+- **Walkover:** `estado = WALKOVER` + `walkoverVencedor` (**obrigatório**, CASA|FORA) — conta como **vitória** do vencedor com `golosWalkover`–0 (default 3–0). Se `golosCasa`/`golosFora` estiverem preenchidos, são **ignorados** a favor do resultado regulamentar. Validação Zod: `WALKOVER ⇒ walkoverVencedor != null`.
+- **Pontos por vitória configuráveis:** `pontosVitoria = 2` ou `3` (também `pontosEmpate`/`pontosDerrota` editáveis) — definido na criação, **editável depois**; alterar recalcula a tabela na leitura seguinte (nada persistido a corrigir).
+- **Participante removido com jogos realizados:** `removerEquipaCompeticao` **bloqueia** se a equipa já tiver confrontos `REALIZADO`/`WALKOVER` (mantém §3.7); equipas só com `AGENDADO`/`CANCELADO` podem ser removidas.
+- **Regeneração do quadro:** `gerarQuadroCompeticao` **falha se já existirem confrontos** (confirmação no UI apaga o quadro anterior) — inalterado (§8.11).
+- **Mínimo 2 participantes** para gerar quadro (§8.11); numa **Externa** sem quadro, não há mínimo (confrontos avulsos).
+- **Confronto com nome novo:** ao registar um confronto com um nome de equipa inexistente, cria-se um `EquipaCompeticao` `EXTERNO` automaticamente (autocompletar evita duplicados; unicidade `@@unique([competicaoId, nome])` de §3.7).
+
+### 23.8 Server Actions e rotas (deltas a §7.3 / §8.11)
+
+```
+// COMPETICOES_GERIR (âmbito do escalão) — evolução das actions de §3.7/§8.11
+criarCompeticao(dados)                         // dados ganham: ambito, pontosVitoria/Empate/Derrota, golosWalkover
+atualizarCompeticao(id, dados)                 // idem (pontuação/âmbito editáveis)
+registarResultadoConfronto(competicaoId, {     // evolução de registarResultadoExterno (§3.7)
+  equipaCasaId?|equipaCasaNome, equipaForaId?|equipaForaNome,
+  golosCasa?, golosFora?, ronda?, data?,
+  estado, walkoverVencedor?                     // WALKOVER exige walkoverVencedor
+})
+definirEstadoConfronto(resultadoId, estado, walkoverVencedor?) // AGENDADO|REALIZADO|CANCELADO|WALKOVER
+ligarJogoAConfronto(jogoId, resultadoId) / desligarJogoDeConfronto(jogoId) // DEVERIA
+obterClassificacao(competicaoId) -> LinhaClassificacao[]  // pontos configuráveis + WO + estados ignorados (§23.5)
+// mantêm-se sem alteração de assinatura: apagarCompeticao, listarCompeticoes,
+//   adicionarEquipaCompeticao, removerEquipaCompeticao, obterEquipasCompeticao,
+//   gerarQuadroCompeticao, criarCompeticaoCompleta, atualizarAgendamentoJogo (§7.3/§8.11)
+```
+Schemas Zod em `lib/schemas/competicao.ts` (fonte única cliente/servidor); a lógica pura de tabela em `lib/classificacao.ts` (função testável isoladamente). Rotas em `/jogos` › Competições (inalteradas na navegação — §8.13.1).
+
+### 23.9 Migração aditiva (referência para Apêndice C)
+
+Tudo aditivo e retrocompatível: enums novos (`AmbitoCompeticao`, `TipoParticipanteCompeticao`), valores novos em `EstadoResultado` (`CANCELADO`, `WALKOVER`), colunas novas com default/nullable em `Competicao`, `EquipaCompeticao`, `ResultadoCompeticao`, `Jogo`. **Backfill (idempotente):** `Competicao.ambito = PROPRIA`; `EquipaCompeticao.tipo = EXTERNO`; `ResultadoCompeticao.equipaCasaId/equipaForaId` resolvidos por nome dentro da competição (sem correspondência ⇒ `null`, apresentação por nome). Competições e resultados legados classificam **exatamente como antes** (pontos 3/1/0, só `REALIZADO`).
+
+### 23.10 Testes (Vitest)
+
+- **Tabela (funções puras, `lib/classificacao.ts`):** pontos configuráveis (3/1/0 e 2/1/0); só contam `REALIZADO`+`WALKOVER`; `AGENDADO`/`CANCELADO` ignorados; WO conta 3–0 ao `walkoverVencedor` (ignora golos inseridos); ordem de desempate (pontos → DG → GM → confronto direto → nome).
+- **Validação Zod:** `WALKOVER ⇒ walkoverVencedor` obrigatório; golos ≥ 0; nome de equipa com trim.
+- **Actions:** isolamento multi-tenant e `COMPETICOES_GERIR` por âmbito; criação de participante `EXTERNO` on-the-fly; bloqueio de remoção de equipa com jogos realizados; sincronização `Jogo ↔ ResultadoCompeticao` (quando ligados).
+
+---
+
 ## Apêndice A — Configuração de Futsal ⚽
 
 Referência da entrada `CONFIG_MODALIDADE.FUTSAL` (registry — 20.3). Reflete o comportamento já existente (v6), agora explicitado como configuração.
@@ -3372,6 +3647,10 @@ Todas as alterações são **aditivas** (colunas/tabelas novas, nullable ou com 
 | `Licenca` | `modalidade` | `Modalidade?` | nullable; persistida na criação da licença, **exclusiva do Individual**, `null` em Clube (§3.11, §17.2) |
 | `Licenca` | `numSeccoes` | `Int` | default `1` (pricing multi-secção — §17.1) |
 | `DiagramaCampo` (Json) | `campo` | `TipoCampo?` (no JSON) | ausente = `FUTSAL_5` (retrocompatível — §11.2) |
+| `MetricaConfig` | `aplicaSoGuardaRedes` | `Boolean` | default `false` — §8.24.3: métrica só para atletas GR |
+| `Habilidade` | `aplicaSoGuardaRedes` | `Boolean` | default `false` — §8.24.4: habilidade específica de GR |
+| `Sessao` | `entidadeExterna` | `String?` | nullable — §8.24.6: organizador da sessão externa |
+| `TipoSessao` | `EXTERNA_GR` | valor de enum | aditivo — §8.24.6: sessão de GR não gerida pela app |
 
 ### C.4 Backfill (idempotente; execução manual após deploy, como as migrações anteriores)
 1. **Secção por clube:** para cada `Clube` existente, criar **uma `Seccao` FUTSAL** (`upsert` por `@@unique([clubeId, modalidade=FUTSAL])`).
