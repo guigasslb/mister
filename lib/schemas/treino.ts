@@ -11,6 +11,19 @@ export const LABEL_TIPO_SESSAO: Record<(typeof TIPOS_SESSAO)[number], string> = 
 };
 
 /**
+ * §8.24.6 — `EXTERNA_GR` (sessão de GR realizada fora da app) **não** entra em
+ * `TIPOS_SESSAO`: tem fluxo de registo próprio e não é oferecida no seletor de
+ * criação de treino nem no plano semanal. Precisa, ainda assim, de rótulo na
+ * apresentação de sessões já existentes (impressão, agenda, analíticos).
+ */
+export const TIPOS_SESSAO_TODOS = [...TIPOS_SESSAO, "EXTERNA_GR"] as const;
+
+export const LABEL_TIPO_SESSAO_TODOS: Record<(typeof TIPOS_SESSAO_TODOS)[number], string> = {
+  ...LABEL_TIPO_SESSAO,
+  EXTERNA_GR: "Sessão externa de GR",
+};
+
+/**
  * §8.9.1 — Momento da semana (modo ESTRUTURADO): dia de treino marcado por
  * relação com o dia de jogo (MD-X). Definido localmente para não acoplar o
  * schema à geração do cliente Prisma.
@@ -81,6 +94,40 @@ export const sessaoSchema = z
   });
 
 export type SessaoInput = z.infer<typeof sessaoSchema>;
+
+/**
+ * §8.24.6 — Sessão de treino EXTERNA de GR (estágio, clínica, outro treinador).
+ * Fluxo de registo próprio: `tipoSessao = EXTERNA_GR`, sem ligação a periodização
+ * nem plano semanal, `rpeSessao` nulo (imposto na action, não neste schema). DEVE
+ * ter ≥1 guarda-redes participante (RN-GR-5). As `metricas` são opcionais e
+ * restritas no servidor a `MetricaConfig.aplicaSoGuardaRedes=true` +
+ * `contexto ∈ {TREINO, AMBOS}` (RN-GR-2). `valor` é inteiro (coluna
+ * `ValorMetricaSessao.valor Int`).
+ */
+export const SessaoExternaGRSchema = z.object({
+  data: z.coerce.date(),
+  duracaoMin: z.number().int().positive().optional(),
+  local: z.string().max(255).optional(),
+  entidadeExterna: z.string().max(255).optional(),
+  objetivo: z.string().max(1000).optional(),
+  notas: z.string().max(2000).optional(),
+  escalaoId: z.string().cuid(),
+  atletasIds: z
+    .array(z.string().cuid())
+    .min(1, "Requer ≥1 guarda-redes participante"),
+  metricas: z
+    .array(
+      z.object({
+        metricaId: z.string().cuid(),
+        atletaId: z.string().cuid(),
+        valor: z.number().int(),
+      }),
+    )
+    .optional()
+    .default([]),
+});
+
+export type SessaoExternaGRFormData = z.infer<typeof SessaoExternaGRSchema>;
 
 export const ESTADOS_PRESENCA = [
   "PRESENTE",

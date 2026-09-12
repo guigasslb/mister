@@ -6,11 +6,9 @@ vi.mock("@/lib/db", () => ({ prisma: {} }));
 import {
   EXERCICIOS_ARRANQUE_FUTEBOL,
   SUBCATEGORIAS_ARRANQUE_FUTEBOL,
-  HABILIDADES_ARRANQUE_FUTEBOL,
   instalarSubcategoriasFutebol,
   instalarBibliotecaArranqueFutebol,
   instalarTemplatesArranqueFutebol,
-  instalarHabilidadesFutebol,
   instalarConteudoArranqueFutebol,
 } from "@/lib/biblioteca-arranque-futebol";
 import { TEMPLATES_ARRANQUE_FUTEBOL } from "@/lib/templates-arranque";
@@ -24,7 +22,6 @@ const CATEGORIAS_VALIDAS = [
   "GUARDA_REDES",
   "OUTRO",
 ];
-const NIVEIS_VALIDOS = ["BASICO", "INTERMEDIO", "AVANCADO"];
 const PARTES_VALIDAS = ["AQUECIMENTO", "PRINCIPAL", "JOGO_REDUZIDO", "RETORNO_CALMA"];
 
 // ─── Fake Prisma em memória (só as operações usadas pelos instaladores) ────────
@@ -75,7 +72,6 @@ function criarFakeDb() {
     exercicio: criarTabela(),
     modeloSessao: criarTabela(),
     modeloSessaoExercicio: criarTabela(),
-    habilidade: criarTabela(),
   };
 }
 
@@ -118,16 +114,6 @@ describe("Fase 29 — dados curados de futebol", () => {
       expect(CATEGORIAS_VALIDAS).toContain(s.categoria);
       expect(s.nome.trim().length).toBeGreaterThan(0);
     }
-  });
-
-  it("as habilidades têm níveis válidos e cobrem os 3 níveis + GR", () => {
-    expect(HABILIDADES_ARRANQUE_FUTEBOL.length).toBeGreaterThanOrEqual(15);
-    for (const h of HABILIDADES_ARRANQUE_FUTEBOL) {
-      expect(NIVEIS_VALIDOS).toContain(h.nivel);
-      expect(h.nome.trim().length).toBeGreaterThan(0);
-    }
-    const niveis = new Set(HABILIDADES_ARRANQUE_FUTEBOL.map((h) => h.nivel));
-    expect(niveis.size).toBe(3);
   });
 
   it("os exercícios referenciados pelos templates existem na biblioteca", () => {
@@ -199,23 +185,14 @@ describe("Fase 29 — instaladores idempotentes de futebol", () => {
     );
   });
 
-  it("instala habilidades (modalidade FUTEBOL) e é idempotente", async () => {
-    const r1 = await instalarHabilidadesFutebol(CLUBE, db);
-    expect(r1.criadas).toBe(HABILIDADES_ARRANQUE_FUTEBOL.length);
-    for (const h of db.habilidade.linhas) expect(h.modalidade).toBe("FUTEBOL");
-    const r2 = await instalarHabilidadesFutebol(CLUBE, db);
-    expect(r2.criadas).toBe(0);
-  });
-
   it("a orquestração instala tudo e é idempotente na 2.ª corrida", async () => {
     const r1 = await instalarConteudoArranqueFutebol(CLUBE, db);
     expect(r1.subcategorias).toBe(SUBCATEGORIAS_ARRANQUE_FUTEBOL.length);
     expect(r1.exercicios).toBe(EXERCICIOS_ARRANQUE_FUTEBOL.length);
     expect(r1.templates).toBe(TEMPLATES_ARRANQUE_FUTEBOL.length);
-    expect(r1.habilidades).toBe(HABILIDADES_ARRANQUE_FUTEBOL.length);
 
     const r2 = await instalarConteudoArranqueFutebol(CLUBE, db);
-    expect(r2).toEqual({ subcategorias: 0, exercicios: 0, templates: 0, habilidades: 0 });
+    expect(r2).toEqual({ subcategorias: 0, exercicios: 0, templates: 0 });
   });
 
   it("falha se o clube não tiver membros (criador não resolúvel)", async () => {

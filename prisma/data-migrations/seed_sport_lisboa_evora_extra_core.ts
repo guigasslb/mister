@@ -15,7 +15,6 @@
 //   C — ligação de 3-5 exercícios a cada sessão de treino existente
 //   D — periodização (Planeamento: 3 períodos → 7 mesociclos) + ligação às sessões
 //   E — 6 reuniões com atas
-//   F — 10 habilidades + progresso na caderneta (4 por atleta)
 //
 // NOTA DE MAPEAMENTO (schema): o schema não tem modelos Ciclo/Mesociclo separados
 // nem "planeamento anual". A periodização é modelada num único modelo `Planeamento`
@@ -32,8 +31,6 @@ import {
   TipoPlaneamento,
   PeriodoEpoca,
   AmbitoReuniao,
-  NivelHabilidade,
-  EstadoHabilidade,
 } from "@prisma/client";
 
 const NOME_CLUBE = "Sport Lisboa e Évora";
@@ -50,8 +47,6 @@ export type ResultadoSeedExtra = {
     planeamentos: number;
     sessoesLigadas: number;
     reunioes: number;
-    habilidades: number;
-    progressos: number;
   };
 };
 
@@ -391,25 +386,6 @@ const REUNIOES: readonly ReuniaoDef[] = [
 ] as const;
 
 // ─────────────────────────────────────────────
-// F — Habilidades (caderneta)
-// ─────────────────────────────────────────────
-
-type HabilidadeDef = { nome: string; descricao: string; nivel: NivelHabilidade; ordem: number };
-
-const HABILIDADES: readonly HabilidadeDef[] = [
-  { nome: "Passe curto", descricao: "Passe de curta distância com precisão.", nivel: NivelHabilidade.BASICO, ordem: 0 },
-  { nome: "Receção orientada", descricao: "Controlo do primeiro toque orientado para o espaço.", nivel: NivelHabilidade.BASICO, ordem: 1 },
-  { nome: "Condução de bola", descricao: "Condução com as duas superfícies e cabeça levantada.", nivel: NivelHabilidade.BASICO, ordem: 2 },
-  { nome: "Remate colocado", descricao: "Remate com precisão para os cantos.", nivel: NivelHabilidade.INTERMEDIO, ordem: 0 },
-  { nome: "Drible 1x1", descricao: "Ultrapassar o adversário em duelo direto.", nivel: NivelHabilidade.INTERMEDIO, ordem: 1 },
-  { nome: "Posicionamento defensivo", descricao: "Ocupar corretamente o espaço em fase defensiva.", nivel: NivelHabilidade.INTERMEDIO, ordem: 2 },
-  { nome: "1x1 defensivo", descricao: "Defender o duelo individual sem cometer falta.", nivel: NivelHabilidade.INTERMEDIO, ordem: 3 },
-  { nome: "Passe entre linhas", descricao: "Encontrar o companheiro entre setores adversários.", nivel: NivelHabilidade.AVANCADO, ordem: 0 },
-  { nome: "Finalização de primeira", descricao: "Concluir sem controlo prévio.", nivel: NivelHabilidade.AVANCADO, ordem: 1 },
-  { nome: "Leitura de jogo", descricao: "Antecipar ações e decidir com qualidade.", nivel: NivelHabilidade.AVANCADO, ordem: 2 },
-] as const;
-
-// ─────────────────────────────────────────────
 // Utilitários
 // ─────────────────────────────────────────────
 
@@ -603,64 +579,6 @@ export async function seedSleExtra(prisma: PrismaClient): Promise<ResultadoSeedE
     }
   }
 
-  // ── F — Habilidades + caderneta ────────────────
-  const habJaExiste = await prisma.habilidade.findFirst({ where: { clubeId: clube.id } });
-  if (!habJaExiste) {
-    await prisma.habilidade.createMany({
-      data: HABILIDADES.map((h) => ({
-        clubeId: clube.id,
-        nome: h.nome,
-        descricao: h.descricao,
-        nivel: h.nivel,
-        ordem: h.ordem,
-      })),
-      skipDuplicates: true,
-    });
-  }
-  const habilidades = await prisma.habilidade.findMany({
-    where: { clubeId: clube.id },
-    orderBy: [{ nivel: "asc" }, { ordem: "asc" }],
-  });
-
-  const atletas = await prisma.atleta.findMany({
-    where: {
-      clubeId: clube.id,
-      participacoes: { some: { epocaId: epoca.id } },
-    },
-    orderBy: { numero: "asc" },
-  });
-
-  let progressosCriados = 0;
-  if (habilidades.length > 0 && atletas.length > 0) {
-    const estados: EstadoHabilidade[] = [
-      EstadoHabilidade.NAO_INICIADO,
-      EstadoHabilidade.EM_PROGRESSO,
-      EstadoHabilidade.DESBLOQUEADO,
-    ];
-    const progData = [];
-    for (let i = 0; i < atletas.length; i++) {
-      const atleta = atletas[i];
-      const base = atleta.numero ?? i;
-      for (let k = 0; k < 4; k++) {
-        const hab = habilidades[(i + k) % habilidades.length];
-        const estado = estados[(base + k) % 3];
-        progData.push({
-          atletaId: atleta.id,
-          habilidadeId: hab.id,
-          epocaId: epoca.id,
-          estado,
-          dataDesbloqueio:
-            estado === EstadoHabilidade.DESBLOQUEADO ? inicioDoDia("2026-01-15") : null,
-        });
-      }
-    }
-    const r = await prisma.progressoHabilidade.createMany({
-      data: progData,
-      skipDuplicates: true,
-    });
-    progressosCriados = r.count;
-  }
-
   return {
     ok: true,
     mensagem: "Seed suplementar SLE concluído.",
@@ -671,8 +589,6 @@ export async function seedSleExtra(prisma: PrismaClient): Promise<ResultadoSeedE
       planeamentos: planeamentosCriados,
       sessoesLigadas,
       reunioes: reunioesCriadas,
-      habilidades: habilidades.length,
-      progressos: progressosCriados,
     },
   };
 }

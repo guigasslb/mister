@@ -8,7 +8,7 @@
 // Todos os instaladores são idempotentes e aceitam um cliente de transação, para
 // poderem correr dentro (ou fora) de uma transação de onboarding.
 
-import { NivelHabilidade, type Prisma, type PrismaClient } from "@prisma/client";
+import { type Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { BIBLIOTECA_ARRANQUE } from "@/lib/biblioteca-arranque";
 import { SUBCATEGORIAS_ARRANQUE } from "@/lib/subcategorias-arranque";
@@ -23,26 +23,7 @@ export interface ResumoArranque {
   subcategorias: number;
   exercicios: number;
   templates: number;
-  habilidades: number;
 }
-
-// ─────────────────────────────────────────────
-// Habilidades curadas de FUTSAL (caderneta §8.14)
-// ─────────────────────────────────────────────
-
-// Reproduz a árvore de habilidades de futsal do seed base (modalidade `null`).
-const HABILIDADES_ARRANQUE_FUTSAL: {
-  nome: string;
-  nivel: NivelHabilidade;
-  ordem: number;
-}[] = [
-  { nome: "Rolo", nivel: NivelHabilidade.BASICO, ordem: 0 },
-  { nome: "Corta", nivel: NivelHabilidade.BASICO, ordem: 1 },
-  { nome: "Vírgula", nivel: NivelHabilidade.INTERMEDIO, ordem: 0 },
-  { nome: "Flip-flap", nivel: NivelHabilidade.INTERMEDIO, ordem: 1 },
-  { nome: "Elástico", nivel: NivelHabilidade.AVANCADO, ordem: 0 },
-  { nome: "Chapéu", nivel: NivelHabilidade.AVANCADO, ordem: 1 },
-];
 
 // ─────────────────────────────────────────────
 // Instaladores idempotentes de FUTSAL
@@ -204,35 +185,9 @@ export async function instalarTemplatesArranqueFutsal(
   return { criados };
 }
 
-/** Habilidades curadas de futsal. Idempotente por (clubeId, modalidade null, nome). */
-export async function instalarHabilidadesFutsal(
-  clubeId: string,
-  db: ClientePrisma = prisma,
-): Promise<{ criadas: number }> {
-  const existentes = await db.habilidade.findMany({
-    where: { clubeId, modalidade: null },
-    select: { nome: true },
-  });
-  const jaExiste = new Set(existentes.map((h) => h.nome));
-
-  const emFalta = HABILIDADES_ARRANQUE_FUTSAL.filter((h) => !jaExiste.has(h.nome));
-  if (emFalta.length === 0) return { criadas: 0 };
-
-  await db.habilidade.createMany({
-    data: emFalta.map((h) => ({
-      clubeId,
-      nome: h.nome,
-      nivel: h.nivel,
-      ordem: h.ordem,
-      modalidade: null,
-    })),
-  });
-  return { criadas: emFalta.length };
-}
-
 /**
  * Orquestração do conteúdo de arranque de FUTSAL, pela ordem de dependências:
- * subcategorias → exercícios → templates → habilidades. Idempotente.
+ * subcategorias → exercícios → templates. Idempotente.
  */
 export async function instalarConteudoArranqueFutsal(
   clubeId: string,
@@ -241,12 +196,10 @@ export async function instalarConteudoArranqueFutsal(
   const sub = await instalarSubcategoriasFutsal(clubeId, db);
   const ex = await instalarBibliotecaArranqueFutsal(clubeId, db);
   const tpl = await instalarTemplatesArranqueFutsal(clubeId, db);
-  const hab = await instalarHabilidadesFutsal(clubeId, db);
   return {
     subcategorias: sub.criadas,
     exercicios: ex.criados,
     templates: tpl.criados,
-    habilidades: hab.criadas,
   };
 }
 

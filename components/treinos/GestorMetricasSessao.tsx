@@ -15,8 +15,20 @@ import { Button } from "@/components/ui/button";
 import { guardarMetricasSessao } from "@/lib/actions/metricas";
 import type { TipoMetrica } from "@prisma/client";
 
-type Metrica = { id: string; nome: string; tipo: TipoMetrica };
-type Atleta = { id: string; nome: string; numero: number | null };
+type Metrica = {
+  id: string;
+  nome: string;
+  tipo: TipoMetrica;
+  // §8.24.3: métrica exclusiva de guarda-redes.
+  aplicaSoGuardaRedes: boolean;
+};
+type Atleta = {
+  id: string;
+  nome: string;
+  numero: number | null;
+  // §8.24.3: atleta com posição de guarda-redes.
+  eGR: boolean;
+};
 
 /**
  * §8.20: grelha de métricas de treino (empenho, desempenho, …) por atleta
@@ -103,16 +115,31 @@ export function GestorMetricasSessao({
                       )}
                       {a.nome}
                     </td>
-                    {metricas.map((m) => (
-                      <td key={m.id} className="px-2 py-1.5">
-                        <CampoMetrica
-                          tipo={m.tipo}
-                          valor={valores[a.id]?.[m.id] ?? null}
-                          disabled={fechado}
-                          onChange={(v) => atualizar(a.id, m.id, v)}
-                        />
-                      </td>
-                    ))}
+                    {metricas.map((m) => {
+                      // §8.24.3: métrica exclusiva de GR → input desativado ("—")
+                      // nas linhas de atletas que não são guarda-redes.
+                      const soGRIndisponivel = m.aplicaSoGuardaRedes && !a.eGR;
+                      return (
+                        <td key={m.id} className="px-2 py-1.5">
+                          {soGRIndisponivel ? (
+                            <span
+                              className="flex h-9 w-20 cursor-not-allowed items-center justify-center rounded-md border border-cinza-100 bg-cinza-50 text-cinza-400"
+                              aria-label="Métrica exclusiva de guarda-redes"
+                              title="Métrica exclusiva de guarda-redes"
+                            >
+                              —
+                            </span>
+                          ) : (
+                            <CampoMetrica
+                              tipo={m.tipo}
+                              valor={valores[a.id]?.[m.id] ?? null}
+                              disabled={fechado}
+                              onChange={(v) => atualizar(a.id, m.id, v)}
+                            />
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>

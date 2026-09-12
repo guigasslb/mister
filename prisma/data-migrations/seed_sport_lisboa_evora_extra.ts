@@ -11,8 +11,7 @@
 //   npm run db:seed:sle-extra
 //
 // Acrescenta: 5 subcategorias, 20 exercícios, exercícios nas sessões,
-// periodização (7 mesociclos em 3 períodos), 6 reuniões e 10 habilidades
-// com progresso na caderneta.
+// periodização (7 mesociclos em 3 períodos) e 6 reuniões.
 
 import { PrismaClient } from "@prisma/client";
 import { seedSleExtra } from "./seed_sport_lisboa_evora_extra_core";
@@ -41,8 +40,6 @@ async function main() {
     console.log(`  Planeamentos (mesociclos): ${d.planeamentos}`);
     console.log(`  Sessões ligadas a planeamento: ${d.sessoesLigadas}`);
     console.log(`  Reuniões: ${d.reunioes}`);
-    console.log(`  Habilidades: ${d.habilidades}`);
-    console.log(`  Progressos de caderneta (criados): ${d.progressos}`);
   }
 }
 

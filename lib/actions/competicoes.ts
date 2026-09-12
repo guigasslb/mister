@@ -9,6 +9,9 @@ import {
   criarCompeticaoSchema,
   atualizarCompeticaoSchema,
   registarResultadoExternoSchema,
+  registarConfrontoSchema,
+  definirEstadoConfrontoSchema,
+  ligarJogoAConfrontoSchema,
   criarCompeticaoCompletaSchema,
   equipaCompeticaoSchema,
   atualizarAgendamentoSchema,
@@ -20,6 +23,9 @@ import {
   type Competicao,
   type ResultadoCompeticao,
   type EquipaCompeticao,
+  type EstadoResultado,
+  type CasaFora,
+  type TipoParticipanteCompeticao,
 } from "@prisma/client";
 
 export type { LinhaClassificacao } from "@/lib/classificacao";
@@ -140,6 +146,12 @@ export async function criarCompeticao(dados: unknown): Promise<Resultado<Competi
       nome: parsed.data.nome,
       tipo: parsed.data.tipo,
       formato: parsed.data.formato,
+      // P1.2 (§23.3): âmbito + pontuação configurável + walkover.
+      ambito: parsed.data.ambito,
+      pontosVitoria: parsed.data.pontosVitoria,
+      pontosEmpate: parsed.data.pontosEmpate,
+      pontosDerrota: parsed.data.pontosDerrota,
+      golosWalkover: parsed.data.golosWalkover,
     },
   });
   revalidatePath(PATH);
@@ -274,6 +286,238 @@ export async function apagarResultadoExterno(id: string): Promise<Resultado<void
 }
 
 // ─────────────────────────────────────────────
+// P1.2 (§23) — Confrontos: registo, estado e ligação a jogo detalhado
+// ─────────────────────────────────────────────
+
+type ParticipanteResolvido =
+  | { ok: true; id: string; nome: string }
+  | { ok: false; erro: string };
+
+/**
+ * Resolve um participante de um confronto: por FK (`id`, validado contra a
+ * competição) ou por nome (autocompletar). Se o nome não existir, cria um
+ * participante EXTERNO on-the-fly (§23.7); tolera corridas (P2002) relendo.
+ */
+async function resolverParticipante(
+  competicaoId: string,
+  id: string | undefined,
+  nome: string | undefined,
+): Promise<ParticipanteResolvido> {
+  if (id) {
+    const eq = await prisma.equipaCompeticao.findFirst({
+      where: { id, competicaoId },
+      select: { id: true, nome: true },
+    });
+    if (!eq) return { ok: false, erro: "A equipa indicada não pertence a esta competição" };
+    return { ok: true, id: eq.id, nome: eq.nome };
+  }
+
+  const nomeTrim = nome?.trim();
+  if (!nomeTrim) return { ok: false, erro: "Indica as equipas do confronto" };
+
+  const existente = await prisma.equipaCompeticao.findFirst({
+    where: { competicaoId, nome: { equals: nomeTrim, mode: "insensitive" } },
+    select: { id: true, nome: true },
+  });
+  if (existente) return { ok: true, id: existente.id, nome: existente.nome };
+
+  try {
+    const criada = await prisma.equipaCompeticao.create({
+      data: { competicaoId, nome: nomeTrim, tipo: "EXTERNO" },
+      select: { id: true, nome: true },
+    });
+    return { ok: true, id: criada.id, nome: criada.nome };
+  } catch (e) {
+    // Corrida: outro pedido criou a mesma equipa (viola @@unique). Relê.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const relida = await prisma.equipaCompeticao.findFirst({
+        where: { competicaoId, nome: { equals: nomeTrim, mode: "insensitive" } },
+        select: { id: true, nome: true },
+      });
+      if (relida) return { ok: true, id: relida.id, nome: relida.nome };
+    }
+    throw e;
+  }
+}
+
+/**
+ * Regista um confronto entre dois participantes (§23.8, evolução de
+ * `registarResultadoExterno`). As equipas identificam-se por FK ou por nome (criado
+ * on-the-fly). Persiste as FKs novas E os campos de texto legados (fallback de
+ * apresentação/retrocompatibilidade). WALKOVER ignora os golos inseridos (§23.7).
+ */
+export async function registarConfronto(
+  competicaoId: string,
+  dados: unknown,
+): Promise<Resultado<ResultadoCompeticao>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const parsed = registarConfrontoSchema.safeParse(dados);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const competicao = await prisma.competicao.findFirst({
+    where: { id: competicaoId, clubeId },
+    select: { id: true, escalaoId: true },
+  });
+  if (!competicao) return erro("Competição não encontrada");
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", competicao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const casa = await resolverParticipante(
+    competicaoId,
+    parsed.data.equipaCasaId,
+    parsed.data.equipaCasaNome,
+  );
+  if (!casa.ok) return erro(casa.erro);
+
+  const fora = await resolverParticipante(
+    competicaoId,
+    parsed.data.equipaForaId,
+    parsed.data.equipaForaNome,
+  );
+  if (!fora.ok) return erro(fora.erro);
+
+  if (casa.id === fora.id || casa.nome.trim().toLowerCase() === fora.nome.trim().toLowerCase())
+    return erro("As duas equipas têm de ser diferentes");
+
+  // WALKOVER conta pelo resultado regulamentar (§23.7): os golos inseridos são
+  // ignorados/limpos. REALIZADO/AGENDADO usam os golos fornecidos (se existirem).
+  const walkover = parsed.data.estado === "WALKOVER";
+  const golosCasa = walkover ? null : parsed.data.golosCasa ?? null;
+  const golosFora = walkover ? null : parsed.data.golosFora ?? null;
+
+  const resultado = await prisma.resultadoCompeticao.create({
+    data: {
+      competicaoId,
+      equipaCasaId: casa.id,
+      equipaForaId: fora.id,
+      // Texto legado + fallback de apresentação (§23.3 notas de integridade).
+      equipaCasa: casa.nome,
+      equipaFora: fora.nome,
+      golosCasa,
+      golosFora,
+      estado: parsed.data.estado,
+      walkoverVencedor: walkover ? parsed.data.walkoverVencedor ?? null : null,
+    },
+  });
+  revalidatePath(`${PATH}/${competicaoId}`);
+  return ok(resultado);
+}
+
+/**
+ * Define o estado de um confronto (AGENDADO | REALIZADO | CANCELADO | WALKOVER).
+ * WALKOVER exige `walkoverVencedor`; noutros estados o vencedor de WO é limpo (§23.7).
+ */
+export async function definirEstadoConfronto(
+  resultadoId: string,
+  estado: EstadoResultado,
+  walkoverVencedor?: CasaFora,
+): Promise<Resultado<ResultadoCompeticao>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const parsed = definirEstadoConfrontoSchema.safeParse({ resultadoId, estado, walkoverVencedor });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const resultado = await prisma.resultadoCompeticao.findFirst({
+    where: { id: resultadoId, competicao: { clubeId } },
+    select: { id: true, competicaoId: true, competicao: { select: { escalaoId: true } } },
+  });
+  if (!resultado) return erro("Confronto não encontrado");
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", resultado.competicao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const atualizado = await prisma.resultadoCompeticao.update({
+    where: { id: resultadoId },
+    data: {
+      estado: parsed.data.estado,
+      walkoverVencedor:
+        parsed.data.estado === "WALKOVER" ? parsed.data.walkoverVencedor ?? null : null,
+    },
+  });
+  revalidatePath(`${PATH}/${resultado.competicaoId}`);
+  return ok(atualizado);
+}
+
+/**
+ * Liga um jogo detalhado (convocatória/estatísticas) a um confronto (§23.8).
+ * O jogo e o confronto têm de pertencer ao mesmo clube, escalão e época.
+ */
+export async function ligarJogoAConfronto(
+  jogoId: string,
+  resultadoId: string,
+): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const parsed = ligarJogoAConfrontoSchema.safeParse({ jogoId, resultadoId });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const jogo = await prisma.jogo.findFirst({
+    where: { id: jogoId, escalao: { clubeId } },
+    select: { id: true, escalaoId: true, epocaId: true },
+  });
+  if (!jogo) return erro("Jogo não encontrado");
+
+  const resultado = await prisma.resultadoCompeticao.findFirst({
+    where: { id: resultadoId, competicao: { clubeId } },
+    select: {
+      id: true,
+      competicaoId: true,
+      competicao: { select: { escalaoId: true, epocaId: true } },
+    },
+  });
+  if (!resultado) return erro("Confronto não encontrado");
+
+  if (
+    jogo.escalaoId !== resultado.competicao.escalaoId ||
+    jogo.epocaId !== resultado.competicao.epocaId
+  )
+    return erro("O jogo e o confronto têm de ser do mesmo escalão e época");
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", resultado.competicao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  await prisma.jogo.update({
+    where: { id: jogoId },
+    data: { resultadoCompeticaoId: resultadoId },
+  });
+  revalidatePath(`${PATH}/${resultado.competicaoId}`);
+  return ok(undefined);
+}
+
+/** Desliga o jogo detalhado do confronto a que estava associado (§23.8). */
+export async function desligarJogoDeConfronto(jogoId: string): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const jogo = await prisma.jogo.findFirst({
+    where: { id: jogoId, escalao: { clubeId } },
+    select: {
+      id: true,
+      escalaoId: true,
+      resultadoCompeticao: { select: { competicaoId: true } },
+    },
+  });
+  if (!jogo) return erro("Jogo não encontrado");
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", jogo.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  await prisma.jogo.update({
+    where: { id: jogoId },
+    data: { resultadoCompeticaoId: null },
+  });
+  if (jogo.resultadoCompeticao?.competicaoId)
+    revalidatePath(`${PATH}/${jogo.resultadoCompeticao.competicaoId}`);
+  revalidatePath(PATH);
+  return ok(undefined);
+}
+
+// ─────────────────────────────────────────────
 // Classificação (calculada)
 // ─────────────────────────────────────────────
 
@@ -290,11 +534,20 @@ export async function obterClassificacao(
 
   const competicao = await prisma.competicao.findFirst({
     where: { id: competicaoId, clubeId },
+    // P1.2 (§23.5): campos de pontuação configurável + walkover para o cálculo.
     include: { escalao: { select: { nome: true } } },
   });
   if (!competicao) return erro("Competição não encontrada");
   if (!(await podeLerEscalao(competicao.escalaoId)))
     return erro("Sem permissão neste escalão");
+
+  // P1.2 (§23.5): nome da equipa própria vem do participante PROPRIO (se existir);
+  // fallback = nome do escalão (comportamento de §10.9). Alimenta o `ehProprio`.
+  const participanteProprio = await prisma.equipaCompeticao.findFirst({
+    where: { competicaoId, tipo: "PROPRIO" },
+    select: { nome: true },
+  });
+  const nomeEquipaPropria = participanteProprio?.nome ?? competicao.escalao.nome;
 
   // Jogos próprios com resultado final (ambos os golos preenchidos).
   const jogosBrutos = await prisma.jogo.findMany({
@@ -306,17 +559,24 @@ export async function obterClassificacao(
     select: { adversario: true, golosMarcados: true, golosSofridos: true },
   });
 
-  // Só jogos REALIZADOS entram na classificação: os agendados (quadro competitivo)
-  // ainda não têm golos e não devem contar. Filtra por golos preenchidos — robusto
-  // independentemente do `estado`. `golosCasa`/`golosFora` são `Int?` (number | null)
-  // no schema Prisma; o flatMap abaixo estreita o tipo para `number` SEM asserção.
+  // P1.2 (§23.5): só contam confrontos REALIZADO e WALKOVER (AGENDADO/CANCELADO
+  // ignorados). Inclui `estado` e `walkoverVencedor` para o cálculo do WO.
+  // `golosCasa`/`golosFora` são `Int?` (number | null) — o cálculo puro descarta os
+  // REALIZADO sem golos.
   const resultadosBrutos = await prisma.resultadoCompeticao.findMany({
-    where: { competicaoId, golosCasa: { not: null }, golosFora: { not: null } },
-    select: { equipaCasa: true, equipaFora: true, golosCasa: true, golosFora: true },
+    where: { competicaoId, estado: { in: ["REALIZADO", "WALKOVER"] } },
+    select: {
+      equipaCasa: true,
+      equipaFora: true,
+      golosCasa: true,
+      golosFora: true,
+      estado: true,
+      walkoverVencedor: true,
+    },
   });
 
-  // Narrowing por type guard (flatMap): descarta linhas com golos nulos e devolve
-  // objetos com golos garantidamente `number`, satisfazendo Jogo/ResultadoClassificacao.
+  // Narrowing por type guard (flatMap): descarta jogos próprios com golos nulos e
+  // devolve objetos com golos garantidamente `number` (satisfaz JogoClassificacao).
   const jogosProprios = jogosBrutos.flatMap((j) =>
     j.golosMarcados === null || j.golosSofridos === null
       ? []
@@ -329,24 +589,25 @@ export async function obterClassificacao(
         ],
   );
 
-  const resultados = resultadosBrutos.flatMap((r) =>
-    r.golosCasa === null || r.golosFora === null
-      ? []
-      : [
-          {
-            equipaCasa: r.equipaCasa,
-            equipaFora: r.equipaFora,
-            golosCasa: r.golosCasa,
-            golosFora: r.golosFora,
-          },
-        ],
-  );
+  const resultados = resultadosBrutos.map((r) => ({
+    equipaCasa: r.equipaCasa,
+    equipaFora: r.equipaFora,
+    golosCasa: r.golosCasa,
+    golosFora: r.golosFora,
+    estado: r.estado,
+    walkoverVencedor: r.walkoverVencedor,
+  }));
 
   const classificacao = calcularClassificacao({
-    nomeEquipaPropria: competicao.escalao.nome,
+    nomeEquipaPropria,
     formato: competicao.formato,
     jogosProprios,
     resultados,
+    // P1.2 (§23.5): pontuação configurável (defaults preservam 3/1/0 para legado).
+    pontosVitoria: competicao.pontosVitoria,
+    pontosEmpate: competicao.pontosEmpate,
+    pontosDerrota: competicao.pontosDerrota,
+    golosWalkover: competicao.golosWalkover,
   });
 
   return ok(classificacao);
@@ -437,13 +698,19 @@ export async function removerEquipaCompeticao(equipaId: string): Promise<Resulta
   const perm = await exigirCapacidade("COMPETICOES_GERIR", equipa.competicao.escalaoId);
   if (!perm.ok) return erro(perm.erro);
 
-  // Impede a remoção se a equipa já tem jogos REALIZADOS (casa ou fora): apagá-la
-  // deixaria a classificação inconsistente.
+  // Impede a remoção se a equipa já tem confrontos REALIZADO ou WALKOVER (casa ou
+  // fora): apagá-la deixaria a classificação inconsistente (§23.7). Confrontos por
+  // FK (equipaCasaId/equipaForaId) ou por nome legado são ambos considerados.
   const comResultado = await prisma.resultadoCompeticao.findFirst({
     where: {
       competicaoId: equipa.competicaoId,
-      estado: "REALIZADO",
-      OR: [{ equipaCasa: equipa.nome }, { equipaFora: equipa.nome }],
+      estado: { in: ["REALIZADO", "WALKOVER"] },
+      OR: [
+        { equipaCasa: equipa.nome },
+        { equipaFora: equipa.nome },
+        { equipaCasaId: equipa.id },
+        { equipaForaId: equipa.id },
+      ],
     },
     select: { id: true },
   });
@@ -560,6 +827,46 @@ export async function criarCompeticaoCompleta(dados: unknown): Promise<Resultado
       return erro("Um jogo agendado refere uma equipa que não está na lista");
   }
 
+  // P1.2 (§23.4 Fluxo D): em competições PRÓPRIAS, a equipa do próprio escalão é o
+  // primeiro participante e fica marcada como PROPRIO (com escalaoVinculadoId). Se já
+  // constar da lista do wizard (por nome, case-insensitive), promove-se essa entrada
+  // em vez de duplicar (respeita @@unique([competicaoId, nome])).
+  type ParticipanteData = {
+    nome: string;
+    posicao: number | null;
+    tipo: TipoParticipanteCompeticao;
+    escalaoVinculadoId: string | null;
+    clubeVinculadoId: string | null;
+  };
+
+  const participantes: ParticipanteData[] = parsed.data.equipas.map((e) => ({
+    nome: e.nome.trim(),
+    posicao: e.posicao ?? null,
+    tipo: e.tipo,
+    escalaoVinculadoId: e.escalaoVinculadoId ?? null,
+    clubeVinculadoId: e.clubeVinculadoId ?? null,
+  }));
+
+  if (parsed.data.ambito === "PROPRIA") {
+    const nomeProprio = escalao.nome.trim();
+    const existente = participantes.find(
+      (p) => p.nome.toLowerCase() === nomeProprio.toLowerCase(),
+    );
+    if (existente) {
+      existente.tipo = "PROPRIO";
+      existente.escalaoVinculadoId = escalao.id;
+      existente.clubeVinculadoId = clubeId;
+    } else {
+      participantes.unshift({
+        nome: nomeProprio,
+        posicao: null,
+        tipo: "PROPRIO",
+        escalaoVinculadoId: escalao.id,
+        clubeVinculadoId: clubeId,
+      });
+    }
+  }
+
   const competicao = await prisma.$transaction(async (tx) => {
     const comp = await tx.competicao.create({
       data: {
@@ -570,14 +877,23 @@ export async function criarCompeticaoCompleta(dados: unknown): Promise<Resultado
         tipo: parsed.data.tipo,
         formato: parsed.data.formato,
         formatoJogo: parsed.data.formatoJogo ?? null,
+        // P1.2 (§23.3): âmbito + pontuação configurável + walkover.
+        ambito: parsed.data.ambito,
+        pontosVitoria: parsed.data.pontosVitoria,
+        pontosEmpate: parsed.data.pontosEmpate,
+        pontosDerrota: parsed.data.pontosDerrota,
+        golosWalkover: parsed.data.golosWalkover,
       },
     });
 
     await tx.equipaCompeticao.createMany({
-      data: parsed.data.equipas.map((e) => ({
+      data: participantes.map((p) => ({
         competicaoId: comp.id,
-        nome: e.nome.trim(),
-        posicao: e.posicao ?? null,
+        nome: p.nome,
+        posicao: p.posicao,
+        tipo: p.tipo,
+        escalaoVinculadoId: p.escalaoVinculadoId,
+        clubeVinculadoId: p.clubeVinculadoId,
       })),
     });
 

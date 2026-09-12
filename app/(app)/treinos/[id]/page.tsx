@@ -179,7 +179,13 @@ export default async function DetalheSessaoPage({
 
   // §8.20 — métricas de treino + valores já registados; grelha só para presentes.
   const metricasTreino = resMetricas.sucesso
-    ? resMetricas.dados.metricas.map((m) => ({ id: m.id, nome: m.nome, tipo: m.tipo }))
+    ? resMetricas.dados.metricas.map((m) => ({
+        id: m.id,
+        nome: m.nome,
+        tipo: m.tipo,
+        // §8.24.3: exclusiva de GR — desativa a coluna para atletas não-GR.
+        aplicaSoGuardaRedes: m.aplicaSoGuardaRedes,
+      }))
     : [];
   const valoresMetricasIniciais = resMetricas.sucesso ? resMetricas.dados.valores : {};
   const presentesSet = new Set(presentesAtletaIds);
@@ -189,6 +195,30 @@ export default async function DetalheSessaoPage({
       id: a.id,
       nome: a.nome,
       numero: a.participacaoContexto?.numero ?? s.numeroPorAtleta[a.id] ?? null,
+      // §8.24.3: guarda-redes → habilita as métricas exclusivas de GR.
+      eGR: a.posicoes.includes("GUARDA_REDES"),
+    }));
+
+  // §8.24.2 — Bloco de Guarda-redes: exercícios de categoria GUARDA_REDES
+  // agrupados, com os GRs presentes na sessão (PRESENTE/ATRASADO + posição GR).
+  const exerciciosGR = exerciciosResolvidos
+    .filter((e) => e.categoriaPrincipal === "GUARDA_REDES")
+    .map((e) => ({
+      id: e.id,
+      nome: e.nome,
+      duracaoMin: e.duracaoMin,
+      parteTreino: e.parteTreino,
+    }));
+  const guardaRedesPresentes = s.presencas
+    .filter(
+      (p) =>
+        (p.estado === "PRESENTE" || p.estado === "ATRASADO") &&
+        p.atleta.posicoes.includes("GUARDA_REDES"),
+    )
+    .map((p) => ({
+      id: p.atleta.id,
+      nome: p.atleta.nome,
+      numero: s.numeroPorAtleta[p.atleta.id] ?? null,
     }));
 
   return (

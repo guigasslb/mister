@@ -7,7 +7,6 @@ import {
   instalarSubcategoriasFutsal,
   instalarBibliotecaArranqueFutsal,
   instalarTemplatesArranqueFutsal,
-  instalarHabilidadesFutsal,
   instalarConteudoArranqueFutsal,
   instalarConteudoArranquePorModalidade,
 } from "@/lib/biblioteca-arranque-instalar";
@@ -63,7 +62,6 @@ function criarFakeDb() {
     exercicio: criarTabela(),
     modeloSessao: criarTabela(),
     modeloSessaoExercicio: criarTabela(),
-    habilidade: criarTabela(),
   };
 }
 
@@ -71,7 +69,6 @@ function criarFakeDb() {
 type FakeDb = ReturnType<typeof criarFakeDb> & any;
 
 const CLUBE = "clube1";
-const NUM_HABILIDADES_FUTSAL = 6;
 
 describe("Fase 30 — instaladores idempotentes de futsal (§8.1.1)", () => {
   let db: FakeDb;
@@ -119,23 +116,14 @@ describe("Fase 30 — instaladores idempotentes de futsal (§8.1.1)", () => {
     await expect(instalarTemplatesArranqueFutsal(CLUBE, db)).rejects.toThrow(/biblioteca de futsal/i);
   });
 
-  it("instala habilidades (modalidade null) e é idempotente", async () => {
-    const r1 = await instalarHabilidadesFutsal(CLUBE, db);
-    expect(r1.criadas).toBe(NUM_HABILIDADES_FUTSAL);
-    for (const h of db.habilidade.linhas) expect(h.modalidade).toBeNull();
-    const r2 = await instalarHabilidadesFutsal(CLUBE, db);
-    expect(r2.criadas).toBe(0);
-  });
-
   it("a orquestração de futsal instala tudo e é idempotente na 2.ª corrida", async () => {
     const r1 = await instalarConteudoArranqueFutsal(CLUBE, db);
     expect(r1.subcategorias).toBe(SUBCATEGORIAS_ARRANQUE.length);
     expect(r1.exercicios).toBe(BIBLIOTECA_ARRANQUE.length);
     expect(r1.templates).toBe(TEMPLATES_ARRANQUE.length);
-    expect(r1.habilidades).toBe(NUM_HABILIDADES_FUTSAL);
 
     const r2 = await instalarConteudoArranqueFutsal(CLUBE, db);
-    expect(r2).toEqual({ subcategorias: 0, exercicios: 0, templates: 0, habilidades: 0 });
+    expect(r2).toEqual({ subcategorias: 0, exercicios: 0, templates: 0 });
   });
 
   it("falha se o clube não tiver membros (criador não resolúvel)", async () => {

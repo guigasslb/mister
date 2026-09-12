@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { obterAtleta, obterEstatisticasAtleta } from "@/lib/actions/atletas";
-import { obterCadernetaAtleta } from "@/lib/actions/caderneta";
 import {
   obterEvolucaoAtleta,
   obterPresencasMensal,
@@ -22,10 +21,8 @@ import { obterSeccoes } from "@/lib/actions/seccoes";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { mapaModalidadePorEscalao } from "@/lib/modalidade-escalao";
 import { escolherEscalaoContextoAnalitico } from "@/lib/analitico-atleta-escalao";
-import type { Modalidade } from "@prisma/client";
 import { AvatarAtleta } from "@/components/plantel/AvatarAtleta";
 import { EstatisticasAtleta } from "@/components/plantel/EstatisticasAtleta";
-import { CadernetaAtleta } from "@/components/plantel/CadernetaAtleta";
 import { ParticipacoesAtleta } from "@/components/plantel/ParticipacoesAtleta";
 import { CarreiraAtleta } from "@/components/plantel/CarreiraAtleta";
 import { PainelAtleta } from "@/components/analiticos/PainelAtleta";
@@ -65,7 +62,6 @@ export default async function PerfilAtletaPage({
 
   const [
     resStats,
-    resCaderneta,
     resEvolucao,
     resPresencas,
     resParticipacoes,
@@ -76,7 +72,6 @@ export default async function PerfilAtletaPage({
     resEvolucaoEpocas,
   ] = await Promise.all([
     obterEstatisticasAtleta(id),
-    obterCadernetaAtleta(id),
     obterEvolucaoAtleta(id),
     obterPresencasMensal(id),
     listarParticipacoes(id),
@@ -110,7 +105,7 @@ export default async function PerfilAtletaPage({
     : undefined;
 
   // Modalidades em que o atleta participa (§3.2/§9): derivadas das secções dos
-  // escalões das suas participações. Usadas para segmentar a caderneta por
+  // escalões das suas participações. Usadas para segmentar o analítico por
   // modalidade quando o atleta é multi-desporto.
   const modalidadePorEscalao = mapaModalidadePorEscalao(
     resEscaloes.sucesso ? resEscaloes.dados : [],
@@ -139,14 +134,6 @@ export default async function PerfilAtletaPage({
     // misturar escalões de modalidades diferentes (futsal vs futebol).
     escalaoAnalitico ? undefined : a.participacaoContexto?.modalidade ?? undefined,
   );
-
-  const modalidadesAtleta = [
-    ...new Set(
-      a.participacoes
-        .map((p) => modalidadePorEscalao.get(p.escalaoId))
-        .filter((m): m is Modalidade => m != null),
-    ),
-  ];
 
   // Gating de UI das ações de participação (secção 6.7). O servidor continua a
   // ser a autoridade — isto apenas evita oferecer ações que iriam falhar.
@@ -243,7 +230,6 @@ export default async function PerfilAtletaPage({
         <TabsList>
           <TabsTrigger value="estatisticas">Estatísticas</TabsTrigger>
           {podeVerRelatorios && <TabsTrigger value="treino">Treino</TabsTrigger>}
-          <TabsTrigger value="caderneta">Caderneta</TabsTrigger>
           <TabsTrigger value="participacoes">Participações</TabsTrigger>
           <TabsTrigger value="carreira">Carreira</TabsTrigger>
         </TabsList>
@@ -316,18 +302,6 @@ export default async function PerfilAtletaPage({
             )}
           </TabsContent>
         )}
-
-        <TabsContent value="caderneta">
-          {resCaderneta.sucesso ? (
-            <CadernetaAtleta
-              atletaId={a.id}
-              habilidades={resCaderneta.dados}
-              modalidades={modalidadesAtleta}
-            />
-          ) : (
-            <p className="text-corpo-sec text-vermelho-600">{resCaderneta.erro}</p>
-          )}
-        </TabsContent>
 
         <TabsContent value="participacoes">
           {resParticipacoes.sucesso && resEscaloes.sucesso ? (

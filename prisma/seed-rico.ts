@@ -2,7 +2,7 @@
  * Seed RICO de dados históricos/analíticos (sandbox local).
  *
  * Popula a BD local com dados realistas (atletas, exercícios, sessões, presenças,
- * jogos, convocatórias, estatísticas, habilidades/progressos, competição, métricas
+ * jogos, convocatórias, estatísticas, competição, métricas
  * e planeamento) para que as personas beta-tester tenham material real para testar
  * analíticos, histórico, estatísticas e todos os flows do Mister.
  *
@@ -42,8 +42,6 @@ import {
   FormatoJogo,
   Utilizacao,
   BlocoTempo,
-  NivelHabilidade,
-  EstadoHabilidade,
   TipoMetrica,
   FormatoCompeticao,
   EstadoResultado,
@@ -513,66 +511,6 @@ async function ensureJogos(opts: {
   return { criados, jogoIds };
 }
 
-/** Cria habilidades (por nome) + progressos para os primeiros `nAtletas` do plantel. */
-async function ensureHabilidadesEProgressos(opts: {
-  clubeId: string;
-  epocaId: string;
-  roster: AtletaRoster[];
-  nAtletas: number;
-  rng: () => number;
-}): Promise<{ habilidades: number; progressos: number }> {
-  const { clubeId, epocaId, roster, nAtletas, rng } = opts;
-  const defs: { nome: string; nivel: NivelHabilidade }[] = [
-    { nome: "Passe de Interior", nivel: NivelHabilidade.BASICO },
-    { nome: "Receção Orientada", nivel: NivelHabilidade.BASICO },
-    { nome: "Condução de Bola", nivel: NivelHabilidade.BASICO },
-    { nome: "Vírgula", nivel: NivelHabilidade.INTERMEDIO },
-    { nome: "Meia-Lua", nivel: NivelHabilidade.INTERMEDIO },
-    { nome: "Rolinho", nivel: NivelHabilidade.INTERMEDIO },
-    { nome: "Elástico", nivel: NivelHabilidade.AVANCADO },
-    { nome: "Chapéu", nivel: NivelHabilidade.AVANCADO },
-    { nome: "Flip-Flap", nivel: NivelHabilidade.AVANCADO },
-  ];
-  const habIds: string[] = [];
-  let habCriadas = 0;
-  for (let i = 0; i < defs.length; i++) {
-    const d = defs[i];
-    let h = await prisma.habilidade.findFirst({ where: { clubeId, nome: d.nome } });
-    if (!h) {
-      h = await prisma.habilidade.create({
-        data: { clubeId, nome: d.nome, nivel: d.nivel, ordem: i, modalidade: Modalidade.FUTSAL },
-      });
-      habCriadas++;
-    }
-    habIds.push(h.id);
-  }
-
-  const alvo = roster.slice(0, nAtletas);
-  const progData: {
-    atletaId: string;
-    habilidadeId: string;
-    epocaId: string;
-    estado: EstadoHabilidade;
-    dataDesbloqueio: Date | null;
-  }[] = [];
-  for (const a of alvo) {
-    for (const hId of habIds) {
-      const r = rng();
-      let estado: EstadoHabilidade = EstadoHabilidade.NAO_INICIADO;
-      let dataDesbloqueio: Date | null = null;
-      if (r < 0.4) {
-        estado = EstadoHabilidade.DESBLOQUEADO;
-        dataDesbloqueio = new Date(2025, 9 + randInt(rng, 0, 3), randInt(rng, 1, 27));
-      } else if (r < 0.75) {
-        estado = EstadoHabilidade.EM_PROGRESSO;
-      }
-      progData.push({ atletaId: a.id, habilidadeId: hId, epocaId, estado, dataDesbloqueio });
-    }
-  }
-  const res = await prisma.progressoHabilidade.createMany({ data: progData, skipDuplicates: true });
-  return { habilidades: habCriadas, progressos: res.count };
-}
-
 // ─────────────────────────────────────────────────────────────
 // Definições de exercícios
 // ─────────────────────────────────────────────────────────────
@@ -946,8 +884,6 @@ async function main() {
     exercicios: 0,
     sessoes: 0,
     jogos: 0,
-    habilidades: 0,
-    progressos: 0,
     competicaoEquipas: 0,
     competicaoResultados: 0,
     metricas: 0,
@@ -1018,9 +954,6 @@ async function main() {
     });
     totais.jogos += criados;
 
-    const hp = await ensureHabilidadesEProgressos({ clubeId: clube.id, epocaId: epoca.id, roster, nAtletas: 6, rng });
-    totais.habilidades += hp.habilidades;
-    totais.progressos += hp.progressos;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1085,9 +1018,6 @@ async function main() {
     });
     totais.jogos += criados;
 
-    const hp = await ensureHabilidadesEProgressos({ clubeId: clube.id, epocaId: epoca.id, roster, nAtletas: 6, rng });
-    totais.habilidades += hp.habilidades;
-    totais.progressos += hp.progressos;
 
     totais.planeamentos += await ensurePlaneamento({ clubeId: clube.id, escalaoId: escalao.id, epocaId: epoca.id });
   }
@@ -1153,9 +1083,6 @@ async function main() {
       });
       totais.jogos += criados;
 
-      const hp = await ensureHabilidadesEProgressos({ clubeId: clube.id, epocaId: epoca.id, roster, nAtletas: 6, rng });
-      totais.habilidades += hp.habilidades;
-      totais.progressos += hp.progressos;
 
       // Competição + métricas (usam os jogos de futsal).
       const comp = await ensureCompeticao({ clubeId: clube.id, escalaoId: escalaoFutsal.id, epocaId: epoca.id, rng });
@@ -1227,8 +1154,6 @@ async function main() {
   console.log(`   Exercícios ............... ${totais.exercicios}`);
   console.log(`   Sessões .................. ${totais.sessoes}`);
   console.log(`   Jogos .................... ${totais.jogos}`);
-  console.log(`   Habilidades .............. ${totais.habilidades}`);
-  console.log(`   Progressos ............... ${totais.progressos}`);
   console.log(`   Competição (equipas) ..... ${totais.competicaoEquipas}`);
   console.log(`   Competição (resultados) .. ${totais.competicaoResultados}`);
   console.log(`   Métricas ................. ${totais.metricas}`);
@@ -1245,8 +1170,6 @@ async function main() {
     estatisticas: await prisma.estatisticaAtleta.count(),
     exercicios: await prisma.exercicio.count(),
     convocatorias: await prisma.convocatoria.count(),
-    habilidades: await prisma.habilidade.count(),
-    progressos: await prisma.progressoHabilidade.count(),
     competicoes: await prisma.competicao.count(),
     resultadosCompeticao: await prisma.resultadoCompeticao.count(),
     metricas: await prisma.metricaConfig.count(),

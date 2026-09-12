@@ -509,7 +509,7 @@ function WizardRollover({
       <div>
         <h1>Nova época</h1>
         <p className="mt-1 text-corpo-sec text-cinza-600">
-          Transição guiada: herda exercícios, métricas e caderneta; zera
+          Transição guiada: herda exercícios e métricas; zera
           estatísticas, presenças e jogos.
         </p>
       </div>

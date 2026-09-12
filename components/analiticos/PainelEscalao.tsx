@@ -30,6 +30,8 @@ const LABEL_TIPO_SESSAO: Record<TipoSessao, string> = {
   ABERTO: "Aberto",
   CAPTACAO: "Captação",
   EVENTO: "Evento",
+  // §8.24.6 — sessão de GR realizada fora da app (estágio, clínica).
+  EXTERNA_GR: "Externa (GR)",
 };
 
 // Análise por período (M6, §8.15): tipos de evento relevantes para a leitura

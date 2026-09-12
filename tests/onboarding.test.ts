@@ -76,7 +76,6 @@ beforeEach(() => {
     subcategorias: 0,
     exercicios: 0,
     templates: 0,
-    habilidades: 0,
   });
 
   // $transaction interativo: invoca o callback com o próprio prisma como `tx`.

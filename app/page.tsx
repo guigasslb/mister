@@ -84,7 +84,7 @@ const PLANOS: Plano[] = [
       "Uma modalidade (futsal ou futebol)",
       "Plantel, treinos e jogos",
       "Editor de campo e biblioteca de exercícios",
-      "Estatísticas e caderneta do atleta",
+      "Estatísticas do atleta",
       "Comunicação via WhatsApp",
     ],
     cta: "Começar agora",

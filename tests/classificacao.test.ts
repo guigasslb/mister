@@ -228,3 +228,158 @@ describe("calcularClassificacao — robustez", () => {
     expect(propria.pontos).toBe(3);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P1.2 (§23.5) — pontos configuráveis, WALKOVER, estados ignorados, ehProprio, posicao
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("calcularClassificacao — pontos configuráveis (§23.5)", () => {
+  it("aplica pontuação 2/1/0 (alternativa) em LIGA", () => {
+    const tabela = calcularClassificacao({
+      nomeEquipaPropria: "irrelevante",
+      formato: "LIGA",
+      jogosProprios: SEM_JOGOS,
+      resultados: [
+        { equipaCasa: "Vencedora", equipaFora: "Vencida", golosCasa: 1, golosFora: 0 },
+        { equipaCasa: "EmpA", equipaFora: "EmpB", golosCasa: 2, golosFora: 2 },
+      ],
+      pontosVitoria: 2,
+      pontosEmpate: 1,
+      pontosDerrota: 0,
+    });
+
+    expect(tabela.find((l) => l.equipa === "Vencedora")!.pontos).toBe(2); // 2 (não 3)
+    expect(tabela.find((l) => l.equipa === "Vencida")!.pontos).toBe(0);
+    expect(tabela.find((l) => l.equipa === "EmpA")!.pontos).toBe(1);
+  });
+
+  it("aplica pontosDerrota configurável (ex: 1 ponto por derrota)", () => {
+    const tabela = calcularClassificacao({
+      nomeEquipaPropria: "irrelevante",
+      formato: "LIGA",
+      jogosProprios: SEM_JOGOS,
+      resultados: [{ equipaCasa: "Ganha", equipaFora: "Perde", golosCasa: 3, golosFora: 1 }],
+      pontosVitoria: 3,
+      pontosEmpate: 1,
+      pontosDerrota: 1,
+    });
+    expect(tabela.find((l) => l.equipa === "Perde")!.pontos).toBe(1);
+  });
+});
+
+describe("calcularClassificacao — WALKOVER (§23.7)", () => {
+  it("conta o WO como vitória do vencedor com golosWalkover–0 e ignora golos inseridos", () => {
+    const tabela = calcularClassificacao({
+      nomeEquipaPropria: "irrelevante",
+      formato: "LIGA",
+      jogosProprios: SEM_JOGOS,
+      resultados: [
+        {
+          equipaCasa: "Presente",
+          equipaFora: "Faltou",
+          // Golos preenchidos por engano — DEVEM ser ignorados a favor do resultado regulamentar.
+          golosCasa: 9,
+          golosFora: 9,
+          estado: "WALKOVER",
+          walkoverVencedor: "CASA",
+        },
+      ],
+      golosWalkover: 3,
+    });
+
+    const presente = tabela.find((l) => l.equipa === "Presente")!;
+    expect(presente.vitorias).toBe(1);
+    expect(presente.golosMarcados).toBe(3); // regulamentar, não os 9 inseridos
+    expect(presente.golosSofridos).toBe(0);
+    expect(presente.pontos).toBe(3);
+
+    const faltou = tabela.find((l) => l.equipa === "Faltou")!;
+    expect(faltou.derrotas).toBe(1);
+    expect(faltou.golosMarcados).toBe(0);
+    expect(faltou.golosSofridos).toBe(3);
+    expect(faltou.pontos).toBe(0);
+  });
+
+  it("respeita walkoverVencedor = FORA e o golosWalkover configurável", () => {
+    const tabela = calcularClassificacao({
+      nomeEquipaPropria: "irrelevante",
+      formato: "LIGA",
+      jogosProprios: SEM_JOGOS,
+      resultados: [
+        {
+          equipaCasa: "Faltou",
+          equipaFora: "Presente",
+          estado: "WALKOVER",
+          walkoverVencedor: "FORA",
+        },
+      ],
+      golosWalkover: 5,
+    });
+
+    const presente = tabela.find((l) => l.equipa === "Presente")!;
+    expect(presente.vitorias).toBe(1);
+    expect(presente.golosMarcados).toBe(5);
+    expect(presente.golosSofridos).toBe(0);
+  });
+});
+
+describe("calcularClassificacao — estados ignorados (§23.5)", () => {
+  it("ignora confrontos CANCELADO e AGENDADO (não contam golos/jogos/pontos)", () => {
+    const tabela = calcularClassificacao({
+      nomeEquipaPropria: "irrelevante",
+      formato: "LIGA",
+      jogosProprios: SEM_JOGOS,
+      resultados: [
+        { equipaCasa: "A", equipaFora: "B", golosCasa: 5, golosFora: 0, estado: "CANCELADO" },
+        { equipaCasa: "C", equipaFora: "D", golosCasa: 3, golosFora: 1, estado: "AGENDADO" },
+        { equipaCasa: "A", equipaFora: "C", golosCasa: 2, golosFora: 1, estado: "REALIZADO" },
+      ],
+    });
+
+    // Só o confronto REALIZADO conta: A 1 jogo (vitória), C 1 jogo (derrota).
+    const a = tabela.find((l) => l.equipa === "A")!;
+    expect(a.jogos).toBe(1);
+    expect(a.golosMarcados).toBe(2); // não inclui o 5-0 cancelado
+    expect(a.pontos).toBe(3);
+    // B e D nunca entram na tabela (só apareciam em confrontos ignorados).
+    expect(tabela.some((l) => l.equipa === "B")).toBe(false);
+    expect(tabela.some((l) => l.equipa === "D")).toBe(false);
+  });
+});
+
+describe("calcularClassificacao — ehProprio e posicao (§23.5)", () => {
+  it("marca ehProprio = true na equipa própria e false nas restantes", () => {
+    const tabela = calcularClassificacao({
+      nomeEquipaPropria: "Juventude SC",
+      formato: "LIGA",
+      jogosProprios: [{ adversario: "Benfica", golosMarcados: 1, golosSofridos: 0 }],
+      resultados: [
+        { equipaCasa: "Porto", equipaFora: "Sporting", golosCasa: 1, golosFora: 1 },
+      ],
+    });
+
+    expect(tabela.find((l) => l.equipa === "Juventude SC")!.ehProprio).toBe(true);
+    expect(tabela.find((l) => l.equipa === "Benfica")!.ehProprio).toBe(false);
+    expect(tabela.find((l) => l.equipa === "Porto")!.ehProprio).toBe(false);
+  });
+
+  it("atribui posicao 1..N pela ordem final da tabela", () => {
+    const tabela = calcularClassificacao({
+      nomeEquipaPropria: "irrelevante",
+      formato: "LIGA",
+      jogosProprios: SEM_JOGOS,
+      resultados: [
+        { equipaCasa: "Lider", equipaFora: "Meio", golosCasa: 3, golosFora: 0 },
+        { equipaCasa: "Meio", equipaFora: "Ultimo", golosCasa: 1, golosFora: 0 },
+        { equipaCasa: "Lider", equipaFora: "Ultimo", golosCasa: 2, golosFora: 0 },
+      ],
+    });
+
+    // Lider: 6 pts (2V) → 1.º; Meio: 3 pts → 2.º; Ultimo: 0 pts → 3.º.
+    expect(tabela.map((l) => [l.equipa, l.posicao])).toEqual([
+      ["Lider", 1],
+      ["Meio", 2],
+      ["Ultimo", 3],
+    ]);
+  });
+});

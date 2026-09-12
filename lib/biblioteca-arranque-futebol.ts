@@ -1,4 +1,4 @@
-// Fase 29 — Conteúdo curado de FUTEBOL (exercícios, subcategorias, habilidades)
+// Fase 29 — Conteúdo curado de FUTEBOL (exercícios, subcategorias)
 // e funções de instalação idempotentes por clube.
 //
 // Espelha o modelo do futsal (lib/biblioteca-arranque.ts / lib/subcategorias-arranque.ts),
@@ -14,7 +14,6 @@
 
 import type {
   CategoriaExercicioPrincipal,
-  NivelHabilidade,
   ParteTreino,
   Prisma,
   PrismaClient,
@@ -242,40 +241,7 @@ export const SUBCATEGORIAS_ARRANQUE_FUTEBOL: SubcategoriaArranqueFutebol[] = [
 ];
 
 // ─────────────────────────────────────────────
-// 3. Habilidades curadas de futebol (caderneta §8.14)
-// ─────────────────────────────────────────────
-
-export interface HabilidadeArranqueFutebol {
-  nome: string;
-  descricao: string;
-  nivel: NivelHabilidade;
-  ordem: number;
-}
-
-export const HABILIDADES_ARRANQUE_FUTEBOL: HabilidadeArranqueFutebol[] = [
-  // Nível 1 — Fundamentos (BASICO)
-  { nome: "Passe curto", descricao: "Passe de curta distância com precisão e no momento certo.", nivel: "BASICO", ordem: 0 },
-  { nome: "Controlo de bola", descricao: "Dominar a bola com diferentes superfícies em segurança.", nivel: "BASICO", ordem: 1 },
-  { nome: "Condução com ambos os pés", descricao: "Conduzir a bola com o pé direito e esquerdo, cabeça levantada.", nivel: "BASICO", ordem: 2 },
-  { nome: "Posição base", descricao: "Adotar a postura e orientação corporal corretas em campo.", nivel: "BASICO", ordem: 3 },
-  // Nível 2 — Desenvolvimento (INTERMEDIO)
-  { nome: "Passe longo", descricao: "Passe de média/longa distância com trajetória controlada.", nivel: "INTERMEDIO", ordem: 0 },
-  { nome: "Recepção orientada", descricao: "Primeiro toque orientado para o espaço ou próxima ação.", nivel: "INTERMEDIO", ordem: 1 },
-  { nome: "Drible 1v1", descricao: "Ultrapassar o adversário em duelo individual.", nivel: "INTERMEDIO", ordem: 2 },
-  { nome: "Cabeceamento básico", descricao: "Cabecear com técnica em situações defensivas e ofensivas.", nivel: "INTERMEDIO", ordem: 3 },
-  // Nível 3 — Especialização (AVANCADO)
-  { nome: "Passe entre linhas", descricao: "Encontrar o companheiro entre sectores adversários.", nivel: "AVANCADO", ordem: 0 },
-  { nome: "Jogo de costas", descricao: "Proteger a bola e jogar de costas para a baliza.", nivel: "AVANCADO", ordem: 1 },
-  { nome: "Finalização com ambos os pés", descricao: "Finalizar com eficácia com o pé direito e esquerdo.", nivel: "AVANCADO", ordem: 2 },
-  { nome: "Bola parada executante", descricao: "Executar cantos, livres e penáltis com qualidade.", nivel: "AVANCADO", ordem: 3 },
-  // Guarda-redes (transversal)
-  { nome: "Posicionamento GR", descricao: "Colocação correta na baliza em função da bola.", nivel: "BASICO", ordem: 4 },
-  { nome: "Saídas a cruzamentos", descricao: "Decidir e executar a saída ao cruzamento com segurança.", nivel: "INTERMEDIO", ordem: 4 },
-  { nome: "Jogo com os pés", descricao: "Participar na construção do jogo com qualidade de passe.", nivel: "AVANCADO", ordem: 4 },
-];
-
-// ─────────────────────────────────────────────
-// 4. Instaladores idempotentes por clube
+// 3. Instaladores idempotentes por clube
 // ─────────────────────────────────────────────
 
 /** Resolve o utilizador criador/autor do conteúdo: primeiro membro do clube. */
@@ -448,39 +414,9 @@ export async function instalarTemplatesArranqueFutebol(
 }
 
 /**
- * Instala a árvore de habilidades curada de futebol (caderneta §8.14).
- * Idempotente por (clubeId, nome, modalidade FUTEBOL).
- */
-export async function instalarHabilidadesFutebol(
-  clubeId: string,
-  db: ClientePrisma = prisma,
-): Promise<{ criadas: number }> {
-  const existentes = await db.habilidade.findMany({
-    where: { clubeId, modalidade: "FUTEBOL" },
-    select: { nome: true },
-  });
-  const jaExiste = new Set(existentes.map((h) => h.nome));
-
-  const emFalta = HABILIDADES_ARRANQUE_FUTEBOL.filter((h) => !jaExiste.has(h.nome));
-  if (emFalta.length === 0) return { criadas: 0 };
-
-  await db.habilidade.createMany({
-    data: emFalta.map((h) => ({
-      clubeId,
-      nome: h.nome,
-      descricao: h.descricao,
-      nivel: h.nivel,
-      ordem: h.ordem,
-      modalidade: "FUTEBOL",
-    })),
-  });
-  return { criadas: emFalta.length };
-}
-
-/**
  * Orquestração do conteúdo de arranque por modalidade. Para FUTEBOL instala,
- * pela ordem correta de dependências: subcategorias → exercícios → templates →
- * habilidades. Idempotente (cada instalador só cria o que falta).
+ * pela ordem correta de dependências: subcategorias → exercícios → templates.
+ * Idempotente (cada instalador só cria o que falta).
  *
  * Para FUTSAL não faz nada aqui — o conteúdo de futsal é instalado pelas actions
  * existentes (lib/actions/*Arranque) e pelo seed base.
@@ -492,16 +428,13 @@ export async function instalarConteudoArranqueFutebol(
   subcategorias: number;
   exercicios: number;
   templates: number;
-  habilidades: number;
 }> {
   const sub = await instalarSubcategoriasFutebol(clubeId, db);
   const ex = await instalarBibliotecaArranqueFutebol(clubeId, db);
   const tpl = await instalarTemplatesArranqueFutebol(clubeId, db);
-  const hab = await instalarHabilidadesFutebol(clubeId, db);
   return {
     subcategorias: sub.criadas,
     exercicios: ex.criados,
     templates: tpl.criados,
-    habilidades: hab.criadas,
   };
 }

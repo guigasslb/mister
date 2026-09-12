@@ -7,7 +7,11 @@ import {
   type ParteTreinoValor,
 } from "@/lib/schemas/exercicio";
 import { LABEL_CATEGORIA_PRINCIPAL } from "@/lib/schemas/subcategoria";
-import { LABEL_TIPO_SESSAO, LABEL_MOMENTO_SEMANA, type MomentoSemana } from "@/lib/schemas/treino";
+import {
+  LABEL_TIPO_SESSAO_TODOS,
+  LABEL_MOMENTO_SEMANA,
+  type MomentoSemana,
+} from "@/lib/schemas/treino";
 import { LABEL_PERIODO } from "@/lib/schemas/planeamento";
 import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 import type {
@@ -317,7 +321,7 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
             className="rounded-full px-2.5 py-0.5 text-legenda font-semibold text-white"
             style={{ backgroundColor: MISTER_LARANJA }}
           >
-            {LABEL_TIPO_SESSAO[tipoSessao]}
+            {LABEL_TIPO_SESSAO_TODOS[tipoSessao]}
           </span>
           <span className="rounded-full border border-cinza-300 px-2.5 py-0.5 text-legenda text-cinza-700">
             {escalaoNome}
@@ -381,7 +385,7 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
           <div>
             <p className="text-legenda text-cinza-500">Tipo</p>
             <p className="text-corpo font-semibold text-cinza-900">
-              {LABEL_TIPO_SESSAO[tipoSessao]}
+              {LABEL_TIPO_SESSAO_TODOS[tipoSessao]}
             </p>
           </div>
           <div>

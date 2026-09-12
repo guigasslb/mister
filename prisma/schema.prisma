@@ -42,7 +42,6 @@ model Clube {
   escaloes      Escalao[]
   exercicios    Exercicio[]
   metricas      MetricaConfig[]
-  habilidades   Habilidade[]
   reunioes      Reuniao[]
   subcategorias SubcategoriaExercicio[]
   atletas       Atleta[]
@@ -392,11 +391,10 @@ model Epoca {
 
   sessoes       Sessao[]
   jogos         Jogo[]
-  progressos    ProgressoHabilidade[]
   planeamentos  Planeamento[]
   competicoes   Competicao[]
   participacoes AtletaEscalao[]
-  modelosJogo   ModeloJogo[]          @relation("ModeloJogoEpoca")
+  modelosJogo   ModeloJogo[]    @relation("ModeloJogoEpoca")
 
   // Fase 31 (§3.5/§8.8.1): planos semanais de treino desta época.
   planosSemanais PlanoSemanal[]
@@ -494,21 +492,21 @@ model Escalao {
 }
 
 model Atleta {
-  id             String    @id @default(cuid())
-  nome           String
-  dataNascimento DateTime?
-  posicoes       Posicao[] // um atleta pode ter várias posições
-  numero         Int?
-  observacoes    String?   @db.Text
-  fotoUrl        String? // upload (Supabase Storage, WebP 256×256) ou URL externo (§8.5)
-  ativo          Boolean   @default(true)
+  id                     String    @id @default(cuid())
+  nome                   String
+  dataNascimento         DateTime?
+  posicoes               Posicao[] // um atleta pode ter várias posições
+  numero                 Int?
+  observacoes            String?   @db.Text
+  fotoUrl                String? // upload (Supabase Storage, WebP 256×256) ou URL externo (§8.5)
+  ativo                  Boolean   @default(true)
   // Inscrição federativa/no clube (secção 8 — plantel): distingue quem já está
   // formalmente inscrito de quem falta inscrever. Independente de `ativo` (um
   // atleta ativo pode ainda estar por inscrever). Default false: nasce por inscrever.
-  inscrito       Boolean   @default(false)
+  inscrito               Boolean   @default(false)
   // Atleta que pratica também futebol (dupla modalidade futsal + futebol).
-  praticaDuplaModalidade Boolean @default(false)
-  dataIngresso   DateTime? // para a taxa de presença (secção 10); fallback = criadoEm
+  praticaDuplaModalidade Boolean   @default(false)
+  dataIngresso           DateTime? // para a taxa de presença (secção 10); fallback = criadoEm
 
   // Dados pessoais adicionais.
   email          String?
@@ -527,9 +525,9 @@ model Atleta {
   numeroLicencaFPF String?
 
   // Dados do encarregado de educação (RGPD — minimização).
-  encarregadoNome     String?
-  encarregadoContacto String?
-  encarregadoEmail    String?
+  encarregadoNome        String?
+  encarregadoContacto    String?
+  encarregadoEmail       String?
   // Documento de identificação do encarregado de educação.
   encarregadoDocTipo     DocTipo?
   encarregadoDocNumero   String?
@@ -546,7 +544,6 @@ model Atleta {
   presencas             Presenca[]
   convocatorias         Convocatoria[]
   estatisticas          EstatisticaAtleta[]
-  progressos            ProgressoHabilidade[]
   consentimentos        Consentimento[]
   participacoes         AtletaEscalao[]
   // P1.5: eventos de jogo (ao vivo) associados ao atleta.
@@ -954,6 +951,9 @@ model Sessao {
   objetivo            String?          @db.Text
   local               String?
   notas               String?          @db.Text
+  // §8.24.6 — organizador/entidade da sessão externa (ex: "Estágio FPF").
+  // Só preenchido quando tipoSessao = EXTERNA_GR.
+  entidadeExterna     String?
   microciclo          Int?
   mesociclo           Int?
   // §8.9.1 (decisão 2026-08-16) — posição do dia na semana no modo ESTRUTURADO (MD-X);
@@ -985,12 +985,12 @@ model Sessao {
   // F8 (§3.12): id do evento correspondente no Google Calendar (idempotência da sincronização).
   googleEventId String?
 
-  exercicios     SessaoExercicio[]
-  presencas      Presenca[]
+  exercicios      SessaoExercicio[]
+  presencas       Presenca[]
   // P4.8 (§8.20): RPE individual reportado por cada atleta para esta sessão.
-  rpesAtletas    RpeAtleta[]
+  rpesAtletas     RpeAtleta[]
   // Mano-a-Mano (§3.16): duelos 1×1 disputados no âmbito desta sessão de treino.
-  duelosManoMano MatchManoMano[]
+  duelosManoMano  MatchManoMano[]
   // §8.20: valores de métricas configuráveis (empenho, desempenho, …) por atleta nesta sessão.
   valoresMetricas ValorMetricaSessao[]
 
@@ -1021,16 +1021,16 @@ model RpeAtleta {
 }
 
 model SessaoExercicio {
-  id                String       @id @default(cuid())
-  sessaoId          String
-  sessao            Sessao       @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
-  exercicioId       String
-  exercicio         Exercicio    @relation(fields: [exercicioId], references: [id])
-  ordem             Int          @default(0)
-  duracaoMin        Int?
-  notas             String?      @db.Text
-  series            Int?
-  descricaoOverride String?      @db.Text
+  id                      String       @id @default(cuid())
+  sessaoId                String
+  sessao                  Sessao       @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
+  exercicioId             String
+  exercicio               Exercicio    @relation(fields: [exercicioId], references: [id])
+  ordem                   Int          @default(0)
+  duracaoMin              Int?
+  notas                   String?      @db.Text
+  series                  Int?
+  descricaoOverride       String?      @db.Text
   // Overrides por sessão — não alteram a biblioteca (§4.2.1).
   numeroJogadoresOverride String?
   espacoOverride          String?
@@ -1038,7 +1038,7 @@ model SessaoExercicio {
   // enum ParteTreino já usado em Exercicio/ModeloSessaoExercicio: AQUECIMENTO |
   // PRINCIPAL | JOGO_REDUZIDO | RETORNO_CALMA. Null = sem fase atribuída (rows
   // legadas). Override por sessão — não altera a biblioteca.
-  parteTreino       ParteTreino?
+  parteTreino             ParteTreino?
 
   // Snapshot só-de-leitura (mecanismo em §4.2.1). Preenchido AUTOMATICAMENTE quando se
   // adiciona à sessão do clube um exercício com proprietario = TREINADOR: congela os dados
@@ -1108,6 +1108,8 @@ enum TipoSessao {
   ABERTO
   CAPTACAO
   EVENTO
+  // §8.24.6 — sessão de GR realizada fora da app (estágio, clínica, outro treinador).
+  EXTERNA_GR
 }
 
 // §8.9.1 — Posição do dia de treino na SEMANA (modo ESTRUTURADO), por relação com o dia de jogo
@@ -1128,33 +1130,38 @@ enum MomentoSemana {
 // ─────────────────────────────────────────────
 
 model Jogo {
-  id                  String       @id @default(cuid())
-  data                DateTime
-  adversario          String
-  casaFora            CasaFora     @default(CASA)
-  tipo                TipoJogo     @default(OFICIAL)
-  competicao          String? // texto livre (legado); preferir competicaoId
-  competicaoId        String?
-  competicaoRef       Competicao?  @relation(fields: [competicaoId], references: [id])
-  golosMarcados       Int? // total da equipa (preenchido pós-jogo)
-  golosSofridos       Int?
-  faltas1aParte       Int? // faltas acumuladas da equipa por parte (futsal)
-  faltas2aParte       Int?
-  local               String?
-  relatorio           String?      @db.Text
-  videoUrl            String? // link YouTube (sem armazenamento)
+  id                    String               @id @default(cuid())
+  data                  DateTime
+  adversario            String
+  casaFora              CasaFora             @default(CASA)
+  tipo                  TipoJogo             @default(OFICIAL)
+  competicao            String? // texto livre (legado); preferir competicaoId
+  competicaoId          String?
+  competicaoRef         Competicao?          @relation(fields: [competicaoId], references: [id])
+  // Gestão de Competições (P1.1): ligação 1:1 opcional ao resultado do quadro
+  // competitivo (jogo detalhado da própria equipa). SetNull preserva o jogo se o
+  // resultado for removido.
+  resultadoCompeticaoId String?              @unique
+  resultadoCompeticao   ResultadoCompeticao? @relation(fields: [resultadoCompeticaoId], references: [id], onDelete: SetNull)
+  golosMarcados         Int? // total da equipa (preenchido pós-jogo)
+  golosSofridos         Int?
+  faltas1aParte         Int? // faltas acumuladas da equipa por parte (futsal)
+  faltas2aParte         Int?
+  local                 String?
+  relatorio             String?              @db.Text
+  videoUrl              String? // link YouTube (sem armazenamento)
   // 🔁 v7 (§3.7): FUTSAL_5 | FUTEBOL_* ; default derivado da secção do escalão.
-  formato             FormatoJogo?
+  formato               FormatoJogo?
   // 🔁 v7 (§3.5/§3.7): null = herda a modalidade da secção; preenchido = atividade pontual noutra modalidade.
-  modalidadeAtividade Modalidade?
-  escalaoId           String
-  escalao             Escalao      @relation(fields: [escalaoId], references: [id])
-  epocaId             String
-  epoca               Epoca        @relation(fields: [epocaId], references: [id])
-  criadorId           String
-  criador             Utilizador   @relation("JogoCriador", fields: [criadorId], references: [id])
-  criadoEm            DateTime     @default(now())
-  atualizadoEm        DateTime     @updatedAt
+  modalidadeAtividade   Modalidade?
+  escalaoId             String
+  escalao               Escalao              @relation(fields: [escalaoId], references: [id])
+  epocaId               String
+  epoca                 Epoca                @relation(fields: [epocaId], references: [id])
+  criadorId             String
+  criador               Utilizador           @relation("JogoCriador", fields: [criadorId], references: [id])
+  criadoEm              DateTime             @default(now())
+  atualizadoEm          DateTime             @updatedAt
 
   // F8 (§3.12): id do evento correspondente no Google Calendar (idempotência da sincronização).
   googleEventId String?
@@ -1197,22 +1204,30 @@ enum FormatoJogo {
 }
 
 model Competicao {
-  id          String            @id @default(cuid())
-  clubeId     String
+  id            String            @id @default(cuid())
+  clubeId       String
   // P1.5: FK explícita para o clube proprietário da competição.
-  clube       Clube             @relation(fields: [clubeId], references: [id], onDelete: Cascade)
-  escalaoId   String
-  escalao     Escalao           @relation(fields: [escalaoId], references: [id], onDelete: Cascade)
-  epocaId     String
-  epoca       Epoca             @relation(fields: [epocaId], references: [id], onDelete: Cascade)
-  nome        String
-  tipo        TipoJogo          @default(OFICIAL) // OFICIAL | AMIGAVEL
+  clube         Clube             @relation(fields: [clubeId], references: [id], onDelete: Cascade)
+  escalaoId     String
+  escalao       Escalao           @relation(fields: [escalaoId], references: [id], onDelete: Cascade)
+  epocaId       String
+  epoca         Epoca             @relation(fields: [epocaId], references: [id], onDelete: Cascade)
+  nome          String
+  tipo          TipoJogo          @default(OFICIAL) // OFICIAL | AMIGAVEL
   // F6 (M16): formato da prova, para o cálculo da classificação (bíblia §3.7).
-  formato     FormatoCompeticao @default(LIGA) // LIGA | TORNEIO | TACA
+  formato       FormatoCompeticao @default(LIGA) // LIGA | TORNEIO | TACA
   // 🔁 v7 (§3.7): formato de jogo por defeito da competição (FUTSAL_5 | FUTEBOL_*).
   // NÃO confundir com `formato` (LIGA/TORNEIO/TACA).
-  formatoJogo FormatoJogo?
-  criadoEm    DateTime          @default(now())
+  formatoJogo   FormatoJogo?
+  // Gestão de Competições (P1.1): âmbito e regras de pontuação/walkover.
+  // EXTERNA = prova organizada por terceiros (o clube só regista resultados);
+  // PROPRIA = prova organizada pelo próprio clube.
+  ambito        AmbitoCompeticao  @default(PROPRIA)
+  pontosVitoria Int               @default(3)
+  pontosEmpate  Int               @default(1)
+  pontosDerrota Int               @default(0)
+  golosWalkover Int               @default(3)
+  criadoEm      DateTime          @default(now())
 
   jogos Jogo[]
 
@@ -1257,13 +1272,48 @@ model ResultadoCompeticao {
   estado       EstadoResultado @default(AGENDADO)
   criadoEm     DateTime        @default(now())
 
+  // Gestão de Competições (P1.1): referência às equipas participantes registadas
+  // (EquipaCompeticao). Nullable — coexiste com os campos de texto equipaCasa/equipaFora.
+  // SetNull: apagar uma equipa não apaga o resultado (preserva o histórico).
+  equipaCasaId     String?
+  equipaForaId     String?
+  // Vencedor por walkover (só relevante quando estado = WALKOVER).
+  walkoverVencedor CasaFora?
+  equipaCasaRef    EquipaCompeticao? @relation("ResultadoCasa", fields: [equipaCasaId], references: [id], onDelete: SetNull)
+  equipaForaRef    EquipaCompeticao? @relation("ResultadoFora", fields: [equipaForaId], references: [id], onDelete: SetNull)
+
+  // Gestão de Competições (P1.1): jogo detalhado da própria equipa ligado a este
+  // resultado (relação inversa de Jogo.resultadoCompeticao).
+  jogoDetalhado Jogo?
+
   @@index([competicaoId])
+  @@index([equipaCasaId])
+  @@index([equipaForaId])
 }
 
-// Estado de um jogo do quadro competitivo: agendado (sem resultado) ou realizado.
+// Estado de um jogo do quadro competitivo: agendado (sem resultado), realizado,
+// cancelado, ou decidido por walkover (falta de comparência de uma equipa).
 enum EstadoResultado {
   AGENDADO
   REALIZADO
+  CANCELADO
+  WALKOVER
+}
+
+// Gestão de Competições (P1.1): âmbito de uma competição.
+// EXTERNA = prova organizada por terceiros · PROPRIA = organizada pelo próprio clube.
+enum AmbitoCompeticao {
+  EXTERNA
+  PROPRIA
+}
+
+// Gestão de Competições (P1.1): natureza de uma equipa participante.
+// PROPRIO = equipa do próprio clube · CLUBE_MISTER = outro clube do sistema ·
+// EXTERNO = equipa fora do sistema.
+enum TipoParticipanteCompeticao {
+  PROPRIO
+  CLUBE_MISTER
+  EXTERNO
 }
 
 // Equipa participante numa competição (base para a geração do quadro competitivo
@@ -1275,7 +1325,19 @@ model EquipaCompeticao {
   posicao      Int?
   criadoEm     DateTime @default(now())
 
+  // Gestão de Competições (P1.1): natureza do participante.
+  // PROPRIO = a equipa do próprio clube · CLUBE_MISTER = outro clube do sistema ·
+  // EXTERNO = equipa fora do sistema (texto livre). clubeVinculadoId/escalaoVinculadoId
+  // são IDs de referência (sem FK para Clube/Escalao por agora).
+  tipo               TipoParticipanteCompeticao @default(EXTERNO)
+  clubeVinculadoId   String?
+  escalaoVinculadoId String?
+
   competicao Competicao @relation(fields: [competicaoId], references: [id], onDelete: Cascade)
+
+  // Relações inversas dos resultados onde esta equipa joga em casa/fora.
+  resultadosCasa ResultadoCompeticao[] @relation("ResultadoCasa")
+  resultadosFora ResultadoCompeticao[] @relation("ResultadoFora")
 
   @@unique([competicaoId, nome])
   @@index([competicaoId])
@@ -1435,17 +1497,19 @@ enum BlocoTempo {
 // ─────────────────────────────────────────────
 
 model MetricaConfig {
-  id         String          @id @default(cuid())
-  nome       String
-  tipo       TipoMetrica     @default(NUMERO)
-  ativa      Boolean         @default(true)
-  ordem      Int             @default(0)
+  id                  String          @id @default(cuid())
+  nome                String
+  tipo                TipoMetrica     @default(NUMERO)
+  ativa               Boolean         @default(true)
+  ordem               Int             @default(0)
   // §8.20: contexto onde a métrica é registada — jogo, treino, ou ambos.
-  contexto   ContextoMetrica @default(JOGO)
+  contexto            ContextoMetrica @default(JOGO)
+  // §8.24.3: quando true, a métrica só se aplica a atletas com posição GUARDA_REDES.
+  aplicaSoGuardaRedes Boolean         @default(false)
   // 🔁 v7 (§3.7): métrica pode ser específica de uma modalidade; null = ambas.
-  modalidade Modalidade?
-  clubeId    String
-  clube      Clube           @relation(fields: [clubeId], references: [id])
+  modalidade          Modalidade?
+  clubeId             String
+  clube               Clube           @relation(fields: [clubeId], references: [id])
 
   valores       ValorMetrica[]
   valoresSessao ValorMetricaSessao[]
@@ -1495,56 +1559,6 @@ model ValorMetricaSessao {
   @@index([sessaoId])
   @@index([atletaId])
   @@index([metricaId])
-}
-
-// ─────────────────────────────────────────────
-// CADERNETA DE HABILIDADES
-// ─────────────────────────────────────────────
-
-model Habilidade {
-  id         String          @id @default(cuid())
-  nome       String // ex: "Vírgula", "Flip-flap", "Elástico"
-  descricao  String?         @db.Text
-  nivel      NivelHabilidade @default(BASICO)
-  ordem      Int             @default(0)
-  // 🔁 v7 (§3.8): habilidade pode ser específica de uma modalidade; null = ambas.
-  modalidade Modalidade?
-  clubeId    String
-  clube      Clube           @relation(fields: [clubeId], references: [id])
-  criadoEm   DateTime        @default(now())
-
-  progressos ProgressoHabilidade[]
-
-  @@index([clubeId])
-}
-
-enum NivelHabilidade {
-  BASICO
-  INTERMEDIO
-  AVANCADO
-}
-
-model ProgressoHabilidade {
-  id              String           @id @default(cuid())
-  atletaId        String
-  atleta          Atleta           @relation(fields: [atletaId], references: [id], onDelete: Cascade)
-  habilidadeId    String
-  habilidade      Habilidade       @relation(fields: [habilidadeId], references: [id])
-  epocaId         String
-  epoca           Epoca            @relation(fields: [epocaId], references: [id])
-  estado          EstadoHabilidade @default(NAO_INICIADO)
-  dataDesbloqueio DateTime?
-  notas           String?
-
-  @@unique([atletaId, habilidadeId, epocaId])
-  @@index([atletaId, epocaId])
-  @@index([habilidadeId])
-}
-
-enum EstadoHabilidade {
-  NAO_INICIADO
-  EM_PROGRESSO
-  DESBLOQUEADO
 }
 
 // ─────────────────────────────────────────────

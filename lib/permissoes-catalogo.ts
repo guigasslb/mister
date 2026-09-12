@@ -9,7 +9,6 @@ export const CAPACIDADES = [
   "CLUBE_UTILIZADORES",
   "CLUBE_PERFIS",
   "CATALOGO_METRICAS",
-  "CATALOGO_HABILIDADES",
   // Secção (âmbito SECCAO — §6.9): gestão de escalões dentro da(s) secção(ões)
   // coordenada(s), sem conceder o CLUBE_ESCALOES (que é sempre de nível clube).
   "SECCAO_ESCALOES_GERIR",
@@ -25,7 +24,6 @@ export const CAPACIDADES = [
   "COMPETICOES_GERIR",
   "MANOAMANO_GERIR",
   "SCOUTING_GERIR",
-  "CADERNETA_GERIR",
   "REUNIOES_GERIR",
   // Transversais
   "EXERCICIOS_GERIR",
@@ -83,7 +81,6 @@ export const LABEL_CAPACIDADE: Record<Capacidade, string> = {
   CLUBE_UTILIZADORES: "Gerir utilizadores",
   CLUBE_PERFIS: "Gerir perfis",
   CATALOGO_METRICAS: "Gerir métricas",
-  CATALOGO_HABILIDADES: "Gerir habilidades",
   SECCAO_ESCALOES_GERIR: "Gerir escalões da secção",
   PLANTEL_GERIR: "Gerir plantel",
   TREINOS_GERIR: "Gerir treinos",
@@ -96,7 +93,6 @@ export const LABEL_CAPACIDADE: Record<Capacidade, string> = {
   COMPETICOES_GERIR: "Gerir competições",
   MANOAMANO_GERIR: "Gerir Mano-a-Mano (duelos 1×1)",
   SCOUTING_GERIR: "Observação de adversários",
-  CADERNETA_GERIR: "Gerir caderneta",
   REUNIOES_GERIR: "Gerir reuniões",
   EXERCICIOS_GERIR: "Gerir exercícios",
   RELATORIOS_VER: "Ver relatórios",
@@ -112,7 +108,6 @@ export const CAPACIDADES_ESTRUTURA: Capacidade[] = [
   "CLUBE_UTILIZADORES",
   "CLUBE_PERFIS",
   "CATALOGO_METRICAS",
-  "CATALOGO_HABILIDADES",
 ];
 
 // Capacidades cujo alcance é limitado pelo âmbito PROPRIOS_ESCALOES.
@@ -128,7 +123,6 @@ export const CAPACIDADES_POR_ESCALAO: Capacidade[] = [
   "COMPETICOES_GERIR",
   "MANOAMANO_GERIR",
   "SCOUTING_GERIR",
-  "CADERNETA_GERIR",
   "REUNIOES_GERIR",
 ];
 
@@ -162,7 +156,6 @@ export const PERFIS_ARRANQUE: PerfilArranque[] = [
       // administrador (ativar licenças, config de infra) continuam do Administrador.
       "CLUBE_UTILIZADORES",
       "CATALOGO_METRICAS",
-      "CATALOGO_HABILIDADES",
       "EXERCICIOS_GERIR",
       "RELATORIOS_VER",
       "PROMOVER_ATLETAS",
@@ -190,7 +183,6 @@ export const PERFIS_ARRANQUE: PerfilArranque[] = [
       "TREINOS_GERIR",
       "PRESENCAS_MARCAR",
       "ESTATISTICAS_GERIR",
-      "CADERNETA_GERIR",
       "EXERCICIOS_GERIR",
     ],
   },

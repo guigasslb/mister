@@ -1,9 +1,10 @@
-import { PrismaClient, TipoMetrica, NivelHabilidade, Prisma } from "@prisma/client";
+import { PrismaClient, TipoMetrica, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { PERFIS_ARRANQUE } from "../lib/permissoes-catalogo";
 import { BIBLIOTECA_ARRANQUE } from "../lib/biblioteca-arranque";
 import { SUBCATEGORIAS_ARRANQUE } from "../lib/subcategorias-arranque";
 import { instalarConteudoArranqueFutebol } from "../lib/biblioteca-arranque-futebol";
+import { instalarConteudoArranqueGR } from "../lib/biblioteca-arranque-gr";
 
 const prisma = new PrismaClient();
 
@@ -114,6 +115,15 @@ async function main() {
       select: { id: true },
     });
     await garantirLicencaDemo(jaExiste.id, goncaloExistente?.id ?? null);
+
+    // §8.24 — conteúdo de arranque de GR. Instalado também no caminho de
+    // re-run (clube já semeado) para que bases criadas antes desta funcionalidade
+    // recebam as subcategorias/métricas/templates de guarda-redes.
+    const gr = await instalarConteudoArranqueGR(jaExiste.id, prisma);
+    console.log(
+      `GR (§8.24): ${gr.subcategorias} subcategorias, ${gr.metricas} métricas, ${gr.templates} templates.`,
+    );
+
     console.log("Seed já aplicado (clube existente). A sair.");
     return;
   }
@@ -124,6 +134,10 @@ async function main() {
       nome: "Juventude Sport Clube",
       corPrimaria: "#1A2FD4",
       corSecundaria: "#FFD700",
+      // Clube-demo é um clube estabelecido (já tem época/plantel): salta o
+      // assistente de onboarding (F10). Sem isto, a guarda de licença atira-o
+      // para /onboarding em loop. Alinha com seed-teste.ts e seeds de dados.
+      onboardingConcluido: true,
     },
   });
 
@@ -212,18 +226,6 @@ async function main() {
     ],
   });
 
-  // 7. Habilidades exemplo por nível
-  await prisma.habilidade.createMany({
-    data: [
-      { nome: "Rolo", nivel: NivelHabilidade.BASICO, ordem: 0, clubeId: clube.id },
-      { nome: "Corta", nivel: NivelHabilidade.BASICO, ordem: 1, clubeId: clube.id },
-      { nome: "Vírgula", nivel: NivelHabilidade.INTERMEDIO, ordem: 0, clubeId: clube.id },
-      { nome: "Flip-flap", nivel: NivelHabilidade.INTERMEDIO, ordem: 1, clubeId: clube.id },
-      { nome: "Elástico", nivel: NivelHabilidade.AVANCADO, ordem: 0, clubeId: clube.id },
-      { nome: "Chapéu", nivel: NivelHabilidade.AVANCADO, ordem: 1, clubeId: clube.id },
-    ],
-  });
-
   // Silenciar "declarado mas não usado" (traquinas fica disponível para futuros dados)
   void traquinas;
 
@@ -256,7 +258,7 @@ async function main() {
 
   // 10. Secção de FUTEBOL de demonstração (Fase 29) — conteúdo curado instalado.
   // Cria uma secção FUTEBOL com um escalão e instala a biblioteca curada de
-  // futebol (subcategorias, exercícios, templates e habilidades), para que a
+  // futebol (subcategorias, exercícios e templates), para que a
   // secção de futebol nunca comece vazia (§16 Fase 29, Apêndice B).
   const seccaoFutebol = await prisma.seccao.create({
     data: { clubeId: clube.id, modalidade: "FUTEBOL", nome: "Futebol" },
@@ -273,9 +275,17 @@ async function main() {
   });
   const resumoFutebol = await instalarConteudoArranqueFutebol(clube.id, prisma);
 
+  // 11. Conteúdo de arranque de Guarda-Redes (§8.24) — subcategorias de exercício,
+  // métricas técnicas (escala 1–5, contexto TREINO) e templates de sessão de GR.
+  // Idempotente (só cria o que falta).
+  const resumoGR = await instalarConteudoArranqueGR(clube.id, prisma);
+
   console.log("Seed concluído.");
   console.log(
-    `Futebol instalado: ${resumoFutebol.subcategorias} subcategorias, ${resumoFutebol.exercicios} exercícios, ${resumoFutebol.templates} templates, ${resumoFutebol.habilidades} habilidades.`,
+    `Futebol instalado: ${resumoFutebol.subcategorias} subcategorias, ${resumoFutebol.exercicios} exercícios, ${resumoFutebol.templates} templates.`,
+  );
+  console.log(
+    `GR (§8.24) instalado: ${resumoGR.subcategorias} subcategorias, ${resumoGR.metricas} métricas, ${resumoGR.templates} templates.`,
   );
   console.log("Login inicial:");
   console.log(`  goncalo@jsc.pt / ${PASS_GONCALO}  (Administrador)`);

@@ -1,6 +1,6 @@
 // Painel de analíticos do atleta (Nível 1 — bíblia §8.15 / §10.1).
 // Presentacional: recebe o AnaliticoAtleta já calculado (Server Action) e
-// desenha os tiles, a comparação com a equipa, a caderneta e os gráficos.
+// desenha os tiles, a comparação com a equipa e os gráficos.
 "use client";
 
 import {
@@ -60,7 +60,6 @@ export function PainelAtleta({
   const {
     atleta,
     agregado,
-    caderneta,
     comparacaoEquipa,
     evolucaoJogos,
     presencasMensais,
@@ -353,21 +352,6 @@ export function PainelAtleta({
         </div>
       )}
 
-      {/* Caderneta */}
-      <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-        <p className="mb-1 text-legenda font-medium uppercase tracking-wide text-cinza-400">
-          Caderneta
-        </p>
-        <p className="text-corpo text-cinza-900">
-          <span className="font-semibold text-primary">{caderneta.desbloqueadas}</span>{" "}
-          de {caderneta.total} habilidades desbloqueadas
-          {caderneta.emProgresso > 0 && (
-            <span className="text-cinza-500"> · {caderneta.emProgresso} em progresso</span>
-          )}
-          .
-        </p>
-      </div>
-
       {/* Métricas personalizadas (§8.14 / §10.1) — configuráveis pelo clube. */}
       <div className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
         <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-400">
@@ -559,8 +543,7 @@ function TabelaEvolucaoAtleta({
             <th className="px-3 py-3 font-medium">Escalão</th>
             <th className="px-3 py-3 text-right font-medium">Golos</th>
             <th className="px-3 py-3 text-right font-medium">Jogos</th>
-            <th className="px-3 py-3 text-right font-medium">Presenças</th>
-            <th className="px-5 py-3 text-right font-medium">Habilidades</th>
+            <th className="px-5 py-3 text-right font-medium">Presenças</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-cinza-100">
@@ -590,11 +573,8 @@ function TabelaEvolucaoAtleta({
                 <td className="px-3 py-3">{e.escalaoNome ?? "—"}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{e.totalGolos}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{e.jogosUtilizados}</td>
-                <td className="px-3 py-3 text-right tabular-nums">
-                  {pct(e.taxaPresenca)}
-                </td>
                 <td className="px-5 py-3 text-right tabular-nums">
-                  {e.habilidades.desbloqueadas}/{e.habilidades.total}
+                  {pct(e.taxaPresenca)}
                 </td>
               </tr>
             );

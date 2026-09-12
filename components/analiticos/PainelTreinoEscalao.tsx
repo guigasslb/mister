@@ -26,10 +26,20 @@ const LABEL_TIPO_SESSAO: Record<TipoSessao, string> = {
   ABERTO: "Aberto",
   CAPTACAO: "Captação",
   EVENTO: "Evento",
+  // §8.24.6 — sessão de GR realizada fora da app (estágio, clínica).
+  EXTERNA_GR: "Externa (GR)",
 };
 
 // Ordem fixa dos tipos de sessão na distribuição.
-const ORDEM_TIPO_SESSAO: TipoSessao[] = ["NORMAL", "ABERTO", "CAPTACAO", "EVENTO"];
+// (as barras com valor 0 são filtradas a jusante, pelo que acrescentar um tipo
+// sem registos não altera a apresentação atual)
+const ORDEM_TIPO_SESSAO: TipoSessao[] = [
+  "NORMAL",
+  "ABERTO",
+  "CAPTACAO",
+  "EVENTO",
+  "EXTERNA_GR",
+];
 
 /** Acento semântico para uma taxa 0–1 (verde ≥85%, âmbar ≥60%, senão vermelho). */
 function acentoTaxa(taxa: number): AcentoKpi {

@@ -82,6 +82,7 @@ export async function editarMetrica(
       nome: parsed.data.nome,
       tipo: parsed.data.tipo,
       contexto: parsed.data.contexto,
+      aplicaSoGuardaRedes: parsed.data.aplicaSoGuardaRedes,
     },
   });
   revalidatePath(PATH);
@@ -183,6 +184,8 @@ export async function listarMetricasSessao(
   if (!(await podeLerEscalao(sessao.escalaoId))) return erro("Sem permissão neste escalão");
 
   const [metricas, valores] = await Promise.all([
+    // Devolve o MetricaConfig completo — inclui `aplicaSoGuardaRedes` (§8.24.3),
+    // que a grelha da sessão usa para desativar ("—") a coluna nos atletas não-GR.
     prisma.metricaConfig.findMany({
       where: { clubeId, ativa: true, contexto: { in: ["TREINO", "AMBOS"] } },
       orderBy: { ordem: "asc" },
@@ -229,19 +232,40 @@ export async function guardarMetricasSessao(
   // Só métricas de treino ativas do clube são aceites.
   const metricasValidas = await prisma.metricaConfig.findMany({
     where: { clubeId, ativa: true, contexto: { in: ["TREINO", "AMBOS"] } },
-    select: { id: true },
+    select: { id: true, aplicaSoGuardaRedes: true },
   });
   const idsValidos = new Set(metricasValidas.map((m) => m.id));
+  // §8.24.3 (RN-GR-2): métricas que só se aplicam a guarda-redes.
+  const metricasSoGR = new Set(
+    metricasValidas.filter((m) => m.aplicaSoGuardaRedes).map((m) => m.id),
+  );
 
-  // Só atletas do clube.
+  // Só atletas do clube (com as posições para validar as métricas de GR).
   const idsAtletas = parsed.data.map((d) => d.atletaId);
   const atletas = await prisma.atleta.findMany({
     where: { id: { in: idsAtletas }, clubeId },
-    select: { id: true },
+    select: { id: true, posicoes: true },
   });
   const idsAtletasValidos = new Set(atletas.map((a) => a.id));
+  const atletaEGR = new Map(
+    atletas.map((a) => [a.id, a.posicoes.includes("GUARDA_REDES")]),
+  );
 
   const linhasValidas = parsed.data.filter((l) => idsAtletasValidos.has(l.atletaId));
+
+  // §8.24.3 (RN-GR-2): rejeita (não confia na UI) valores de métricas
+  // `aplicaSoGuardaRedes=true` para atletas que não são guarda-redes.
+  for (const linha of linhasValidas) {
+    if (atletaEGR.get(linha.atletaId)) continue;
+    const invalida = linha.valores.find(
+      (v) => idsValidos.has(v.metricaId) && metricasSoGR.has(v.metricaId),
+    );
+    if (invalida) {
+      return erro("Métrica de guarda-redes não aplicável a este atleta.", {
+        [linha.atletaId]: "Métrica de guarda-redes não aplicável a este atleta.",
+      });
+    }
+  }
   const atletasSubmetidos = linhasValidas.map((l) => l.atletaId);
 
   const novos = linhasValidas.flatMap((linha) =>

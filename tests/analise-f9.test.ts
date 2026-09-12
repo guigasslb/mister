@@ -29,8 +29,6 @@ vi.mock("@/lib/db", () => ({
     eventoJogo: { findMany: vi.fn() },
     jogo: { findMany: vi.fn() },
     competicao: { findMany: vi.fn() },
-    habilidade: { count: vi.fn() },
-    progressoHabilidade: { findMany: vi.fn() },
     valorMetrica: { findMany: vi.fn() },
     valorMetricaSessao: { findMany: vi.fn() },
     relatorioPartilhado: {
@@ -189,7 +187,7 @@ describe("obterAnaliticoAtleta", () => {
     expect(r.sucesso).toBe(false);
   });
 
-  it("vista conjunta: agrega golos, tempo de jogo, presenças e caderneta", async () => {
+  it("vista conjunta: agrega golos, tempo de jogo e presenças", async () => {
     p.atleta.findFirst.mockResolvedValue({
       id: ATLETA,
       nome: "João",
@@ -216,12 +214,6 @@ describe("obterAnaliticoAtleta", () => {
       { id: "s2", data: new Date("2025-09-08") },
     ]);
     p.presenca.findMany.mockResolvedValue([{ sessaoId: "s1" }]);
-    p.habilidade.count.mockResolvedValue(20);
-    p.progressoHabilidade.findMany.mockResolvedValue([
-      { estado: "DESBLOQUEADO" },
-      { estado: "EM_PROGRESSO" },
-      { estado: "NAO_INICIADO" },
-    ]);
 
     const r = await obterAnaliticoAtleta(ATLETA);
     expect(r.sucesso).toBe(true);
@@ -232,7 +224,6 @@ describe("obterAnaliticoAtleta", () => {
     expect(r.dados.agregado.jogosConvocado).toBe(2);
     expect(r.dados.presencasMensais).toHaveLength(1);
     expect(r.dados.presencasMensais[0].taxa).toBeCloseTo(0.5);
-    expect(r.dados.caderneta).toEqual({ total: 20, desbloqueadas: 1, emProgresso: 1 });
     expect(r.dados.evolucaoJogos).toHaveLength(1);
     expect(r.dados.comparacaoEquipa).toBeNull();
   });
@@ -250,8 +241,6 @@ describe("obterAnaliticoAtleta", () => {
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
     p.sessao.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
-    p.habilidade.count.mockResolvedValue(0);
-    p.progressoHabilidade.findMany.mockResolvedValue([]);
     p.valorMetrica.findMany.mockResolvedValue([
       { valor: 3, metrica: { id: "m1", nome: "Remates", tipo: "NUMERO", ordem: 0 } },
       { valor: 2, metrica: { id: "m1", nome: "Remates", tipo: "NUMERO", ordem: 0 } },
@@ -285,8 +274,6 @@ describe("obterAnaliticoAtleta", () => {
     p.estatisticaAtleta.findMany.mockResolvedValue([]);
     p.sessao.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
-    p.habilidade.count.mockResolvedValue(0);
-    p.progressoHabilidade.findMany.mockResolvedValue([]);
 
     const r = await obterAnaliticoAtleta(ATLETA);
     expect(r.sucesso).toBe(true);
@@ -341,8 +328,6 @@ describe("obterAnaliticoAtleta", () => {
     ]);
     p.sessao.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
-    p.habilidade.count.mockResolvedValue(0);
-    p.progressoHabilidade.findMany.mockResolvedValue([]);
 
     const r = await obterAnaliticoAtleta(ATLETA);
     expect(r.sucesso).toBe(true);

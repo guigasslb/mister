@@ -640,7 +640,7 @@ export async function toggleAtivoAtleta(atletaId: string): Promise<Resultado<voi
  *
  * Ao contrário de `apagarAtleta` (soft-delete: ativo=false), esta ação remove
  * IRREVERSIVELMENTE o atleta e todos os dados pessoais associados. As FK com
- * onDelete: Cascade (presenças, convocatórias, participações, caderneta, eventos
+ * onDelete: Cascade (presenças, convocatórias, participações, eventos
  * de jogo, consentimentos e — transitivamente — valores de métricas) garantem a
  * limpeza em cadeia.
  *

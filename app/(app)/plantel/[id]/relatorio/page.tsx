@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { obterAtleta, obterEstatisticasAtleta } from "@/lib/actions/atletas";
-import { obterCadernetaAtleta } from "@/lib/actions/caderneta";
 import { AvatarAtleta } from "@/components/plantel/AvatarAtleta";
 import { BotaoImprimir } from "@/components/relatorios/BotaoImprimir";
 import { LABEL_POSICAO } from "@/lib/schemas/atleta";
@@ -30,15 +29,7 @@ export default async function RelatorioAtletaPage({
   const a = res.dados;
   const eGR = a.posicoes.includes("GUARDA_REDES");
 
-  const [resStats, resCad] = await Promise.all([
-    obterEstatisticasAtleta(id),
-    obterCadernetaAtleta(id),
-  ]);
-
-  const desbloqueadas = resCad.sucesso
-    ? resCad.dados.filter((h) => h.estado === "DESBLOQUEADO").length
-    : 0;
-  const totalHab = resCad.sucesso ? resCad.dados.length : 0;
+  const resStats = await obterEstatisticasAtleta(id);
 
   const meta: string[] = [];
   if (a.posicoes.length) meta.push(a.posicoes.map((p) => LABEL_POSICAO[p]).join(", "));
@@ -96,24 +87,6 @@ export default async function RelatorioAtletaPage({
           </div>
         </div>
       )}
-
-      <div>
-        <h2 className="mb-3 text-subtitulo text-cinza-900">Caderneta</h2>
-        <p className="text-corpo-sec text-cinza-600">
-          {desbloqueadas} de {totalHab} habilidades desbloqueadas.
-        </p>
-        {resCad.sucesso && desbloqueadas > 0 && (
-          <ul className="mt-2 flex flex-wrap gap-2">
-            {resCad.dados
-              .filter((h) => h.estado === "DESBLOQUEADO")
-              .map((h) => (
-                <li key={h.id} className="rounded-full bg-verde-600/10 px-2.5 py-0.5 text-legenda text-verde-600">
-                  {h.nome}
-                </li>
-              ))}
-          </ul>
-        )}
-      </div>
 
       {a.observacoes && (
         <div>

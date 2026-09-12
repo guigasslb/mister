@@ -1,11 +1,20 @@
 import { z } from "zod";
 import { TipoMetrica, ContextoMetrica } from "@prisma/client";
 
-export const metricaSchema = z.object({
-  nome: z.string().min(1, "Nome obrigatório").max(60, "Máximo 60 caracteres"),
-  tipo: z.nativeEnum(TipoMetrica),
-  contexto: z.nativeEnum(ContextoMetrica).default(ContextoMetrica.JOGO),
-});
+export const metricaSchema = z
+  .object({
+    nome: z.string().min(1, "Nome obrigatório").max(60, "Máximo 60 caracteres"),
+    tipo: z.nativeEnum(TipoMetrica),
+    contexto: z.nativeEnum(ContextoMetrica).default(ContextoMetrica.JOGO),
+    // §8.24.3: métrica técnica exclusiva de guarda-redes. Só faz sentido em
+    // métricas de treino (contexto TREINO/AMBOS); em contexto JOGO é sempre false.
+    aplicaSoGuardaRedes: z.boolean().default(false),
+  })
+  .transform((dados) => ({
+    ...dados,
+    aplicaSoGuardaRedes:
+      dados.contexto === ContextoMetrica.JOGO ? false : dados.aplicaSoGuardaRedes,
+  }));
 
 export type MetricaInput = z.infer<typeof metricaSchema>;
 

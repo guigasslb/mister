@@ -101,7 +101,7 @@ export default async function EditarAtletaPage({
           <p className="text-corpo font-semibold text-vermelho-600">Zona de perigo</p>
           <p className="text-corpo-sec text-cinza-600">
             Apagar definitivamente remove o atleta e todos os dados pessoais associados
-            (presenças, caderneta, convocatórias, participações). A ação é irreversível
+            (presenças, convocatórias, participações). A ação é irreversível
             e destina-se ao cumprimento do direito ao apagamento (RGPD). Para apenas o
             retirar das listas, usa «Arquivar atleta» acima.
           </p>

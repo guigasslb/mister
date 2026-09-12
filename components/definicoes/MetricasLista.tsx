@@ -62,13 +62,24 @@ function MetricaFormDialog({
   const [contexto, setContexto] = useState<ContextoMetrica>(
     metrica?.contexto ?? "JOGO",
   );
+  // §8.24.3: exclusiva de guarda-redes. Só relevante em métricas de treino
+  // (contexto TREINO/AMBOS); ao voltar a JOGO o servidor força false.
+  const [aplicaSoGuardaRedes, setAplicaSoGuardaRedes] = useState(
+    metrica?.aplicaSoGuardaRedes ?? false,
+  );
+  const mostrarToggleGR = contexto !== "JOGO";
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     setErro(null);
     startTransition(async () => {
-      const dados = { nome: fd.get("nome"), tipo, contexto };
+      const dados = {
+        nome: fd.get("nome"),
+        tipo,
+        contexto,
+        aplicaSoGuardaRedes: mostrarToggleGR ? aplicaSoGuardaRedes : false,
+      };
       const res = metrica
         ? await editarMetrica(metrica.id, dados)
         : await criarMetrica(dados);
@@ -78,6 +89,7 @@ function MetricaFormDialog({
         if (!editar) {
           setTipo("NUMERO");
           setContexto("JOGO");
+          setAplicaSoGuardaRedes(false);
         }
       } else {
         setErro(res.erro);
@@ -134,6 +146,26 @@ function MetricaFormDialog({
               </SelectContent>
             </Select>
           </div>
+          {/* §8.24.3: exclusiva de GR — só em métricas de treino (TREINO/AMBOS). */}
+          {mostrarToggleGR && (
+            <div className="flex items-start justify-between gap-3 rounded-md border border-cinza-200 bg-cinza-50 p-3">
+              <div>
+                <Label htmlFor="aplicaSoGuardaRedes" className="cursor-pointer">
+                  Aplica só a guarda-redes
+                </Label>
+                <p className="mt-0.5 text-legenda text-cinza-600">
+                  A métrica só aparece na grelha e nas análises dos atletas com a
+                  posição de guarda-redes.
+                </p>
+              </div>
+              <Switch
+                id="aplicaSoGuardaRedes"
+                checked={aplicaSoGuardaRedes}
+                onCheckedChange={setAplicaSoGuardaRedes}
+                aria-label="Aplica só a guarda-redes"
+              />
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="submit" disabled={pending}>
               {pending
@@ -245,6 +277,7 @@ export function MetricasLista({
                 <p className="text-corpo font-semibold text-cinza-900">{m.nome}</p>
                 <p className="text-legenda text-cinza-600">
                   {LABEL_TIPO[m.tipo]} · {LABEL_CONTEXTO[m.contexto]}
+                  {m.aplicaSoGuardaRedes && " · 🧤 Só guarda-redes"}
                 </p>
               </div>
 

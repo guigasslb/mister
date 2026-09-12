@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   criarCompeticaoSchema,
+  criarCompeticaoCompletaSchema,
   registarResultadoExternoSchema,
+  registarConfrontoSchema,
+  definirEstadoConfrontoSchema,
 } from "@/lib/schemas/competicao";
 
 const CUID = "ckv9v0z1w0000abcd1234efgh";
@@ -97,6 +100,141 @@ describe("registarResultadoExternoSchema", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// P1.2 (§23) — Configuração de pontos + schemas de confronto
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("criarCompeticaoSchema — configuração de pontos (§23.3)", () => {
+  it("aplica defaults 3/1/0, golosWalkover 3 e ambito PROPRIA", () => {
+    const r = criarCompeticaoSchema.safeParse({ nome: "Liga", escalaoId: CUID });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.ambito).toBe("PROPRIA");
+      expect(r.data.pontosVitoria).toBe(3);
+      expect(r.data.pontosEmpate).toBe(1);
+      expect(r.data.pontosDerrota).toBe(0);
+      expect(r.data.golosWalkover).toBe(3);
+    }
+  });
+
+  it("aceita pontuação alternativa 2/1/0 e ambito EXTERNA", () => {
+    const r = criarCompeticaoSchema.safeParse({
+      nome: "Torneio de Páscoa",
+      escalaoId: CUID,
+      ambito: "EXTERNA",
+      pontosVitoria: 2,
+      pontosEmpate: 1,
+      pontosDerrota: 0,
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.ambito).toBe("EXTERNA");
+      expect(r.data.pontosVitoria).toBe(2);
+    }
+  });
+
+  it("rejeita pontosVitoria fora do intervalo (0 ou 6)", () => {
+    expect(criarCompeticaoSchema.safeParse({ nome: "X", escalaoId: CUID, pontosVitoria: 0 }).success).toBe(
+      false,
+    );
+    expect(criarCompeticaoSchema.safeParse({ nome: "X", escalaoId: CUID, pontosVitoria: 6 }).success).toBe(
+      false,
+    );
+  });
+
+  it("propaga a configuração ao schema completo (wizard)", () => {
+    const r = criarCompeticaoCompletaSchema.safeParse({
+      nome: "Torneio",
+      escalaoId: CUID,
+      ambito: "PROPRIA",
+      pontosVitoria: 2,
+      equipas: [{ nome: "A" }, { nome: "B" }],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.pontosVitoria).toBe(2);
+      expect(r.data.golosWalkover).toBe(3);
+      // Participante ganha tipo EXTERNO por defeito (§23.3).
+      expect(r.data.equipas[0].tipo).toBe("EXTERNO");
+    }
+  });
+});
+
+describe("registarConfrontoSchema (§23.7)", () => {
+  it("aceita um confronto por nome com estado REALIZADO por defeito", () => {
+    const r = registarConfrontoSchema.safeParse({
+      equipaCasaNome: "Benfica",
+      equipaForaNome: "Sporting",
+      golosCasa: 2,
+      golosFora: 1,
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.estado).toBe("REALIZADO");
+  });
+
+  it("WALKOVER exige walkoverVencedor", () => {
+    const semVencedor = registarConfrontoSchema.safeParse({
+      equipaCasaNome: "Benfica",
+      equipaForaNome: "Sporting",
+      estado: "WALKOVER",
+    });
+    expect(semVencedor.success).toBe(false);
+
+    const comVencedor = registarConfrontoSchema.safeParse({
+      equipaCasaNome: "Benfica",
+      equipaForaNome: "Sporting",
+      estado: "WALKOVER",
+      walkoverVencedor: "CASA",
+    });
+    expect(comVencedor.success).toBe(true);
+  });
+
+  it("aceita identificação por FK (cuid) e faz trim aos nomes", () => {
+    const r = registarConfrontoSchema.safeParse({
+      equipaCasaId: CUID,
+      equipaForaNome: "  Sporting  ",
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.equipaForaNome).toBe("Sporting");
+  });
+
+  it("rejeita golos negativos", () => {
+    const r = registarConfrontoSchema.safeParse({
+      equipaCasaNome: "A",
+      equipaForaNome: "B",
+      golosCasa: -1,
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("definirEstadoConfrontoSchema (§23.7)", () => {
+  it("aceita CANCELADO sem vencedor de walkover", () => {
+    const r = definirEstadoConfrontoSchema.safeParse({ resultadoId: CUID, estado: "CANCELADO" });
+    expect(r.success).toBe(true);
+  });
+
+  it("WALKOVER exige walkoverVencedor", () => {
+    expect(
+      definirEstadoConfrontoSchema.safeParse({ resultadoId: CUID, estado: "WALKOVER" }).success,
+    ).toBe(false);
+    expect(
+      definirEstadoConfrontoSchema.safeParse({
+        resultadoId: CUID,
+        estado: "WALKOVER",
+        walkoverVencedor: "FORA",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejeita resultadoId que não é cuid", () => {
+    expect(
+      definirEstadoConfrontoSchema.safeParse({ resultadoId: "nao-cuid", estado: "REALIZADO" })
+        .success,
+    ).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Actions (mock de auth + prisma) — mesmo padrão de actions-producao.test.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -130,9 +268,18 @@ vi.mock("@/lib/db", () => ({
       create: vi.fn(),
       findFirst: vi.fn(),
       delete: vi.fn(),
+      update: vi.fn(),
       findMany: vi.fn(),
     },
-    jogo: { findMany: vi.fn(), updateMany: vi.fn() },
+    // P1.2 (§23): obterClassificacao lê o participante PROPRIO; as actions de
+    // confronto resolvem/criam participantes on-the-fly.
+    equipaCompeticao: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
+    jogo: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));

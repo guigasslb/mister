@@ -67,6 +67,8 @@ const ROTULO_TIPO_SESSAO: Record<TipoSessao, string> = {
   ABERTO: "Treino aberto",
   CAPTACAO: "Captação",
   EVENTO: "Evento",
+  // §8.24.6 — sessão de GR realizada fora da app (estágio, clínica).
+  EXTERNA_GR: "Sessão externa de GR",
 };
 
 type Contexto =

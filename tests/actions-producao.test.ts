@@ -30,8 +30,6 @@ vi.mock("@/lib/db", () => ({
     escalao: { findFirst: vi.fn(), delete: vi.fn() },
     planeamento: { count: vi.fn() },
     competicao: { count: vi.fn() },
-    habilidade: { findFirst: vi.fn(), delete: vi.fn() },
-    progressoHabilidade: { count: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -39,7 +37,6 @@ vi.mock("@/lib/db", () => ({
 import { definirConvocatoria, guardarEstatisticas } from "@/lib/actions/jogos";
 import { reordenarExercicios } from "@/lib/actions/treinos";
 import { apagarEscalao } from "@/lib/actions/escaloes";
-import { apagarHabilidade } from "@/lib/actions/habilidades";
 import { obterClubeIdAtual } from "@/lib/epoca-context";
 import { exigirCapacidade } from "@/lib/permissoes";
 import { prisma } from "@/lib/db";
@@ -146,17 +143,5 @@ describe("apagarEscalao — guards de integridade (auditoria B3)", () => {
     expect(r.sucesso).toBe(false);
     if (!r.sucesso) expect(r.erro).toMatch(/sess/i);
     expect(prisma.escalao.delete).not.toHaveBeenCalled();
-  });
-});
-
-describe("apagarHabilidade — guard de progressos (auditoria A1)", () => {
-  it("bloqueia se houver progressos na caderneta", async () => {
-    mocked(prisma.habilidade.findFirst).mockResolvedValue({ id: "h1", clubeId: "clube1" });
-    mocked(prisma.progressoHabilidade.count).mockResolvedValue(3);
-
-    const r = await apagarHabilidade("h1");
-    expect(r.sucesso).toBe(false);
-    if (!r.sucesso) expect(r.erro).toMatch(/progresso/i);
-    expect(prisma.habilidade.delete).not.toHaveBeenCalled();
   });
 });

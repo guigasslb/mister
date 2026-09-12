@@ -163,8 +163,6 @@ vi.mock("@/lib/db", () => ({
     atleta: { findFirst: vi.fn() },
     sessao: { findMany: vi.fn() },
     presenca: { findMany: vi.fn() },
-    habilidade: { count: vi.fn() },
-    progressoHabilidade: { findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -379,8 +377,6 @@ describe("obterAnaliticoAtleta — segmentação por modalidade (§10.8)", () =>
     p.convocatoria.count.mockResolvedValue(1);
     p.sessao.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
-    p.habilidade.count.mockResolvedValue(0);
-    p.progressoHabilidade.findMany.mockResolvedValue([]);
   });
 
   it("vista conjunta restringe escalões e jogos à modalidade pedida", async () => {

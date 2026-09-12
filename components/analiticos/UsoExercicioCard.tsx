@@ -14,6 +14,8 @@ const LABEL_TIPO_SESSAO: Record<TipoSessao, string> = {
   ABERTO: "Aberto",
   CAPTACAO: "Captação",
   EVENTO: "Evento",
+  // §8.24.6 — sessão de GR realizada fora da app (estágio, clínica).
+  EXTERNA_GR: "Externa (GR)",
 };
 
 /** Data PT-PT completa (ex.: "04/09/2026") — hora de Lisboa. */

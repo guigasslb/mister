@@ -35,7 +35,7 @@ Next.js 15 (App Router) · React 19 · TypeScript strict · Prisma + PostgreSQL 
 
 - [x] **1. Fundações** — config, schema Prisma (16 entidades, 8 enums), Auth.js + middleware, `obterEpocaAtiva()`, seed, login funcional.
 - [x] **2. Layout + Época** — BarraTopo, Navegacao (sidebar+bottom-nav), SeletorEpoca, EstadosUI, stubs de rotas.
-- [x] **3. Definições base** — CRUD de escalões, épocas, utilizadores, métricas, habilidades.
+- [x] **3. Definições base** — CRUD de escalões, épocas, utilizadores, métricas. _(Habilidades removidas em 2026-09-12.)_
 - [x] **4. Plantel** — CRUD de atletas, lista c/ tabs por escalão, perfil (sem estatísticas).
 - [x] **5. Exercícios** — CRUD da biblioteca (sem editor de campo).
 - [x] **6. Editor de campo (SVG)** — CampoFutsal, MiniaturaCampo, EditorCampo interativo.
@@ -44,7 +44,7 @@ Next.js 15 (App Router) · React 19 · TypeScript strict · Prisma + PostgreSQL 
 - [x] **9. Jogos + convocatória** — CRUD de jogos, abas convocatória/estatísticas/relatório.
 - [x] **10. Estatísticas** — grelha por atleta convocado (campos de GR condicionais), upsert.
 - [x] **11. Agregações** — `obterEstatisticasAtleta` no perfil (golos, jogos, taxa presença).
-- [x] **12. Caderneta** — progresso de habilidades por atleta/época, agrupado por nível.
+- [~] **12. Caderneta** — **REMOVIDA em 2026-09-12** (features Habilidades e Caderneta eliminadas do produto; ver spec §19). Já não existe.
 - [x] **13. Dashboard** — próximo treino/jogo, ações rápidas, resumo da época.
 - [x] **14. Estados e polish** — not-found, redirects para /dashboard, estados vazios.
 
@@ -69,7 +69,7 @@ Next.js 15 (App Router) · React 19 · TypeScript strict · Prisma + PostgreSQL 
 Estado: **build de produção verde, `npm audit --omit=dev` = 0 vulnerabilidades, 51 testes.**
 - [x] **0 — Build** desbloqueada.
 - [x] **1 — Segurança:** Next 15.5.x (CVEs), next-auth beta.32; middleware `authorized`; sessão 7d; allowlist YouTube no `videoUrl`; rate-limit de login; headers de segurança (`next.config.js`); seed falha em prod sem passwords; bcrypt cost 12.
-- [x] **3 — Dados:** `dataIngresso` na taxa de presença; ranking por `atletaId`; FK guards (apagar escalão/habilidade); validação de convocatória e reordenação; `erroDeValidacao`; `convidarMembro` em transação.
+- [x] **3 — Dados:** `dataIngresso` na taxa de presença; ranking por `atletaId`; FK guards (apagar escalão); validação de convocatória e reordenação; `erroDeValidacao`; `convidarMembro` em transação.
 - [x] **4 — Ops:** `global-error.tsx`; 10 índices Prisma; `docs/DEPLOY.md`; `.env.example`.
 - [x] **5 — Visual/a11y:** tokens de cor em falta; `ambar-600` (AA); área de toque + focus nos botões de reordenar.
 - [x] **6 — Testes:** `tests/actions-producao.test.ts` (7).

@@ -141,7 +141,7 @@ export async function verificarElegibilidadeWizard(): Promise<
  * Cria a nova época e transita o plantel escolhido, no mesmo clube.
  *
  * Herda automaticamente (sem cópia): exercícios portáteis (do treinador),
- * métricas, habilidades e modo de semana — nenhum destes é filtrado por época,
+ * métricas e modo de semana — nenhum destes é filtrado por época,
  * pelo que já fica disponível na nova época. Zera automaticamente (por omissão):
  * estatísticas, presenças, jogos, convocatórias e planeamentos — nada disso é
  * copiado. A numeração de semanas recomeça em 1 (não há planeamentos herdados).

@@ -272,6 +272,16 @@ export interface MetricaAgregadaAtleta {
   jogos: number;
 }
 
+/**
+ * §8.24.5 — Evolução técnica de uma métrica de GR (`aplicaSoGuardaRedes=true`) ao
+ * longo da época: um ponto por sessão (NORMAL ou EXTERNA_GR) com valor registado,
+ * ordenado por data. Alimenta o gráfico de linhas "Desenvolvimento do GR".
+ */
+export interface MetricaGREvolucao {
+  nome: string;
+  evolucao: { data: Date; valor: number }[];
+}
+
 export interface AnaliticoAtleta {
   atleta: { id: string; nome: string; posicoes: Posicao[]; eGR: boolean };
   epoca: { id: string; nome: string };
@@ -286,6 +296,12 @@ export interface AnaliticoAtleta {
   metricas: MetricaAgregadaAtleta[];
   /** Métricas de treino (§8.20) agregadas por sessão ao longo da época (default `[]`). */
   metricasTreino: MetricaAgregadaAtleta[];
+  /**
+   * §8.24.5 — Métricas técnicas de GR (`aplicaSoGuardaRedes=true`) com a evolução
+   * por sessão ao longo da época (NORMAL + EXTERNA_GR). Vazio para atletas não-GR
+   * ou sem registos. Alimenta a secção "Desenvolvimento do guarda-redes".
+   */
+  metricasGR: MetricaGREvolucao[];
   /** Cartões acumulados na época (disciplina — §3.7; default `{0,0}`). */
   cartoes: CartoesAcumulados;
 }
@@ -332,6 +348,34 @@ function agregarMetricasAtleta(valores: ValorMetricaLinha[]): MetricaAgregadaAtl
         jogos: a.jogos,
       };
     });
+}
+
+/** Uma linha crua de `ValorMetricaSessao` de GR (métrica + data da sessão). */
+interface ValorMetricaGRLinha {
+  valor: number;
+  sessao: { data: Date };
+  metrica: { id: string; nome: string; ordem: number };
+}
+
+/**
+ * §8.24.5 — Agrupa valores de métricas de GR por métrica, construindo a evolução
+ * (um ponto por sessão, ordenado por data). Assume as linhas já ordenadas por data
+ * ascendente (garantido pela query); ordena as métricas por `ordem`.
+ */
+function agregarMetricasGR(valores: ValorMetricaGRLinha[]): MetricaGREvolucao[] {
+  const map = new Map<
+    string,
+    { nome: string; ordem: number; evolucao: { data: Date; valor: number }[] }
+  >();
+  for (const v of valores) {
+    const acc =
+      map.get(v.metrica.id) ?? { nome: v.metrica.nome, ordem: v.metrica.ordem, evolucao: [] };
+    acc.evolucao.push({ data: v.sessao.data, valor: v.valor });
+    map.set(v.metrica.id, acc);
+  }
+  return [...map.values()]
+    .sort((a, b) => a.ordem - b.ordem)
+    .map(({ nome, evolucao }) => ({ nome, evolucao }));
 }
 
 export async function obterAnaliticoAtleta(
@@ -422,6 +466,7 @@ export async function obterAnaliticoAtleta(
     presencas,
     valoresMetricas,
     valoresMetricasTreino,
+    valoresMetricasGR,
   ] = await Promise.all([
       prisma.convocatoria.count({
         where: { convocado: true, atletaId, jogo: filtroJogo },
@@ -483,6 +528,22 @@ export async function obterAnaliticoAtleta(
           metrica: { select: { id: true, nome: true, tipo: true, ordem: true } },
         },
       }),
+      // §8.24.5: métricas técnicas de GR (`aplicaSoGuardaRedes=true`) segmentadas por
+      // sessão — evolução ao longo da época. Inclui sessões NORMAL e EXTERNA_GR
+      // (ambas registam métricas de GR em `ValorMetricaSessao`); ordenadas por data.
+      prisma.valorMetricaSessao.findMany({
+        where: {
+          atletaId,
+          metrica: { aplicaSoGuardaRedes: true },
+          sessao: { epocaId: epoca.id, escalaoId: { in: escaloesCtx } },
+        },
+        select: {
+          valor: true,
+          sessao: { select: { data: true } },
+          metrica: { select: { id: true, nome: true, ordem: true } },
+        },
+        orderBy: { sessao: { data: "asc" } },
+      }),
     ]);
 
   const linhas: LinhaEstatistica[] = estatisticas.map((e) => ({
@@ -543,6 +604,7 @@ export async function obterAnaliticoAtleta(
     comparacaoEquipa,
     metricas: agregarMetricasAtleta(valoresMetricas),
     metricasTreino: agregarMetricasAtleta(valoresMetricasTreino),
+    metricasGR: agregarMetricasGR(valoresMetricasGR),
     cartoes,
   });
 }

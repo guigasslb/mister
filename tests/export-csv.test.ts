@@ -33,8 +33,6 @@ vi.mock("@/lib/db", () => ({
     eventoJogo: { findMany: vi.fn() },
     jogo: { findMany: vi.fn() },
     competicao: { findMany: vi.fn() },
-    habilidade: { count: vi.fn() },
-    progressoHabilidade: { findMany: vi.fn() },
     valorMetrica: { findMany: vi.fn() },
     valorMetricaSessao: { findMany: vi.fn() },
   },
@@ -212,8 +210,6 @@ function prepararAtleta() {
     { id: "s2", data: new Date("2025-09-08") },
   ]);
   p.presenca.findMany.mockResolvedValue([{ sessaoId: "s1" }]);
-  p.habilidade.count.mockResolvedValue(0);
-  p.progressoHabilidade.findMany.mockResolvedValue([]);
   // Comparação com a equipa (escalão de contexto definido).
   p.sessao.count.mockResolvedValue(2);
   p.presenca.count.mockResolvedValue(5);
@@ -296,8 +292,6 @@ describe("exportarAnaliticoAtletaCsv", () => {
     ]);
     p.sessao.findMany.mockResolvedValue([]);
     p.presenca.findMany.mockResolvedValue([]);
-    p.habilidade.count.mockResolvedValue(0);
-    p.progressoHabilidade.findMany.mockResolvedValue([]);
     p.sessao.count.mockResolvedValue(0);
     p.presenca.count.mockResolvedValue(0);
 

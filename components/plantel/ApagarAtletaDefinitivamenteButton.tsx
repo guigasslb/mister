@@ -62,7 +62,7 @@ export function ApagarAtletaDefinitivamenteButton({
           <AlertDialogTitle>Apagar «{nomeAtleta}» definitivamente?</AlertDialogTitle>
           <AlertDialogDescription>
             Esta ação é irreversível e remove todos os dados pessoais do atleta
-            (presenças, caderneta, convocatórias, participações, etc.). Apenas
+            (presenças, convocatórias, participações, etc.). Apenas
             prossegue se tiveres o consentimento do encarregado de educação.
           </AlertDialogDescription>
         </AlertDialogHeader>
