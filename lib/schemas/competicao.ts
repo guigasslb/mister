@@ -75,8 +75,8 @@ export const registarConfrontoSchema = z
     equipaForaNome: z.string().trim().min(1).max(100).optional(),
     estado: z.nativeEnum(EstadoResultado).default(EstadoResultado.REALIZADO),
     walkoverVencedor: z.nativeEnum(CasaFora).optional(),
-    golosCasa: z.number().int().min(0).optional(),
-    golosFora: z.number().int().min(0).optional(),
+    golosCasa: z.number().int().min(0).max(99).optional(),
+    golosFora: z.number().int().min(0).max(99).optional(),
   })
   .refine((d) => d.estado !== EstadoResultado.WALKOVER || d.walkoverVencedor != null, {
     message: "Indica o vencedor do walkover",
