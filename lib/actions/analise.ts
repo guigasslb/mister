@@ -250,12 +250,6 @@ export async function obterPresencasMensal(
 // NÍVEL 1 — Analítico do atleta (secção 8.15 / 10.1)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface AnaliticoCaderneta {
-  total: number;
-  desbloqueadas: number;
-  emProgresso: number;
-}
-
 export interface ComparacaoEquipa {
   /** Média de golos por atleta do escalão. */
   golosMediaEquipa: number;
@@ -286,7 +280,6 @@ export interface AnaliticoAtleta {
   agregado: EstatisticasAgregadas;
   presencasMensais: PresencaMensal[];
   evolucaoJogos: JogoDadosAtleta[];
-  caderneta: AnaliticoCaderneta;
   /** Comparação com a média da equipa; só disponível na vista de um escalão. */
   comparacaoEquipa: ComparacaoEquipa | null;
   /** Métricas configuráveis do clube agregadas para o atleta (default `[]`). */
@@ -427,8 +420,6 @@ export async function obterAnaliticoAtleta(
     estatisticas,
     sessoes,
     presencas,
-    totalHabilidades,
-    progressos,
     valoresMetricas,
     valoresMetricasTreino,
   ] = await Promise.all([
@@ -475,11 +466,6 @@ export async function obterAnaliticoAtleta(
           escalaoId: { in: escaloesCtx },
         },
         select: { sessaoId: true },
-      }),
-      prisma.habilidade.count({ where: { clubeId } }),
-      prisma.progressoHabilidade.findMany({
-        where: { atletaId, epocaId: epoca.id },
-        select: { estado: true },
       }),
       // Métricas configuráveis registadas por jogo (bíblia §8.14) — surgem agregadas.
       prisma.valorMetrica.findMany({
@@ -536,12 +522,6 @@ export async function obterAnaliticoAtleta(
     utilizado: e.utilizacao !== "NAO_UTILIZADO",
   }));
 
-  const caderneta: AnaliticoCaderneta = {
-    total: totalHabilidades,
-    desbloqueadas: progressos.filter((p) => p.estado === "DESBLOQUEADO").length,
-    emProgresso: progressos.filter((p) => p.estado === "EM_PROGRESSO").length,
-  };
-
   const comparacaoEquipa =
     escalaoContexto !== null
       ? await calcularComparacaoEquipa(escalaoContexto.id, epoca.id, parsed.data.modalidade)
@@ -560,7 +540,6 @@ export async function obterAnaliticoAtleta(
     agregado,
     presencasMensais: montarPresencasMensais(sessoes, presencasSet),
     evolucaoJogos,
-    caderneta,
     comparacaoEquipa,
     metricas: agregarMetricasAtleta(valoresMetricas),
     metricasTreino: agregarMetricasAtleta(valoresMetricasTreino),
@@ -733,14 +712,13 @@ export interface EpocaResumoAtleta {
   jogosUtilizados: number;
   jogosConvocado: number;
   taxaPresenca: number; // 0-1
-  habilidades: { desbloqueadas: number; total: number };
 }
 
 /**
  * Evolução do atleta ao longo de TODAS as épocas em que participou (§10.1).
  * Estratégia batch (evita N+1): 1 query pelas participações (fonte das épocas) e,
- * em paralelo, queries planas de estatísticas, convocatórias, presenças e
- * progressos — todas agregadas em memória por época. Auth + multi-tenant pelo
+ * em paralelo, queries planas de estatísticas, convocatórias e presenças —
+ * todas agregadas em memória por época. Auth + multi-tenant pelo
  * clube; leitura permitida se o membro puder ler ≥1 escalão do atleta.
  */
 export async function obterEvolucaoMultiEpoca(
@@ -774,7 +752,7 @@ export async function obterEvolucaoMultiEpoca(
   if (!(await podeLerAlgumEscalao(participacoes.map((p) => p.escalaoId))))
     return erro("Sem permissão neste escalão");
 
-  const [estatisticas, convocatorias, presencas, progressos] = await Promise.all([
+  const [estatisticas, convocatorias, presencas] = await Promise.all([
     prisma.estatisticaAtleta.findMany({
       where: { atletaId, jogo: { escalao: { clubeId } } },
       select: {
@@ -794,10 +772,6 @@ export async function obterEvolucaoMultiEpoca(
       where: { atletaId, sessao: { tipoSessao: "NORMAL", escalao: { clubeId } } },
       select: { estado: true, sessao: { select: { epocaId: true } } },
     }),
-    prisma.progressoHabilidade.findMany({
-      where: { atletaId },
-      select: { epocaId: true, estado: true },
-    }),
   ]);
 
   interface AccEpoca {
@@ -810,8 +784,6 @@ export async function obterEvolucaoMultiEpoca(
     jogosConvocado: number;
     presentes: number;
     presencasMarcadas: number;
-    habDesbloqueadas: number;
-    habTotal: number;
   }
   const porEpoca = new Map<string, AccEpoca>();
   for (const p of participacoes) {
@@ -826,8 +798,6 @@ export async function obterEvolucaoMultiEpoca(
       jogosConvocado: 0,
       presentes: 0,
       presencasMarcadas: 0,
-      habDesbloqueadas: 0,
-      habTotal: 0,
     });
   }
 
@@ -848,12 +818,6 @@ export async function obterEvolucaoMultiEpoca(
     acc.presencasMarcadas++;
     if ((ESTADOS_PRESENTE as readonly string[]).includes(pr.estado)) acc.presentes++;
   }
-  for (const h of progressos) {
-    const acc = porEpoca.get(h.epocaId);
-    if (!acc) continue;
-    acc.habTotal++;
-    if (h.estado === "DESBLOQUEADO") acc.habDesbloqueadas++;
-  }
 
   const resultado: EpocaResumoAtleta[] = [...porEpoca.entries()]
     .map(([epocaId, a]) => ({
@@ -865,7 +829,6 @@ export async function obterEvolucaoMultiEpoca(
       jogosUtilizados: a.jogosUtilizados,
       jogosConvocado: a.jogosConvocado,
       taxaPresenca: a.presencasMarcadas > 0 ? a.presentes / a.presencasMarcadas : 0,
-      habilidades: { desbloqueadas: a.habDesbloqueadas, total: a.habTotal },
       dataInicio: a.dataInicio,
     }))
     .sort((x, y) => x.dataInicio.getTime() - y.dataInicio.getTime())
@@ -1554,6 +1517,8 @@ const SESSAO_TIPOS: Record<TipoSessao, TipoSessao> = {
   ABERTO: "ABERTO",
   CAPTACAO: "CAPTACAO",
   EVENTO: "EVENTO",
+  // §8.24.6 — sessão de GR realizada fora da app (estágio, clínica).
+  EXTERNA_GR: "EXTERNA_GR",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2513,7 +2478,8 @@ export async function obterFeedAtividadeEquipa(
   }
 
   eventos.sort((a, b) => b.quando.getTime() - a.quando.getTime());
-  return ok(eventos);
+  // Dashboard mostra apenas os 5 mais recentes (sem "ver mais" por agora).
+  return ok(eventos.slice(0, 5));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
