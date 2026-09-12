@@ -10,11 +10,9 @@ import type { FormatoCompeticao } from "@prisma/client";
 export function TabelaClassificacao({
   linhas,
   formato,
-  nomeEquipaPropria,
 }: {
   linhas: LinhaClassificacao[];
   formato: FormatoCompeticao;
-  nomeEquipaPropria: string;
 }) {
   const mostrarPontos = formato === "LIGA";
 
@@ -25,8 +23,6 @@ export function TabelaClassificacao({
       </p>
     );
   }
-
-  const nomePropria = nomeEquipaPropria.trim();
 
   return (
     <div className="overflow-x-auto rounded-md border border-cinza-200 bg-white shadow-card">
@@ -65,18 +61,17 @@ export function TabelaClassificacao({
           </tr>
         </thead>
         <tbody>
-          {linhas.map((l, i) => {
-            const propria = l.equipa.trim() === nomePropria;
+          {linhas.map((l) => {
             const dg = l.golosMarcados - l.golosSofridos;
             return (
               <tr
                 key={l.equipa}
                 className={cn(
                   "border-b border-cinza-100 last:border-0",
-                  propria && "bg-primary/5 font-semibold text-primary",
+                  l.ehProprio && "bg-primary/5 font-semibold text-primary",
                 )}
               >
-                <td className="px-3 py-2 text-cinza-500">{i + 1}</td>
+                <td className="px-3 py-2 text-cinza-500">{l.posicao}</td>
                 <th scope="row" className="px-3 py-2 text-left">{l.equipa}</th>
                 <td className="px-2 py-2 text-center">{l.jogos}</td>
                 <td className="px-2 py-2 text-center">{l.vitorias}</td>

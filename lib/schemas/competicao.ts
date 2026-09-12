@@ -170,6 +170,14 @@ export const LABEL_TIPO_PARTICIPANTE_COMPETICAO: Record<TipoParticipanteCompetic
   EXTERNO: "Externa",
 };
 
+// P1.6 (§23.7): rótulos de estado de um confronto (pt-PT), partilhados pela UI.
+export const LABEL_ESTADO_RESULTADO: Record<EstadoResultado, string> = {
+  AGENDADO: "Agendado",
+  REALIZADO: "Realizado",
+  CANCELADO: "Cancelado",
+  WALKOVER: "Walkover",
+};
+
 /**
  * Alias retrocompatível: código anterior a F6 importa `competicaoSchema`.
  * Aponta para o schema de criação (superset com defaults — nome/tipo/escalaoId

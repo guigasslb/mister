@@ -24,7 +24,7 @@ import {
   type CompeticaoDetalhe as CompeticaoDetalheTipo,
   type LinhaClassificacao,
 } from "@/lib/actions/competicoes";
-import { LABEL_FORMATO_COMPETICAO } from "@/lib/schemas/competicao";
+import { LABEL_FORMATO_COMPETICAO, LABEL_AMBITO_COMPETICAO } from "@/lib/schemas/competicao";
 import { LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
 import { formatarDataCurta } from "@/lib/comunicacao-utils";
 import { CompeticaoForm } from "@/components/competicoes/CompeticaoForm";
@@ -74,6 +74,7 @@ export function CompeticaoDetalhe({
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{LABEL_FORMATO_COMPETICAO[competicao.formato]}</Badge>
               <Badge variant="secondary">{LABEL_TIPO_JOGO[competicao.tipo]}</Badge>
+              <Badge variant="outline">{LABEL_AMBITO_COMPETICAO[competicao.ambito]}</Badge>
               <span className="text-corpo-sec text-cinza-600">{competicao.escalao.nome}</span>
             </div>
           </div>
@@ -131,7 +132,7 @@ export function CompeticaoDetalhe({
         <TabsList className="flex-wrap">
           <TabsTrigger value="classificacao">Classificação</TabsTrigger>
           <TabsTrigger value="resultados">
-            Resultados externos ({competicao._count.resultados})
+            Confrontos ({competicao._count.resultados})
           </TabsTrigger>
           <TabsTrigger value="jogos">Jogos próprios ({competicao._count.jogos})</TabsTrigger>
         </TabsList>
@@ -143,11 +144,7 @@ export function CompeticaoDetalhe({
               a ordenação segue a diferença de golos.
             </p>
           )}
-          <TabelaClassificacao
-            linhas={classificacao}
-            formato={competicao.formato}
-            nomeEquipaPropria={competicao.escalao.nome}
-          />
+          <TabelaClassificacao linhas={classificacao} formato={competicao.formato} />
         </TabsContent>
 
         <TabsContent value="resultados" className="space-y-4">
@@ -165,6 +162,7 @@ export function CompeticaoDetalhe({
               data: r.data,
               dataHora: r.dataHora,
               estado: r.estado,
+              walkoverVencedor: r.walkoverVencedor,
             }))}
             formato={competicao.formato}
           />

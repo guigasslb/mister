@@ -11,14 +11,16 @@ import {
   ChevronRight,
   Check,
   Plus,
-  Trash2,
   ArrowUp,
   ArrowDown,
   X,
+  Globe,
+  Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -28,11 +30,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { LABEL_FORMATO_COMPETICAO } from "@/lib/schemas/competicao";
+import {
+  LABEL_FORMATO_COMPETICAO,
+  LABEL_AMBITO_COMPETICAO,
+} from "@/lib/schemas/competicao";
 import { LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
 import { gerarLiga, gerarBracket, type EquipaQuadro } from "@/lib/quadro-cliente";
 import { criarCompeticaoCompleta } from "@/lib/actions/competicoes";
-import type { FormatoCompeticao, FormatoJogo, TipoJogo } from "@prisma/client";
+import type {
+  AmbitoCompeticao,
+  FormatoCompeticao,
+  FormatoJogo,
+  TipoJogo,
+} from "@prisma/client";
 
 type EscalaoBasico = { id: string; nome: string };
 type EpocaBasica = { id: string; nome: string; ativa: boolean };
@@ -45,6 +55,15 @@ const LABEL_FORMATO_JOGO: Record<FormatoJogo, string> = {
   FUTEBOL_7: "Futebol de 7",
   FUTEBOL_9: "Futebol de 9",
   FUTEBOL_11: "Futebol de 11",
+};
+
+const AMBITOS: AmbitoCompeticao[] = ["EXTERNA", "PROPRIA"];
+const PONTOS_VITORIA_OPCOES = [3, 2] as const;
+
+/** Descrição contextual de cada âmbito (Passo 1 — §23.4 Fluxo A). */
+const DESCRICAO_AMBITO: Record<AmbitoCompeticao, string> = {
+  EXTERNA: "Registas resultados de terceiros para acompanhar a classificação.",
+  PROPRIA: "O clube organiza a prova, convida equipas e gere o calendário.",
 };
 
 const FORMATOS: FormatoCompeticao[] = ["LIGA", "TORNEIO", "TACA"];
@@ -131,6 +150,8 @@ export function WizardCompeticao({
 
   // ── Passo 1 — informação base ──────────────────────────────────────────────
   const [nome, setNome] = useState("");
+  const [ambito, setAmbito] = useState<AmbitoCompeticao>("PROPRIA");
+  const [pontosVitoria, setPontosVitoria] = useState<3 | 2>(3);
   const [tipo, setTipo] = useState<TipoJogo>("OFICIAL");
   const [formato, setFormato] = useState<FormatoCompeticao>("LIGA");
   const [formatoJogo, setFormatoJogo] = useState<string>(FORMATO_JOGO_AUTO);
@@ -148,18 +169,44 @@ export function WizardCompeticao({
 
   const eLiga = formato === "LIGA";
 
+  // Nome do escalão selecionado (equipa própria em competições PROPRIA).
+  const escalaoNome = useMemo(
+    () => escaloes.find((e) => e.id === escalaoId)?.nome.trim() ?? "",
+    [escaloes, escalaoId],
+  );
+
+  // P1.6 (§23.4 Fluxo D): em competições PRÓPRIAS a equipa do escalão é o primeiro
+  // participante (marcada PROPRIO, não removível); as restantes são EXTERNO. Numa
+  // EXTERNA todos os participantes são as equipas introduzidas pelo utilizador.
+  const temPropria = ambito === "PROPRIA" && escalaoNome !== "";
+  const participantes = useMemo(() => {
+    const externas = equipas.map((e) => ({ nome: e.nome, ehPropria: false }));
+    if (!temPropria) return externas;
+    const semDup = externas.filter(
+      (e) => e.nome.toLocaleLowerCase("pt") !== escalaoNome.toLocaleLowerCase("pt"),
+    );
+    return [{ nome: escalaoNome, ehPropria: true }, ...semDup];
+  }, [equipas, temPropria, escalaoNome]);
+
+  // Deslocamento de numeração da lista de equipas externas (1 quando há própria).
+  const offsetNumeracao = temPropria ? 1 : 0;
+
   // Chave que identifica a configuração que gerou o quadro atual. Se mudar, o
   // quadro é regenerado ao (re)entrar no passo 3 — preservando edições manuais
   // quando nada relevante mudou.
   const chaveConfig = useMemo(
-    () => JSON.stringify({ formato, duasMaos: eLiga && duasMaos, equipas }),
-    [formato, duasMaos, eLiga, equipas],
+    () => JSON.stringify({ formato, duasMaos: eLiga && duasMaos, participantes }),
+    [formato, duasMaos, eLiga, participantes],
   );
 
   // ── Mutações de equipas ────────────────────────────────────────────────────
   function adicionarEquipa() {
     const nomeTrim = novaEquipa.trim();
     if (nomeTrim === "") return;
+    if (temPropria && nomeTrim.toLocaleLowerCase("pt") === escalaoNome.toLocaleLowerCase("pt")) {
+      toast.error("A equipa do clube já é participante (própria).");
+      return;
+    }
     if (equipas.some((e) => e.nome.toLocaleLowerCase("pt") === nomeTrim.toLocaleLowerCase("pt"))) {
       toast.error("Essa equipa já está na lista.");
       return;
@@ -184,7 +231,10 @@ export function WizardCompeticao({
 
   // ── Geração do quadro ──────────────────────────────────────────────────────
   function gerarQuadro(): JogoEditavel[] {
-    const comPosicao: EquipaQuadro[] = equipas.map((e, i) => ({ nome: e.nome, posicao: i + 1 }));
+    const comPosicao: EquipaQuadro[] = participantes.map((e, i) => ({
+      nome: e.nome,
+      posicao: i + 1,
+    }));
     const gerados = eLiga
       ? gerarLiga(comPosicao, duasMaos)
       : gerarBracket(comPosicao);
@@ -215,7 +265,7 @@ export function WizardCompeticao({
       if (!validarBase()) return;
     }
     if (chaveAtual === "equipas") {
-      if (equipas.length < 2) {
+      if (participantes.length < 2) {
         toast.error("Adiciona pelo menos 2 equipas para gerar o quadro.");
         return;
       }
@@ -244,7 +294,7 @@ export function WizardCompeticao({
       setPassoIndex(0);
       return;
     }
-    if (equipas.length < 2) {
+    if (participantes.length < 2) {
       setPassoIndex(1);
       toast.error("Adiciona pelo menos 2 equipas.");
       return;
@@ -252,13 +302,24 @@ export function WizardCompeticao({
 
     const dados = {
       nome: nome.trim(),
+      ambito,
       tipo,
       formato,
+      // P1.6 (§23.3): pontuação configurável (empate/derrota fixos nos valores comuns).
+      pontosVitoria,
+      pontosEmpate: 1,
+      pontosDerrota: 0,
+      golosWalkover: 3,
       ...(formatoJogo !== FORMATO_JOGO_AUTO
         ? { formatoJogo: formatoJogo as FormatoJogo }
         : {}),
       escalaoId,
-      equipas: equipas.map((e, i) => ({ nome: e.nome, posicao: i + 1 })),
+      equipas: participantes.map((p, i) => ({
+        nome: p.nome,
+        posicao: i + 1,
+        tipo: p.ehPropria ? ("PROPRIO" as const) : ("EXTERNO" as const),
+        ...(p.ehPropria ? { escalaoVinculadoId: escalaoId } : {}),
+      })),
       jogos: jogos.map((j) => ({
         equipaCasa: j.equipaCasa,
         equipaFora: j.equipaFora,
@@ -322,6 +383,48 @@ export function WizardCompeticao({
                 placeholder="ex: Liga distrital"
               />
               {erros.nome && <p className="text-legenda text-vermelho-600">{erros.nome}</p>}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Âmbito</Label>
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                role="radiogroup"
+                aria-label="Âmbito da competição"
+              >
+                {AMBITOS.map((a) => {
+                  const ativo = ambito === a;
+                  const Icone = a === "EXTERNA" ? Globe : Building2;
+                  return (
+                    <button
+                      key={a}
+                      type="button"
+                      role="radio"
+                      aria-checked={ativo}
+                      onClick={() => setAmbito(a)}
+                      className={cn(
+                        "flex min-h-[44px] flex-col gap-1 rounded-md border p-3 text-left transition-colors",
+                        ativo
+                          ? "border-primary bg-primary/5"
+                          : "border-cinza-200 hover:bg-cinza-50",
+                      )}
+                    >
+                      <span className="flex items-center gap-2 text-corpo font-medium text-cinza-900">
+                        <Icone className="h-4 w-4 text-primary" />
+                        {a === "EXTERNA"
+                          ? "Externa (seguimento)"
+                          : "Própria (gerida pelo clube)"}
+                      </span>
+                      <span className="text-legenda text-cinza-500">{DESCRICAO_AMBITO[a]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {ambito === "EXTERNA" && (
+                <p className="text-legenda text-cinza-500">
+                  Podes adicionar equipas agora ou à medida que os resultados saem.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -392,6 +495,33 @@ export function WizardCompeticao({
             </div>
 
             <div className="space-y-1.5">
+              <Label>Pontos por vitória</Label>
+              <div className="flex gap-2" role="radiogroup" aria-label="Pontos por vitória">
+                {PONTOS_VITORIA_OPCOES.map((p) => {
+                  const ativo = pontosVitoria === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      role="radio"
+                      aria-checked={ativo}
+                      onClick={() => setPontosVitoria(p)}
+                      className={cn(
+                        "min-h-[44px] flex-1 rounded-md border px-3 py-2 text-corpo font-medium transition-colors",
+                        ativo
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-cinza-200 text-cinza-900 hover:bg-cinza-50",
+                      )}
+                    >
+                      {p} pts
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-legenda text-cinza-500">Empate 1 ponto · derrota 0 pontos.</p>
+            </div>
+
+            <div className="space-y-1.5">
               <Label>Época</Label>
               <Select value={epocaAtiva?.id ?? ""} disabled>
                 <SelectTrigger>
@@ -451,9 +581,23 @@ export function WizardCompeticao({
               </div>
             </div>
 
+            {temPropria && (
+              <div className="flex min-h-[44px] items-center gap-3 rounded-md border border-primary bg-primary/5 px-3 py-2">
+                <span className="w-6 shrink-0 text-center text-legenda font-semibold text-primary tabular-nums">
+                  1
+                </span>
+                <span className="min-w-0 flex-1 truncate text-corpo font-medium text-cinza-900">
+                  {escalaoNome}
+                </span>
+                <Badge className="shrink-0">Própria</Badge>
+              </div>
+            )}
+
             {equipas.length === 0 ? (
               <p className="rounded-md border border-dashed border-cinza-300 p-6 text-center text-corpo-sec text-cinza-500">
-                Ainda sem equipas. Adiciona pelo menos 2 para gerar o quadro.
+                {temPropria
+                  ? "Adiciona as equipas convidadas (mínimo 1 além da tua)."
+                  : "Ainda sem equipas. Adiciona pelo menos 2 para gerar o quadro."}
               </p>
             ) : (
               <ul className="space-y-1.5">
@@ -463,7 +607,7 @@ export function WizardCompeticao({
                     className="flex min-h-[44px] items-center gap-3 rounded-md border border-cinza-200 px-3 py-2"
                   >
                     <span className="w-6 shrink-0 text-center text-legenda font-semibold text-cinza-400 tabular-nums">
-                      {i + 1}
+                      {offsetNumeracao + i + 1}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-corpo text-cinza-900">
                       {e.nome}
@@ -505,8 +649,10 @@ export function WizardCompeticao({
             )}
 
             <p className="text-legenda text-cinza-500">
-              A ordem define a posição (usada nos emparelhamentos de torneio/taça). A equipa do
-              clube será adicionada automaticamente se não estiver na lista.
+              A ordem define a posição (usada nos emparelhamentos de torneio/taça).
+              {temPropria
+                ? " A tua equipa é o primeiro participante (própria)."
+                : ""}
             </p>
 
             {eLiga && (
