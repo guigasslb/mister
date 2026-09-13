@@ -14,6 +14,7 @@ import { EstadoErro } from "@/components/layout/EstadosUI";
 import { LigarCalendarioButton } from "@/components/integracoes/LigarCalendarioButton";
 import { DesligarCalendarioButton } from "@/components/integracoes/DesligarCalendarioButton";
 import { NotificacaoCalendario } from "@/components/integracoes/NotificacaoCalendario";
+import { CabecalhoDefinicoes } from "@/components/definicoes/CabecalhoDefinicoes";
 import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 
 export const metadata: Metadata = { title: "Definições · Integrações" };
@@ -43,6 +44,8 @@ export default async function IntegracaoPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       <NotificacaoCalendario sucesso={sucesso} erro={erro} />
+
+      <CabecalhoDefinicoes />
 
       <h1>Integrações</h1>
 

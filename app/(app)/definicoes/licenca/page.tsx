@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
+import { CabecalhoDefinicoes } from "@/components/definicoes/CabecalhoDefinicoes";
 import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 import type { EstadoLicenca } from "@prisma/client";
 
@@ -63,6 +64,7 @@ export default async function LicencaPage() {
 
   return (
     <div className="space-y-6">
+      <CabecalhoDefinicoes />
       <div>
         <h1>Licença</h1>
         <p className="mt-1 text-corpo-sec text-cinza-600">

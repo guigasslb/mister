@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { BrandingForm } from "@/components/definicoes/BrandingForm";
 import { EstadoErro } from "@/components/layout/EstadosUI";
+import { CabecalhoDefinicoes } from "@/components/definicoes/CabecalhoDefinicoes";
 
 export const metadata: Metadata = { title: "Definições · Clube" };
 
@@ -15,6 +16,7 @@ export default async function ClubePage() {
 
   return (
     <div className="space-y-6">
+      <CabecalhoDefinicoes />
       <div>
         <h1>Clube</h1>
         <p className="mt-1 text-corpo-sec text-cinza-600">

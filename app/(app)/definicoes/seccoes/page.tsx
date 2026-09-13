@@ -6,6 +6,7 @@ import { listarEscaloes } from "@/lib/actions/escaloes";
 import { listarMembrosBasico } from "@/lib/actions/utilizadores";
 import { EstadoErro } from "@/components/layout/EstadosUI";
 import { SeccoesLista } from "@/components/definicoes/SeccoesLista";
+import { CabecalhoDefinicoes } from "@/components/definicoes/CabecalhoDefinicoes";
 
 export const metadata: Metadata = { title: "Definições · Secções" };
 
@@ -72,12 +73,15 @@ export default async function SeccoesPage() {
   );
 
   return (
-    <SeccoesLista
-      seccoes={seccoes}
-      modalidadesDisponiveis={modalidadesDisponiveis}
-      membros={membros.map((m) => ({ membroClubeId: m.membroId, nome: m.nome }))}
-      podeCriarSeccoes={podeCriarSeccoes}
-      podeGerirCoordenadores={podeGerirCoordenadores}
-    />
+    <div className="space-y-6">
+      <CabecalhoDefinicoes />
+      <SeccoesLista
+        seccoes={seccoes}
+        modalidadesDisponiveis={modalidadesDisponiveis}
+        membros={membros.map((m) => ({ membroClubeId: m.membroId, nome: m.nome }))}
+        podeCriarSeccoes={podeCriarSeccoes}
+        podeGerirCoordenadores={podeGerirCoordenadores}
+      />
+    </div>
   );
 }

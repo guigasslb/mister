@@ -5,6 +5,7 @@ import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { UtilizadoresLista } from "@/components/definicoes/UtilizadoresLista";
 import { EstadoErro } from "@/components/layout/EstadosUI";
+import { CabecalhoDefinicoes } from "@/components/definicoes/CabecalhoDefinicoes";
 
 export const metadata: Metadata = { title: "Definições · Utilizadores" };
 
@@ -28,12 +29,15 @@ export default async function MembrosPage() {
   const podeGerirMembros = capacidadesProprias.includes("CLUBE_UTILIZADORES");
 
   return (
-    <UtilizadoresLista
-      membros={resMembros.dados}
-      perfis={perfis}
-      escaloes={escaloes}
-      podeGerirMembros={podeGerirMembros}
-      capacidadesProprias={capacidadesProprias}
-    />
+    <div className="space-y-6">
+      <CabecalhoDefinicoes />
+      <UtilizadoresLista
+        membros={resMembros.dados}
+        perfis={perfis}
+        escaloes={escaloes}
+        podeGerirMembros={podeGerirMembros}
+        capacidadesProprias={capacidadesProprias}
+      />
+    </div>
   );
 }

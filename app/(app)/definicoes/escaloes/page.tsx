@@ -3,6 +3,7 @@ import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { EscaloesLista } from "@/components/definicoes/EscaloesLista";
 import { EstadoErro } from "@/components/layout/EstadosUI";
+import { CabecalhoDefinicoes } from "@/components/definicoes/CabecalhoDefinicoes";
 
 export const metadata: Metadata = { title: "Definições · Escalões" };
 
@@ -31,10 +32,13 @@ export default async function EscaloesPage() {
       : [];
 
   return (
-    <EscaloesLista
-      escaloes={resultado.dados}
-      podeCriar={podeCriar}
-      escaloesGeriveis={escaloesGeriveis}
-    />
+    <div className="space-y-6">
+      <CabecalhoDefinicoes />
+      <EscaloesLista
+        escaloes={resultado.dados}
+        podeCriar={podeCriar}
+        escaloesGeriveis={escaloesGeriveis}
+      />
+    </div>
   );
 }

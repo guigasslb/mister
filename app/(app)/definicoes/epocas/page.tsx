@@ -3,6 +3,7 @@ import { listarEpocas } from "@/lib/actions/epocas";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { EpocasLista } from "@/components/definicoes/EpocasLista";
 import { EstadoErro } from "@/components/layout/EstadosUI";
+import { CabecalhoDefinicoes } from "@/components/definicoes/CabecalhoDefinicoes";
 
 export const metadata: Metadata = { title: "Definições · Épocas" };
 
@@ -21,10 +22,13 @@ export default async function EpocasPage() {
   // Mesmo gate (CLUBE_EPOCAS) esconde os botões de escrita (criar época e
   // definir época ativa) a quem não tem a capacidade — §6.7.
   return (
-    <EpocasLista
-      epocas={resultado.dados}
-      podeUsarWizard={podeUsarWizard}
-      podeGerir={podeUsarWizard}
-    />
+    <div className="space-y-6">
+      <CabecalhoDefinicoes />
+      <EpocasLista
+        epocas={resultado.dados}
+        podeUsarWizard={podeUsarWizard}
+        podeGerir={podeUsarWizard}
+      />
+    </div>
   );
 }
