@@ -99,13 +99,33 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 4. Jogos do escalão/época da competição ainda NÃO associados a nenhuma
-    // competição (resultadoCompeticaoId == null). São a fonte de tudo o resto.
+    // 3b. Limpar amigáveis que possam ter sido associados por engano: desligar
+    // os Jogo AMIGAVEL que apontem para ResultadoCompeticao desta competição.
+    const jogosAmigaveisAssociados = await prisma.jogo.findMany({
+      where: {
+        escalaoId: competicao.escalaoId,
+        epocaId: competicao.epocaId,
+        tipo: "AMIGAVEL",
+        resultadoCompeticaoId: { not: null },
+        resultadoCompeticao: { competicaoId: COMPETICAO_ID },
+      },
+      select: { id: true, resultadoCompeticaoId: true },
+    });
+    for (const j of jogosAmigaveisAssociados) {
+      await prisma.jogo.update({ where: { id: j.id }, data: { resultadoCompeticaoId: null } });
+      if (j.resultadoCompeticaoId) {
+        await prisma.resultadoCompeticao.delete({ where: { id: j.resultadoCompeticaoId } });
+      }
+    }
+
+    // 4. Jogos OFICIAIS do escalão/época da competição ainda NÃO associados a
+    // nenhuma competição (resultadoCompeticaoId == null). Exclui amigáveis.
     const jogos = await prisma.jogo.findMany({
       where: {
         escalaoId: competicao.escalaoId,
         epocaId: competicao.epocaId,
         resultadoCompeticaoId: null,
+        tipo: "OFICIAL",
       },
       select: { id: true, adversario: true, casaFora: true, data: true },
       orderBy: { data: "asc" },
