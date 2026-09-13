@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronRight, Plus, Trash2, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ export function CompeticoesLista({
   escaloes: EscalaoBasico[];
   epocas: EpocaBasica[];
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [filtroEscalao, setFiltroEscalao] = useState<string>(TODOS);
 
@@ -61,8 +63,12 @@ export function CompeticoesLista({
   function apagar(id: string) {
     startTransition(async () => {
       const res = await apagarCompeticao(id);
-      if (res.sucesso) toast.success("Competição apagada");
-      else toast.error(res.erro);
+      if (res.sucesso) {
+        toast.success("Competição apagada");
+        router.refresh();
+      } else {
+        toast.error(res.erro);
+      }
     });
   }
 

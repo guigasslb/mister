@@ -15,6 +15,7 @@ import {
   criarCompeticaoCompletaSchema,
   equipaCompeticaoSchema,
   atualizarAgendamentoSchema,
+  atualizarGolosConfrontoSchema,
 } from "@/lib/schemas/competicao";
 import { calcularClassificacao, type LinhaClassificacao } from "@/lib/classificacao";
 import { gerarLiga, gerarBracket, type Equipa } from "@/lib/quadro";
@@ -46,8 +47,16 @@ const ORDER_RESULTADOS: Prisma.ResultadoCompeticaoOrderByWithRelationInput[] = [
   { criadoEm: "asc" },
 ];
 
+// Equipas ordenadas por posição (seed) ascendente, com os sem seed no fim, e o
+// nome como desempate. O Postgres ordena NULLS LAST por defeito em ASC.
+const ORDER_EQUIPAS: Prisma.EquipaCompeticaoOrderByWithRelationInput[] = [
+  { posicao: { sort: "asc", nulls: "last" } },
+  { nome: "asc" },
+];
+
 const INCLUDE_DETALHE = {
   escalao: { select: { id: true, nome: true } },
+  equipas: { orderBy: ORDER_EQUIPAS },
   resultados: { orderBy: ORDER_RESULTADOS },
   jogos: {
     select: {
@@ -443,6 +452,38 @@ export async function definirEstadoConfronto(
 }
 
 /**
+ * Atualiza os golos de um confronto já existente (§23.7). Não altera o estado —
+ * destina-se a corrigir o resultado de um confronto REALIZADO.
+ */
+export async function atualizarGolosConfronto(
+  resultadoId: string,
+  golosCasa: number,
+  golosFora: number,
+): Promise<Resultado<ResultadoCompeticao>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const parsed = atualizarGolosConfrontoSchema.safeParse({ resultadoId, golosCasa, golosFora });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const resultado = await prisma.resultadoCompeticao.findFirst({
+    where: { id: resultadoId, competicao: { clubeId } },
+    select: { id: true, competicaoId: true, competicao: { select: { escalaoId: true } } },
+  });
+  if (!resultado) return erro("Confronto não encontrado");
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", resultado.competicao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const atualizado = await prisma.resultadoCompeticao.update({
+    where: { id: resultadoId },
+    data: { golosCasa: parsed.data.golosCasa, golosFora: parsed.data.golosFora },
+  });
+  revalidatePath(`${PATH}/${resultado.competicaoId}`);
+  return ok(atualizado);
+}
+
+/**
  * Liga um jogo detalhado (convocatória/estatísticas) a um confronto (§23.8).
  * O jogo e o confronto têm de pertencer ao mesmo clube, escalão e época.
  */
@@ -616,13 +657,6 @@ export async function obterClassificacao(
 // ─────────────────────────────────────────────
 // Equipas da competição (quadro competitivo)
 // ─────────────────────────────────────────────
-
-// Equipas ordenadas por posição (seed) ascendente, com os sem seed no fim, e o
-// nome como desempate. O Postgres ordena NULLS LAST por defeito em ASC.
-const ORDER_EQUIPAS: Prisma.EquipaCompeticaoOrderByWithRelationInput[] = [
-  { posicao: { sort: "asc", nulls: "last" } },
-  { nome: "asc" },
-];
 
 export async function obterEquipasCompeticao(
   competicaoId: string,

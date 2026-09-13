@@ -18,6 +18,7 @@ import {
 import {
   apagarResultadoExterno,
   atualizarAgendamentoJogo,
+  atualizarGolosConfronto,
   definirEstadoConfronto,
 } from "@/lib/actions/competicoes";
 import { LABEL_ESTADO_RESULTADO } from "@/lib/schemas/competicao";
@@ -87,6 +88,10 @@ export function QuadroAgendamento({
   const [editando, setEditando] = useState<string | null>(null);
   const [dataEdit, setDataEdit] = useState("");
   const [horaEdit, setHoraEdit] = useState("");
+  // Edição inline dos golos de um confronto já realizado.
+  const [editandoGolos, setEditandoGolos] = useState<string | null>(null);
+  const [golosCasaEdit, setGolosCasaEdit] = useState("");
+  const [golosForaEdit, setGolosForaEdit] = useState("");
 
   const agruparPorRonda = formato !== "LIGA";
 
@@ -114,6 +119,31 @@ export function QuadroAgendamento({
       if (res.sucesso) {
         toast.success("Agendamento atualizado");
         setEditando(null);
+        router.refresh();
+      } else {
+        toast.error(res.erro);
+      }
+    });
+  }
+
+  function iniciarEdicaoGolos(r: ResultadoQuadro) {
+    setGolosCasaEdit(String(r.golosCasa ?? 0));
+    setGolosForaEdit(String(r.golosFora ?? 0));
+    setEditandoGolos(r.id);
+  }
+
+  function guardarGolos(id: string) {
+    const golosCasa = Number(golosCasaEdit);
+    const golosFora = Number(golosForaEdit);
+    if (!Number.isInteger(golosCasa) || !Number.isInteger(golosFora)) {
+      toast.error("Indica golos válidos (0–99)");
+      return;
+    }
+    startTransition(async () => {
+      const res = await atualizarGolosConfronto(id, golosCasa, golosFora);
+      if (res.sucesso) {
+        toast.success("Resultado atualizado");
+        setEditandoGolos(null);
         router.refresh();
       } else {
         toast.error(res.erro);
@@ -289,35 +319,102 @@ export function QuadroAgendamento({
     const ref = r.dataHora ?? r.data;
     const casaVenceWO = r.estado === "WALKOVER" && r.walkoverVencedor === "CASA";
     const foraVenceWO = r.estado === "WALKOVER" && r.walkoverVencedor === "FORA";
+    const emEdicaoGolos = editandoGolos === r.id;
+    // Só os confrontos realizados têm golos editáveis (walkover usa resultado
+    // regulamentar; cancelado não tem placar).
+    const golosEditaveis = r.estado === "REALIZADO";
     return (
-      <li className="flex items-center gap-3 rounded-md border border-cinza-200 bg-white p-3 shadow-card">
+      <li className="flex flex-wrap items-center gap-3 rounded-md border border-cinza-200 bg-white p-3 shadow-card">
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-2 text-corpo text-cinza-900">
             <span className={cn("font-medium", casaVenceWO && "font-bold")}>{r.equipaCasa}</span>
-            <span className="font-semibold tabular-nums">
-              {r.estado === "REALIZADO"
-                ? `${r.golosCasa ?? "—"} — ${r.golosFora ?? "—"}`
-                : r.estado === "WALKOVER"
-                  ? "WO"
-                  : "—"}
-            </span>
+            {emEdicaoGolos ? (
+              <span className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min={0}
+                  max={99}
+                  value={golosCasaEdit}
+                  onChange={(e) => setGolosCasaEdit(e.target.value)}
+                  className="h-9 w-14 text-center"
+                  aria-label="Golos da equipa da casa"
+                />
+                <span className="text-cinza-400">—</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={99}
+                  value={golosForaEdit}
+                  onChange={(e) => setGolosForaEdit(e.target.value)}
+                  className="h-9 w-14 text-center"
+                  aria-label="Golos da equipa visitante"
+                />
+              </span>
+            ) : (
+              <span className="font-semibold tabular-nums">
+                {r.estado === "REALIZADO"
+                  ? `${r.golosCasa ?? "—"} — ${r.golosFora ?? "—"}`
+                  : r.estado === "WALKOVER"
+                    ? "WO"
+                    : "—"}
+              </span>
+            )}
             <span className={cn("font-medium", foraVenceWO && "font-bold")}>{r.equipaFora}</span>
             <SeloEstado estado={r.estado} />
           </p>
           {ref && <p className="text-legenda text-cinza-500">{formatarData(ref)}</p>}
         </div>
         <div className="flex items-center gap-2">
-          <MenuEstado r={r} />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => remover(r.id)}
-            disabled={pending}
-            aria-label="Remover resultado"
-          >
-            <Trash2 className="h-4 w-4 text-vermelho-600" />
-          </Button>
+          {emEdicaoGolos ? (
+            <>
+              <Button
+                type="button"
+                size="icon"
+                onClick={() => guardarGolos(r.id)}
+                disabled={pending}
+                aria-label="Guardar golos"
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setEditandoGolos(null)}
+                disabled={pending}
+                aria-label="Cancelar edição de golos"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              {golosEditaveis && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => iniciarEdicaoGolos(r)}
+                  disabled={pending}
+                  className="gap-1.5"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Golos
+                </Button>
+              )}
+              <MenuEstado r={r} />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => remover(r.id)}
+                disabled={pending}
+                aria-label="Remover resultado"
+              >
+                <Trash2 className="h-4 w-4 text-vermelho-600" />
+              </Button>
+            </>
+          )}
         </div>
       </li>
     );

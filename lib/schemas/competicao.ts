@@ -152,6 +152,13 @@ export const atualizarAgendamentoSchema = z.object({
   dataHora: z.coerce.date().optional().nullable(),
 });
 
+/** Atualização dos golos de um confronto já existente (§23.7). */
+export const atualizarGolosConfrontoSchema = z.object({
+  resultadoId: z.string().cuid(),
+  golosCasa: z.number().int().min(0).max(99),
+  golosFora: z.number().int().min(0).max(99),
+});
+
 export const LABEL_FORMATO_COMPETICAO: Record<FormatoCompeticao, string> = {
   LIGA: "Liga",
   TORNEIO: "Torneio",
@@ -192,6 +199,7 @@ export type EquipaCompeticaoInput = z.infer<typeof equipaCompeticaoSchema>;
 export type JogoAgendadoInput = z.infer<typeof jogoAgendadoSchema>;
 export type CriarCompeticaoCompletaInput = z.infer<typeof criarCompeticaoCompletaSchema>;
 export type AtualizarAgendamentoInput = z.infer<typeof atualizarAgendamentoSchema>;
+export type AtualizarGolosConfrontoInput = z.infer<typeof atualizarGolosConfrontoSchema>;
 export type RegistarConfrontoInput = z.infer<typeof registarConfrontoSchema>;
 export type DefinirEstadoConfrontoInput = z.infer<typeof definirEstadoConfrontoSchema>;
 export type LigarJogoAConfrontoInput = z.infer<typeof ligarJogoAConfrontoSchema>;

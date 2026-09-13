@@ -31,6 +31,7 @@ import { CompeticaoForm } from "@/components/competicoes/CompeticaoForm";
 import { ResultadoExternoForm } from "@/components/competicoes/ResultadoExternoForm";
 import { TabelaClassificacao } from "@/components/competicoes/TabelaClassificacao";
 import { QuadroAgendamento } from "@/components/competicoes/QuadroAgendamento";
+import { GestaoEquipas } from "@/components/competicoes/GestaoEquipas";
 
 type EscalaoBasico = { id: string; nome: string };
 type EpocaBasica = { id: string; nome: string; ativa: boolean };
@@ -131,6 +132,7 @@ export function CompeticaoDetalhe({
       <Tabs defaultValue="classificacao">
         <TabsList className="flex-wrap">
           <TabsTrigger value="classificacao">Classificação</TabsTrigger>
+          <TabsTrigger value="equipas">Equipas ({competicao.equipas.length})</TabsTrigger>
           <TabsTrigger value="resultados">
             Confrontos ({competicao._count.resultados})
           </TabsTrigger>
@@ -145,6 +147,26 @@ export function CompeticaoDetalhe({
             </p>
           )}
           <TabelaClassificacao linhas={classificacao} formato={competicao.formato} />
+        </TabsContent>
+
+        <TabsContent value="equipas" className="space-y-4">
+          <GestaoEquipas
+            competicaoId={competicao.id}
+            formato={competicao.formato}
+            equipas={competicao.equipas.map((e) => ({
+              id: e.id,
+              nome: e.nome,
+              tipo: e.tipo,
+            }))}
+            resultados={competicao.resultados.map((r) => ({
+              equipaCasa: r.equipaCasa,
+              equipaFora: r.equipaFora,
+              equipaCasaId: r.equipaCasaId,
+              equipaForaId: r.equipaForaId,
+              estado: r.estado,
+              walkoverVencedor: r.walkoverVencedor,
+            }))}
+          />
         </TabsContent>
 
         <TabsContent value="resultados" className="space-y-4">
