@@ -1,20 +1,25 @@
-// Route Handler — associa os Jogo já existentes de uma competição ao seu quadro
-// competitivo (ResultadoCompeticao + EquipaCompeticao). Invocável no servidor
-// (Vercel) via browser. Email do utilizador via env SEED_USER_EMAIL.
+// Route Handler — faz um RESET COMPLETO do quadro competitivo de uma competição
+// (ResultadoCompeticao + EquipaCompeticao) e re-associa apenas os Jogo dos
+// adversários que fazem parte do campeonato. Invocável no servidor (Vercel) via
+// browser. Email do utilizador via env SEED_USER_EMAIL.
 //
-// Ao contrário da versão anterior (que criava confrontos a partir de uma lista
-// hardcoded), este handler PARTE DOS Jogo já existentes na BD:
-//   1. Para cada Jogo do escalão/época da competição ainda não associado
-//      (resultadoCompeticaoId == null), cria um ResultadoCompeticao (AGENDADO,
-//      dataHora = Jogo.data) e liga o Jogo a esse resultado.
-//   2. Cria as equipas participantes (EquipaCompeticao): a PRÓPRIA (PROPRIO,
-//      derivada do clube) + uma EXTERNO por cada adversário único encontrado
-//      nos Jogos (upsert por competicaoId+nome via create + captura de P2002).
-//   3. Preenche equipaCasaId/equipaForaId dos ResultadoCompeticao criados com os
-//      IDs das EquipaCompeticao correspondentes.
+// Este handler é DESTRUTIVO e idempotente por reconstrução:
+//   PASSO 1 — Reset completo:
+//     1a. Desliga TODOS os Jogo que apontem para ResultadoCompeticao desta
+//         competição (resultadoCompeticaoId → null).
+//     1b. Apaga todos os ResultadoCompeticao desta competição.
+//     1c. Apaga todas as EquipaCompeticao desta competição.
+//   PASSO 2 — Re-associar apenas os adversários do campeonato:
+//     2a. Filtra os Jogo do escalão/época por tipo OFICIAL e adversario ∈
+//         ADVERSARIOS_CAMPEONATO.
+//     2b. Cria as equipas participantes (EquipaCompeticao): a PRÓPRIA (PROPRIO,
+//         derivada do clube) + uma EXTERNO por cada adversário único encontrado
+//         (upsert por competicaoId+nome via create + captura de P2002).
+//     2c. Para cada Jogo cria um ResultadoCompeticao (AGENDADO, dataHora =
+//         Jogo.data) e liga o Jogo a esse resultado.
+//     2d. Preenche equipaCasaId/equipaForaId com os IDs das EquipaCompeticao.
 //
-// IDEMPOTÊNCIA: se todos os Jogo do escalão/época já tiverem resultadoCompeticaoId
-// (ou não existirem Jogo por associar), devolve { skipped: true } sem alterar nada.
+// O reset corre SEMPRE (sem short-circuit de skipped).
 //
 // PROTEÇÃO: só responde se o query param `secret` for igual à env `SEED_SECRET`;
 // caso contrário devolve 401. Usa o Prisma client partilhado da app (@/lib/db).
@@ -36,6 +41,19 @@ export const dynamic = "force-dynamic";
 
 const EMAIL_ALVO = process.env.SEED_USER_EMAIL ?? "";
 const COMPETICAO_ID = "cmt1hswod0003qcr57ezf6m4i";
+
+// Adversários que realmente fazem parte deste campeonato. Só os Jogo OFICIAIS
+// contra estes adversários são re-associados; quaisquer outros (ex.: de outras
+// competições que ficaram marcados como OFICIAL) são ignorados.
+const ADVERSARIOS_CAMPEONATO = new Set([
+  "TIS",
+  "Internacional SC",
+  "Fund. Salesianos Col. Évora",
+  "Lusitano GC",
+  "Mourão FC",
+  "NS de Moura",
+  "GDC Baronia",
+]);
 
 export async function GET(req: NextRequest) {
   // Proteção: secret tem de bater com a env. Constante ausente/errada → 401.
@@ -99,42 +117,36 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 3b. Limpar amigáveis que possam ter sido associados por engano: desligar
-    // os Jogo AMIGAVEL que apontem para ResultadoCompeticao desta competição.
-    const jogosAmigaveisAssociados = await prisma.jogo.findMany({
-      where: {
-        escalaoId: competicao.escalaoId,
-        epocaId: competicao.epocaId,
-        tipo: "AMIGAVEL",
-        resultadoCompeticaoId: { not: null },
-        resultadoCompeticao: { competicaoId: COMPETICAO_ID },
-      },
-      select: { id: true, resultadoCompeticaoId: true },
+    // PASSO 1 — RESET COMPLETO do quadro competitivo desta competição.
+    // 1a. Desligar TODOS os Jogo que apontem para um ResultadoCompeticao desta
+    //     competição (independentemente de tipo/estado).
+    await prisma.jogo.updateMany({
+      where: { resultadoCompeticao: { competicaoId: COMPETICAO_ID } },
+      data: { resultadoCompeticaoId: null },
     });
-    for (const j of jogosAmigaveisAssociados) {
-      await prisma.jogo.update({ where: { id: j.id }, data: { resultadoCompeticaoId: null } });
-      if (j.resultadoCompeticaoId) {
-        await prisma.resultadoCompeticao.delete({ where: { id: j.resultadoCompeticaoId } });
-      }
-    }
+    // 1b. Apagar todos os ResultadoCompeticao desta competição.
+    await prisma.resultadoCompeticao.deleteMany({
+      where: { competicaoId: COMPETICAO_ID },
+    });
+    // 1c. Apagar todas as EquipaCompeticao desta competição.
+    await prisma.equipaCompeticao.deleteMany({
+      where: { competicaoId: COMPETICAO_ID },
+    });
 
-    // 4. Jogos OFICIAIS do escalão/época da competição ainda NÃO associados a
-    // nenhuma competição (resultadoCompeticaoId == null). Exclui amigáveis.
+    // PASSO 2 — Re-associar apenas os Jogo OFICIAIS contra adversários que fazem
+    // parte deste campeonato (ADVERSARIOS_CAMPEONATO). Os Jogo já foram todos
+    // desligados no reset, por isso partimos de resultadoCompeticaoId == null.
     const jogos = await prisma.jogo.findMany({
       where: {
         escalaoId: competicao.escalaoId,
         epocaId: competicao.epocaId,
         resultadoCompeticaoId: null,
         tipo: "OFICIAL",
+        adversario: { in: [...ADVERSARIOS_CAMPEONATO] },
       },
       select: { id: true, adversario: true, casaFora: true, data: true },
       orderBy: { data: "asc" },
     });
-
-    // Idempotência: se já não há jogos por associar, não há nada a fazer.
-    if (jogos.length === 0) {
-      return NextResponse.json({ skipped: true });
-    }
 
     // 5. Criar equipas participantes: a PRÓPRIA (derivada do clube) + uma EXTERNO
     // por cada adversário único encontrado nos jogos. Upsert lógico por
