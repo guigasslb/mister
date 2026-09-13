@@ -639,6 +639,14 @@ export async function obterClassificacao(
     walkoverVencedor: r.walkoverVencedor,
   }));
 
+  // Equipas inscritas na competição: usadas para preencher a tabela com todas as
+  // equipas (a zero) enquanto ainda não há confrontos REALIZADO/WALKOVER — sem
+  // isto a classificação apareceria vazia no arranque da época (§23.5).
+  const equipas = await prisma.equipaCompeticao.findMany({
+    where: { competicaoId },
+    select: { nome: true, tipo: true },
+  });
+
   const classificacao = calcularClassificacao({
     nomeEquipaPropria,
     formato: competicao.formato,
@@ -651,7 +659,40 @@ export async function obterClassificacao(
     golosWalkover: competicao.golosWalkover,
   });
 
-  return ok(classificacao);
+  // Todas as linhas calculadas têm jogos ≥ 1 (só entram equipas com confrontos
+  // contados). Acrescenta as equipas inscritas que ainda não aparecem, a zero, no
+  // fim e ordenadas por nome; recalcula a posição final (1..N) sobre o conjunto.
+  const presentes = new Set(classificacao.map((l) => l.equipa.trim().toLowerCase()));
+  const nomeProprioNorm = nomeEquipaPropria.trim().toLowerCase();
+
+  const emFalta: LinhaClassificacao[] = equipas
+    .flatMap((e) => {
+      const nome = e.nome.trim();
+      if (nome === "" || presentes.has(nome.toLowerCase())) return [];
+      presentes.add(nome.toLowerCase());
+      return [
+        {
+          equipa: nome,
+          ehProprio: e.tipo === "PROPRIO" || nome.toLowerCase() === nomeProprioNorm,
+          jogos: 0,
+          vitorias: 0,
+          empates: 0,
+          derrotas: 0,
+          golosMarcados: 0,
+          golosSofridos: 0,
+          pontos: 0,
+          posicao: 0,
+        },
+      ];
+    })
+    .sort((a, b) => a.equipa.localeCompare(b.equipa, "pt"));
+
+  const completa = [...classificacao, ...emFalta];
+  completa.forEach((l, i) => {
+    l.posicao = i + 1;
+  });
+
+  return ok(completa);
 }
 
 // ─────────────────────────────────────────────

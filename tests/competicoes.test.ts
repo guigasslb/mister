@@ -387,6 +387,13 @@ describe("obterClassificacao", () => {
     mocked(prisma.resultadoCompeticao.findMany).mockResolvedValue([
       { equipaCasa: "Porto", equipaFora: "Sporting", golosCasa: 2, golosFora: 0 },
     ]);
+    // Equipas inscritas (todas já aparecem via jogos/resultados → sem linhas extra).
+    mocked(prisma.equipaCompeticao.findMany).mockResolvedValue([
+      { nome: "Sub-15", tipo: "PROPRIO" },
+      { nome: "Benfica", tipo: "EXTERNO" },
+      { nome: "Porto", tipo: "EXTERNO" },
+      { nome: "Sporting", tipo: "EXTERNO" },
+    ]);
 
     const r = await obterClassificacao("comp1");
     expect(r.sucesso).toBe(true);
@@ -394,10 +401,80 @@ describe("obterClassificacao", () => {
 
     const tabela = r.dados;
     // Sub-15 (+2 diff) e Porto (+2 diff) têm 3 pts; Sub-15 marcou 3, Porto 2 → Sub-15 primeiro.
+    expect(tabela).toHaveLength(4);
     expect(tabela[0].equipa).toBe("Sub-15");
     expect(tabela.find((l) => l.equipa === "Porto")!.pontos).toBe(3);
     expect(tabela.find((l) => l.equipa === "Benfica")!.derrotas).toBe(1);
     expect(tabela.find((l) => l.equipa === "Sporting")!.derrotas).toBe(1);
+  });
+
+  it("mostra todas as equipas a zero quando não há confrontos REALIZADO", async () => {
+    mocked(prisma.competicao.findFirst).mockResolvedValue({
+      id: "comp1",
+      escalaoId: "esc1",
+      formato: "LIGA",
+      escalao: { nome: "Sub-15" },
+    });
+    // Época a começar: nenhum jogo próprio com resultado, nenhum confronto contado.
+    mocked(prisma.jogo.findMany).mockResolvedValue([]);
+    mocked(prisma.resultadoCompeticao.findMany).mockResolvedValue([]);
+    mocked(prisma.equipaCompeticao.findMany).mockResolvedValue([
+      { nome: "Sporting", tipo: "EXTERNO" },
+      { nome: "Sub-15", tipo: "PROPRIO" },
+      { nome: "Benfica", tipo: "EXTERNO" },
+    ]);
+
+    const r = await obterClassificacao("comp1");
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+
+    const tabela = r.dados;
+    // Todas as equipas presentes, a zero e ordenadas por nome; posição 1..N.
+    expect(tabela).toHaveLength(3);
+    expect(tabela.map((l) => l.equipa)).toEqual(["Benfica", "Sporting", "Sub-15"]);
+    expect(tabela.map((l) => l.posicao)).toEqual([1, 2, 3]);
+    for (const l of tabela) {
+      expect(l.jogos).toBe(0);
+      expect(l.vitorias).toBe(0);
+      expect(l.empates).toBe(0);
+      expect(l.derrotas).toBe(0);
+      expect(l.golosMarcados).toBe(0);
+      expect(l.golosSofridos).toBe(0);
+      expect(l.pontos).toBe(0);
+    }
+    expect(tabela.find((l) => l.equipa === "Sub-15")!.ehProprio).toBe(true);
+  });
+
+  it("acrescenta equipas sem jogos no fim, após as que já jogaram", async () => {
+    mocked(prisma.competicao.findFirst).mockResolvedValue({
+      id: "comp1",
+      escalaoId: "esc1",
+      formato: "LIGA",
+      escalao: { nome: "Sub-15" },
+    });
+    mocked(prisma.jogo.findMany).mockResolvedValue([
+      { adversario: "Benfica", golosMarcados: 3, golosSofridos: 1 },
+    ]);
+    mocked(prisma.resultadoCompeticao.findMany).mockResolvedValue([]);
+    // "Marítimo" está inscrito mas ainda não jogou → entra a zero no fim.
+    mocked(prisma.equipaCompeticao.findMany).mockResolvedValue([
+      { nome: "Sub-15", tipo: "PROPRIO" },
+      { nome: "Benfica", tipo: "EXTERNO" },
+      { nome: "Marítimo", tipo: "EXTERNO" },
+    ]);
+
+    const r = await obterClassificacao("comp1");
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+
+    const tabela = r.dados;
+    expect(tabela).toHaveLength(3);
+    // Equipas com jogos primeiro (Sub-15 3pts, Benfica 0pts com 1 jogo), Marítimo (0 jogos) no fim.
+    expect(tabela[tabela.length - 1].equipa).toBe("Marítimo");
+    expect(tabela[tabela.length - 1].jogos).toBe(0);
+    expect(tabela.find((l) => l.equipa === "Sub-15")!.jogos).toBe(1);
+    expect(tabela.find((l) => l.equipa === "Benfica")!.jogos).toBe(1);
+    expect(tabela.map((l) => l.posicao)).toEqual([1, 2, 3]);
   });
 
   it("rejeita competição de outro clube", async () => {

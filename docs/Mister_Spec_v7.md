@@ -1732,8 +1732,9 @@ No cabeçalho, ao lado de **"Editar"**, existe o botão **"Exportar PDF"** (íco
 - **Ordem canónica das fases (§3.5):** a condução percorre os exercícios pela **ordem canónica das fases** — **Aquecimento → Parte principal → Jogo → Retorno à calma** — e, **dentro de cada fase**, pela `ordem` persistida; exercícios **sem fase** (rows legadas) ficam no fim. É a **mesma sequência** que o plano (`GestorExercicios`) apresenta agrupada. Lógica pura e testada em `lib/treino-fases.ts` (`ordenarExerciciosPorFase` — ordenação estável).
 - **Barra de navegação por fase:** abaixo do cabeçalho, uma barra lista **apenas as fases presentes** no treino (as que têm exercícios), na ordem canónica; **clicar numa fase salta para o 1.º exercício** dessa fase (reinicia o cronómetro, como a navegação exercício-a-exercício) e a **fase atual fica destacada** (`aria-current="step"`). A barra só aparece quando há **mais do que uma fase** (com uma só não há para onde saltar). Alvos ≥44px; scroll horizontal em ecrãs estreitos.
 - Navegação com **"Anterior"** e **"Próximo"** (alvos ≥44px), percorrendo os exercícios já ordenados pela sequência canónica das fases.
+- **Adicionar ao aquecimento (sem sair da condução):** um **espaço simples** — botão **"＋ Adicionar ao aquecimento"** (só quando a biblioteca não está vazia), abaixo da barra de fases — abre um **seletor rápido** (`AdicionarAquecimentoDialog`) com **pesquisa por nome** e a lista da biblioteca do clube; escolher um exercício **adiciona-o à fase de aquecimento** desta sessão via a Server Action existente **`adicionarExercicioSessao(sessaoId, exercicioId, "AQUECIMENTO")`** (§7.3 — valida a fase com `parteTreinoSessaoSchema`, isola por clube e exige `TREINOS_GERIR`; revalida `/treinos/[id]`). O exercício volta pelas props do modo treino e aparece **no início da sequência** (ordem canónica: aquecimento primeiro). O diálogo mantém-se aberto para juntar vários; o `Escape` fecha o diálogo (não termina a sessão). Filtragem/ordenação puras e testadas em `lib/treino-aquecimento.ts` (`filtrarBibliotecaAquecimento`).
 - **Ao terminar** (concluir o último exercício ou sair do modo): **regressa ao detalhe** da sessão e **foca o bloco de Carga da sessão (RPE)** para registo imediato da perceção de esforço (§8.20).
-- O modo condução é **só de apresentação/navegação**: não altera exercícios nem presenças; a captura de dados acontece no detalhe (presenças) e no bloco de RPE (carga).
+- O modo condução foca-se em **apresentação/navegação**; a única escrita disponível é **adicionar um exercício ao aquecimento** (ponto anterior). Não altera presenças nem outras adaptações — a captura de dados acontece no detalhe (presenças, adaptações) e no bloco de RPE (carga).
 
 **4. Notas editáveis inline.** O campo **`Sessao.notas`** passa a ser editável **diretamente no detalhe** (guardar inline), sem abrir o ecrã "Editar" da sessão. Restantes campos de agendamento continuam a editar-se no formulário de sessão (§8.8 / §8.8.1).
 
@@ -1762,7 +1763,7 @@ Conforme v6 §8.9 (sem alteração funcional na v7): grelha anual + planos seman
 - **Detalhe do jogo:** cabeçalho + resultado + **campo «Formato»** 🔁 (pré-preenchido pela secção, editável); **faltas acumuladas por parte só em FUTSAL** 🔁 (ocultas em futebol) + **4 separadores** (UX-P3-04 — os mais usados primeiro; sub-separadores agrupam o dia de jogo e a análise):
   - **Convocatória** — sub-separadores: **Convocados** (`CONVOCATORIA_GERIR`; toggle por atleta) e **Plano de jogo** (posição prevista da modalidade + titular) — este último inclui um **quadro tático interativo** (arrastar titulares, desenhar setas/jogadas e adicionar adversários), semeado pela formação e persistido em `QuadroTatico.diagrama` sob `MODELO_JOGO_GERIR` (só-de-leitura sem a capacidade); ver §8.10. **Aviso de suspensões (BUG-P1-04):** quando o jogo aberto é o **próximo jogo** do escalão, os convocados que estão **suspensos** são sinalizados — alerta no topo dos *Convocados* + badge 🚫 por atleta —, calculados a partir dos cartões registados na época: **cartão vermelho no último jogo jogado** (motivo `CARTAO_VERMELHO`) ou **acumulação de ≥ `LIMITE_AMARELOS_SUSPENSAO` (3) amarelos na época** (motivo `ACUMULACAO_AMARELOS`; simplificação: contam-se todos os amarelos da época, sem purga por jornada). O vermelho tem prioridade sobre os amarelos. Fonte: `obterSuspensoesPendentes(escalaoId)` (§7.3).
   - **Estatísticas** (`ESTATISTICAS_GERIR`): por atleta — utilização, tempo de jogo por blocos, **núcleo por modalidade** 🔁 (futsal: golos, assistências, e se GR defesas/sofridos/faltas; futebol: golos, assistências, **remates, cantos, foras-de-jogo, desarmes**, e se GR defesas/sofridos), **cartões (🟨 amarelo 0–5, 🟥 vermelho 0–2 — comuns às duas modalidades, a seguir às faltas)** + **métricas configuráveis**. Aviso se soma de golos ≠ resultado. Ver 10.8.
-  - **Ao Vivo:** eventos (golo, assistência, falta, cartão, substituição com bloco, defesa, timeout — **futsal**; + **remate, canto, fora-de-jogo, desarme** — **futebol** 🔁) por parte/minuto; agrega para estatísticas. Otimizado telemóvel + offline. **Sem bloqueio de substituições** (informativo — 1.6).
+  - **Ao Vivo:** eventos (golo, assistência, falta, cartão, substituição com bloco, defesa, timeout — **futsal**; + **remate, canto, fora-de-jogo, desarme** — **futebol** 🔁) por parte/minuto; agrega para estatísticas. Otimizado telemóvel + offline. **Sem bloqueio de substituições** (informativo — 1.6). **🔁 2026-09-13 — Modo Jogo ao Vivo:** este separador ganha o botão **«Modo Jogo ao Vivo»** (§8.25) — ecrã dedicado de condução com **cronómetro contínuo por partes**, **substituições por *tap*** e **cálculo automático de minutos**, offline-first; alimenta os mesmos `EstatisticaAtleta` (minutos/utilização) sem substituir a grelha manual.
   - **Análise** — sub-separadores: **Relatório** e **Scouting**.
     - **Relatório** (UX-P3-07): três secções estruturadas — **Análise táctica**, **Destaques**, **Próximo jogo** — guardadas como JSON no campo `Jogo.relatorio` (retrocompatível: relatório antigo em texto puro é lido como «Análise táctica»; (de)serialização em `lib/relatorio-jogo.ts`). Inclui a **cronologia do jogo** (§10.4). O **Vídeo** (YouTube) e o **Quadro tático** (diagramas do jogo, campo da modalidade) mantêm-se.
     - **Scouting** (`SCOUTING_GERIR`): observação do adversário criada no próprio jogo. Também avulso.
@@ -2070,6 +2071,148 @@ Terceiro modo de registo: sessão **não gerida pela app** (estágio externo, cl
 - **Hard-delete de atleta (RGPD)** → `Presenca` e `ValorMetricaSessao` removidos por cascade; se sessão ficar sem participantes, DEVERIA ser sinalizada.
 
 **Definição de pronto (Fase 36):** build verde; migração `gr_treino_especifico` aplicada (`MetricaConfig.aplicaSoGuardaRedes`, `TipoSessao.EXTERNA_GR`, `Sessao.entidadeExterna` — todas retrocompatíveis); seed instala subcategorias/métricas GR (futsal + futebol); chip "Guarda-redes" e "Bloco de Guarda-redes" funcionais; grelha de métricas GR só aceita GRs (validado no servidor); CRUD de sessão externa GR operacional; secção "Desenvolvimento do guarda-redes" renderiza com dados reais e estado vazio correto; testes unitários das funções puras (filtro GR por posição, agregação de métricas GR) e de permissão/isolamento de `guardarMetricasSessao`; `typecheck`/`lint`/`test` limpos; bíblia atualizada.
+
+---
+
+### 8.25 Modo Jogo ao Vivo (`ESTATISTICAS_GERIR`) — 🔁 novo 2026-09-13
+
+> **Estatuto:** nova funcionalidade **transversal às modalidades** (🔁 futsal + futebol). Ecrã dedicado de **condução do jogo em beira-campo** — cronómetro contínuo por partes, gestão do quinteto/onze em campo com substituições por *tap* e **cálculo automático dos minutos** de cada atleta no fim do jogo. **Reuse-first e aditivo:** assenta na convocatória (§3.7), nos eventos de jogo (`EventoJogo`) e na grelha de estatísticas (`EstatisticaAtleta`) já existentes (§8.11, §10.4). É uma **forma alternativa de preencher as estatísticas** do jogo (minutos e utilização), **não** substitui a grelha manual (§8.11 › Estatísticas) — as duas convergem por *last-write-wins* (§13.4). Cumpre o princípio "Beira-campo real" (§1.4, princípio 5): funciona com **rede fraca ou nula** (offline-first) e com **poucos toques**.
+
+**Motivação.** Durante o jogo o treinador não tem mãos nem atenção para preencher grelhas: quer (1) marcar rapidamente os titulares em campo, (2) registar substituições com um *tap* sem perder o fio ao jogo, e (3) obter no fim os **minutos de cada atleta calculados automaticamente**, alimentando as estatísticas e o desenvolvimento do atleta (§1.4, princípio 6). Tudo tem de resistir a saídas da app e a falhas de rede.
+
+#### 8.25.1 Conceito e ponto de entrada
+
+- **Acesso:** no **detalhe do jogo** (§8.11), o separador **Ao Vivo** ganha o botão **«Modo Jogo ao Vivo»**, que abre um **ecrã dedicado de condução** (`/jogos/[id]/ao-vivo`), a ecrã inteiro, otimizado para telemóvel, com alvos de toque ≥44px e **offline-first**.
+- **Pool de atletas:** o Modo Jogo ao Vivo **consome os convocados** do jogo (`Convocatoria.convocado = true`) como conjunto de atletas disponíveis. A **convocatória continua a ser gerida separadamente** (§8.11 › Convocatória) — este modo não a altera.
+- **Relação com o separador "Ao Vivo" clássico:** o registo ao vivo por eventos (golo, assistência, cartão, remate…) de §8.11 mantém-se; o Modo Jogo ao Vivo **especializa-se na gestão de campo e no tempo de jogo**. Ambos escrevem em `EventoJogo` e convergem para `EstatisticaAtleta` (§10.4).
+
+#### 8.25.2 Cronómetro
+
+- **Contínuo:** corre de **0:00 até ao fim do jogo** e **não para** para bola fora, faltas, lançamentos, etc. O tempo de jogo é **contínuo entre partes** (o segundo absoluto **não reinicia** a cada parte; só a **numeração da parte** avança).
+- **Por partes (pausa no intervalo):** entre partes o cronómetro **pausa** (estado `INTERVALO`) e **retoma** na parte seguinte a partir do segundo acumulado.
+- **Número de partes configurável:** suporta **2 a 4 partes**. *Default* = **2** (seniores/futsal); **futebol de formação e escalões jovens** usam tipicamente **4** — o *default* é sugerido a partir do `formato`/escalão (§3.7, Apêndice B) e permanece editável no arranque.
+- **Pausa manual:** o cronómetro pode ser **pausado manualmente** (estado `PAUSADO`) por interrupções imprevistas do jogo (lesão, incidente) e depois **retomado**, sem contaminar o cálculo de minutos (o tempo pausado não conta como tempo de jogo).
+- **Derivação do tempo corrente (cliente e servidor):** `segundosCorrentes = SessaoJogoAoVivo.segundosDecorridos + (aCorrerDesde ? agora − aCorrerDesde : 0)`. Ao pausar/entrar em intervalo, o tempo decorrido é **consolidado** em `segundosDecorridos` e `aCorrerDesde` fica a `null`.
+
+#### 8.25.3 Fluxo principal
+
+1. **Arranque** — o treinador seleciona os **titulares** (o nº exato do formato — 5 em `FUTSAL_5`, 7/9/11 em futebol) e as respetivas **posições** (GR incluído), a partir da grelha de convocados; escolhe o **nº de partes**; toca **«Iniciar Parte 1»** → o cronómetro arranca (`INICIO_PARTE`, `ENTRADA` de cada titular no segundo 0).
+2. **Durante a parte** — o ecrã mostra **em campo** (com posição) e **banco**; **tap num atleta em campo** para o substituir → escolher **quem entra** do banco → a substituição é registada com o **segundo corrente** (`SAIDA` do que sai + `ENTRADA` do que entra, no mesmo segundo).
+3. **Intervalo** — **«Intervalo / Fim de Parte»** regista `FIM_PARTE` e **pausa** o cronómetro (estado `INTERVALO`); o ecrã de intervalo permite **trocas em bloco** antes de retomar.
+4. **Retomar** — **«Iniciar Parte N»** regista `INICIO_PARTE` e **retoma** o cronómetro (estado `EM_CURSO`).
+5. **Fim do jogo** — **«Terminar Jogo»** regista `SAIDA` (no segundo final) de todos os que ainda estão em campo, calcula os **minutos** e **persiste** em `EstatisticaAtleta` (minutos + utilização) — estado `TERMINADO`.
+
+**Notas durante o jogo.** Um **campo de notas** está **sempre acessível** (ícone fixo / *bottom sheet*) sem interromper o modo jogo; o texto é guardado no campo **`Jogo.relatorio`** (JSON estruturado — nova chave `notasAoVivo`, retrocompatível; (de)serialização em `lib/relatorio-jogo.ts`, §8.11 › Relatório). Fica assim disponível na análise do jogo.
+
+#### 8.25.4 Persistência local e offline-first
+
+- **Estado persistido localmente em tempo real** (**IndexedDB**; *fallback* `localStorage`): a cada evento e a cada segundo consolidado, o estado do modo jogo é gravado no dispositivo. Se o utilizador **sair da app** (ex.: durante o intervalo) e **voltar**, o modo jogo **retoma exatamente onde estava** (parte, cronómetro, em-campo/banco).
+- **Offline-first:** **não requer rede** durante o jogo. Os eventos ficam numa **fila local (*outbox*)** e são **sincronizados automaticamente** quando a rede regressa.
+- **Lista imutável de eventos com *timestamp*:** todas as ações (`ENTRADA`/`SAIDA`, `INICIO_PARTE`/`FIM_PARTE`, `PAUSA`/`RETOMA`) são registadas como uma **lista append-only** de `EventoJogo` com o **segundo absoluto** do jogo. A **edição manual** posterior (§8.25.6) é uma operação **explícita e distinta**, não uma mutação silenciosa do registo ao vivo.
+- **Sincronização idempotente:** cada evento traz um `clientEventoId` (gerado no cliente); o *upsert* no servidor é idempotente por `@@unique([jogoId, clientEventoId])`, evitando duplicados em *retries*. O estado da `SessaoJogoAoVivo` reconcilia por *last-write-wins* (§13.4), coerente com a política de escrita da app.
+
+#### 8.25.5 Cálculo de minutos
+
+- **Função pura** `calcularMinutosDeEventos(eventos, formato, segundoFinal)` (proposta: `lib/minutos-jogo.ts`), testável, sem I/O.
+- **Regra:** para cada atleta, somam-se **todos os intervalos `[ENTRADA, SAIDA]`** (em segundos). Se o atleta **ainda está em campo** quando o jogo termina, a **saída = segundo final** do jogo. **Arredondamento a minutos inteiros** (sem decimais).
+- **Utilização derivada:** **TITULAR** (entrou no `INICIO_PARTE` da Parte 1), **UTILIZADO** (entrou depois), **NAO_UTILIZADO** (nunca entrou → 0 minutos).
+- **Escrita nas estatísticas:** o resultado escreve `EstatisticaAtleta.minutos` e `utilizacao` (uma linha por convocado). Converge com o preenchimento manual da grelha (§8.11) por *last-write-wins*. O `blocoTempo` (§3.7) permanece disponível como alternativa por blocos para quem não usa o modo ao vivo.
+
+#### 8.25.6 Edição manual e inserção retroativa
+
+- **Editor tabular** (durante ou após o jogo): interface **atleta | entrada | saída | minutos**, com **editar/inserir/remover** intervalos; o **recálculo dos minutos é automático** ao guardar.
+- **Inserção retroativa:** o treinador pode **criar a sessão e os eventos após o jogo** (ex.: não tinha o telemóvel em beira-campo), preenchendo diretamente a tabela — sem ter usado o cronómetro ao vivo.
+- A edição manual escreve/reescreve os `EventoJogo` do jogo e recalcula `EstatisticaAtleta` (minutos/utilização).
+
+#### 8.25.7 Integração com o resto
+
+- **Estatísticas do jogo:** os minutos calculados alimentam o **campo de minutos** da grelha de estatísticas por atleta (§8.11 › Estatísticas, §10.4). A grelha manual **mantém-se**; o Modo Jogo ao Vivo é apenas uma forma **alternativa** de a preencher.
+- **Placar e outros eventos:** golos/assistências/cartões continuam a ser registados no separador **Ao Vivo** clássico ou na grelha; o placar sincroniza como em §10.4. O Modo Jogo ao Vivo foca-se em **tempo de jogo e quintetos**.
+- **Analytics do atleta:** os minutos entram no **tempo de jogo acumulado** e nas leituras do perfil do atleta (§8.15, §10.1) — reforçando o pilar de desenvolvimento (§1.4.6).
+- **Futsal ⚽:** quintetos/rotações e *power play* derivam naturalmente dos eventos de substituição (§10.5).
+
+#### 8.25.8 Modelo de dados (deltas aditivos a §3.7)
+
+> **Só documentação (spec).** Deltas **aditivos, nullable/com *default* + backfill**, retrocompatíveis (dados 100% existentes migram sem perda); migração descrita para implementação futura (Apêndice C). **Reutiliza `EventoJogo` e `EstatisticaAtleta`** — não cria entidades de estatística novas.
+
+- **Novo enum** `EstadoJogoAoVivo { POR_INICIAR EM_CURSO INTERVALO PAUSADO TERMINADO }`.
+- **`TipoEventoJogo` (extensão aditiva):** acrescenta `INICIO_PARTE`, `FIM_PARTE`, `ENTRADA`, `SAIDA`, `PAUSA`, `RETOMA`. O valor **`SUBSTITUICAO` mantém-se** (registo ao vivo clássico); no Modo Jogo ao Vivo uma substituição materializa-se como `SAIDA` + `ENTRADA` no mesmo segundo (primitivas que sustentam o cálculo de intervalos).
+- **`EventoJogo` (colunas novas, nullable):**
+  - `segundoJogo Int?` — segundo **absoluto** do cronómetro contínuo (0 = apito inicial da Parte 1); base do cálculo de minutos. `parte`/`minuto`/`bloco` mantêm-se para o registo ao vivo clássico.
+  - `posicao Posicao?` — posição ocupada numa `ENTRADA` (opcional; para a vista de campo).
+  - `clientEventoId String?` — id gerado no cliente para *sync* idempotente. `@@unique([jogoId, clientEventoId])`.
+
+```prisma
+// 🔁 v7 (2026-09-13) — estado de condução do Modo Jogo ao Vivo (1:1 com Jogo).
+model SessaoJogoAoVivo {
+  id                 String            @id @default(cuid())
+  jogoId             String            @unique
+  jogo               Jogo              @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+  numeroPartes       Int               @default(2)  // 2..4
+  estado             EstadoJogoAoVivo  @default(POR_INICIAR)
+  parteAtual         Int               @default(0)  // 0 = ainda não iniciou; 1..numeroPartes
+  segundosDecorridos Int               @default(0)  // tempo de jogo contínuo já consolidado (persistido)
+  aCorrerDesde       DateTime?                       // instante do arranque do cronómetro; null se em intervalo/pausado/terminado
+  criadoEm           DateTime          @default(now())
+  atualizadoEm       DateTime          @updatedAt
+}
+```
+
+- **`Jogo`** ganha a relação inversa `sessaoAoVivo SessaoJogoAoVivo?` e a chave `notasAoVivo` no JSON de `relatorio` (sem coluna nova; via `lib/relatorio-jogo.ts`).
+
+#### 8.25.9 Server Actions (deltas a §7.3)
+
+> Padrão obrigatório (§7.1): `"use server"` → validação Zod → `auth()` + isolamento multi-tenant por **clube** → época ativa → **capacidade `ESTATISTICAS_GERIR`** no escalão do jogo → `Resultado<T>` → `revalidatePath`. Escritas correm em **transação** quando tocam vários registos.
+
+- `iniciarJogoAoVivo(jogoId, { numeroPartes, titulares: [{ atletaId, posicao }] })` — cria/reinicia a `SessaoJogoAoVivo` (`POR_INICIAR`); valida que os titulares são convocados e que o nº = tamanho do `formato` (RN-JV-1/2).
+- `iniciarParte(jogoId)` — arranca/retoma o cronómetro; regista `INICIO_PARTE` (e `ENTRADA` dos titulares na Parte 1); `estado = EM_CURSO`.
+- `terminarParte(jogoId)` — regista `FIM_PARTE`, consolida o tempo em `segundosDecorridos`; `estado = INTERVALO`.
+- `substituirEmCampo(jogoId, { sai, entra, posicao? })` — regista `SAIDA(sai)` + `ENTRADA(entra)` no segundo corrente (RN-JV-3).
+- `trocaEmBloco(jogoId, { trocas: [...] })` — várias substituições no intervalo, em transação.
+- `pausarJogoAoVivo(jogoId)` / `retomarJogoAoVivo(jogoId)` — pausa/retoma manual (`PAUSA`/`RETOMA`; `estado = PAUSADO`/`EM_CURSO`).
+- `terminarJogoAoVivo(jogoId)` — `SAIDA` no segundo final para quem está em campo; `estado = TERMINADO`; calcula e persiste minutos/utilização em `EstatisticaAtleta`.
+- `guardarNotaJogoAoVivo(jogoId, texto)` — grava a chave `notasAoVivo` em `Jogo.relatorio`.
+- `sincronizarJogoAoVivo(jogoId, { estadoLocal, eventos })` — *upsert* idempotente da *outbox* offline (por `clientEventoId`) + reconciliação do estado (*last-write-wins*).
+- `editarEventosJogoAoVivo(jogoId, eventos)` — edição manual/tabular dos eventos; recalcula estatísticas.
+- `previewMinutosJogo(jogoId)` — expõe o cálculo (§8.25.5) **sem persistir**, para revisão antes de guardar (à imagem de `previewEstatisticasDeEventos`, §10.4).
+
+**Rotas:** `/jogos/[id]/ao-vivo` (condução) — alcançada pelo botão «Modo Jogo ao Vivo» do separador Ao Vivo (§8.11).
+
+#### 8.25.10 Regras de negócio
+
+- **RN-JV-1** — Nº de atletas em campo = **tamanho do formato** (`FUTSAL_5`=5; `FUTEBOL_3_3`=3; `FUTEBOL_5_5`=5; `FUTEBOL_7`=7; `FUTEBOL_9`=9; `FUTEBOL_11`=11). O arranque exige exatamente esse nº de titulares.
+- **RN-JV-2** — Só **convocados** (`Convocatoria.convocado = true`) podem entrar em campo; o *pool* é a convocatória.
+- **RN-JV-3** — Uma substituição = `SAIDA(sai)` + `ENTRADA(entra)` **no mesmo segundo**; `sai` deve estar em campo e `entra` no banco.
+- **RN-JV-4** — Cronómetro **contínuo**: não para em bola fora/faltas; só pausa no **fim de parte** (`INTERVALO`) ou por **pausa manual** (`PAUSADO`). O tempo pausado **não conta** como tempo de jogo.
+- **RN-JV-5** — Suporta **2 a 4 partes**; o **segundo absoluto é contínuo** entre partes (só a numeração de parte avança).
+- **RN-JV-6** — **Minutos** = soma dos intervalos `[ENTRADA, SAIDA]` por atleta; quem termina em campo tem `SAIDA` = **segundo final**; **arredondamento a minutos inteiros**.
+- **RN-JV-7** — Um atleta pode **entrar e sair mais do que uma vez** → **múltiplos intervalos somados**.
+- **RN-JV-8** — **GR substituído** = substituição normal (`SAIDA`/`ENTRADA`), sem tratamento especial.
+- **RN-JV-9** — Convocado que **não entra** → **0 minutos**, `NAO_UTILIZADO`.
+- **RN-JV-10** — **TITULAR** = entrou no `INICIO_PARTE` da Parte 1; **UTILIZADO** = entrou depois.
+- **RN-JV-11** — **Estado persistido localmente em tempo real** (IndexedDB); **offline-first**; *sync* idempotente por `clientEventoId`; estado da sessão por *last-write-wins* (§13.4).
+- **RN-JV-12** — Lista de eventos **imutável (append-only)** durante o jogo; a **edição manual** (§8.25.6) é operação explícita e distinta.
+- **RN-JV-13** — Os minutos escrevem em `EstatisticaAtleta.minutos`/`utilizacao`; convergência com o registo manual por *last-write-wins*. O Modo Jogo ao Vivo **não substitui** a grelha manual (§8.11).
+- **RN-JV-14** — A **convocatória** é gerida separadamente; o Modo Jogo ao Vivo apenas a **consome** como *pool*.
+- **RN-JV-15** — **Inserção retroativa** permitida: criar/editar sessão e eventos após o jogo, via editor tabular.
+- **RN-JV-16** — Autorização por **`ESTATISTICAS_GERIR`** no escalão do jogo; isolamento multi-tenant por clube (§6, §5.6).
+
+#### 8.25.11 Casos-limite
+
+- **Convocado que não entra** → 0 minutos, `NAO_UTILIZADO`.
+- **Entra e sai mais do que uma vez** → intervalos múltiplos somados.
+- **GR substituído** → substituição normal.
+- **Jogo com 4 partes** (futebol jovem) → tempo contínuo, 3 intervalos; cronómetro nunca reinicia o segundo absoluto.
+- **App fechada / saída durante o intervalo** → ao reabrir, retoma exatamente (estado `INTERVALO`, `segundosDecorridos` preservado).
+- **Rede cai a meio** → tudo local (*outbox*); *sync* idempotente quando a rede volta.
+- **Terminar o jogo com atletas ainda em campo** → `SAIDA` automática no segundo final.
+- **Menos convocados que o tamanho do formato** → arranque **bloqueado** (RN-JV-1) com aviso (CTA para a convocatória, §8.11).
+- **Editar um *timestamp* na tabela** → recálculo automático dos minutos.
+- **Pausa manual prolongada** → tempo pausado ignorado no cálculo (RN-JV-4).
+
+#### 8.25.12 Definição de pronto
+
+Build verde; migração aditiva (novo enum `EstadoJogoAoVivo`; extensão de `TipoEventoJogo`; `EventoJogo.segundoJogo`/`posicao`/`clientEventoId` + `@@unique([jogoId, clientEventoId])`; `SessaoJogoAoVivo`; relação `Jogo.sessaoAoVivo`) aplicada e retrocompatível (Apêndice C); ecrã `/jogos/[id]/ao-vivo` funcional em telemóvel e **offline** (IndexedDB + *outbox* + *sync* idempotente); arranque com titulares/posições e nº de partes; cronómetro contínuo por partes com pausa manual; substituição por *tap* e troca em bloco no intervalo; **cálculo automático de minutos** e escrita em `EstatisticaAtleta`; notas ao vivo em `Jogo.relatorio`; editor tabular (edição/inserção retroativa) com recálculo; **função pura `calcularMinutosDeEventos` com testes unitários** (0 minutos, múltiplos intervalos, ainda em campo no fim, pausa manual, 2–4 partes) e testes de permissão/isolamento das actions; `typecheck`/`lint`/`test` limpos; bíblia atualizada. **Não toca em auth.**
 
 ---
 
@@ -2636,6 +2779,9 @@ Decidida pelo treinador na criação (toggle pessoal vs clube). O pagamento não
 
 Do mais recente para o mais antigo.
 
+- **2026-09-13** — **§23.5 / Fluxo E (§23.4)** — **Correção (BUG) — classificação de competição aparecia vazia sem confrontos realizados.** `calcularClassificacao` (`lib/classificacao.ts`, função pura) só cria linhas para equipas que surgem em pelo menos um confronto `REALIZADO`/`WALKOVER`; no arranque da época, com todos os confrontos `AGENDADO`, devolvia `[]` e a tabela ficava vazia. **Correção — só na camada de leitura, sem alterar a função pura, o schema ou auth.** **(1) `lib/actions/competicoes.ts` — `obterClassificacao`:** passa a ler também as `EquipaCompeticao` inscritas (`prisma.equipaCompeticao.findMany`, `nome`+`tipo`) e, após `calcularClassificacao`, **acrescenta as equipas que ainda não aparecem** na tabela com **todos os campos a zero** (`jogos`/`vitorias`/`empates`/`derrotas`/`golosMarcados`/`golosSofridos`/`pontos = 0`), `ehProprio` derivado de `tipo === PROPRIO` ou do nome da equipa própria; as equipas sem jogos ficam **no fim, ordenadas por nome** (comparação case-insensitive para não duplicar) e a `posicao` (1..N) é recalculada sobre o conjunto completo. **(2) Testes:** `tests/competicoes.test.ts` — o teste existente de `obterClassificacao` passa a mockar `equipaCompeticao.findMany`; +2 testes novos (todas as equipas a zeros quando não há `REALIZADO`; equipas sem jogos acrescentadas no fim, após as que já jogaram). **(3) Bíblia:** §23.5 ganha a regra «Todas as equipas inscritas aparecem (DEVE)»; Fluxo E clarifica que o estado vazio só surge sem participantes. `npm run typecheck` limpo · **1555 testes verdes**. **Não toca em auth.**
+- **2026-09-13** — **§8.8.2 (ponto 3)** — **Modo treino — adicionar exercícios da biblioteca à fase de aquecimento sem sair da condução.** O modo treino (condução em campo, `ModoTreino`) ganha um **espaço simples** para juntar exercícios de aquecimento a partir da biblioteca sem interromper a sessão. **Sem alteração de schema nem auth; reutiliza a Server Action existente.** **(1) Novo `lib/treino-aquecimento.ts`:** tipo `ExercicioBibliotecaAquecimento` + função **pura** `filtrarBibliotecaAquecimento(biblioteca, termo)` (filtra por nome sem distinção de maiúsculas, ordena por nome pt, não muta a entrada). **(2) Novo `components/treinos/AdicionarAquecimentoDialog.tsx`:** diálogo (padrão do `GestorExercicios`, simplificado) com pesquisa por nome e lista da biblioteca; adicionar chama a action existente **`adicionarExercicioSessao(sessaoId, exercicioId, "AQUECIMENTO")`** (§7.3 — valida `parteTreinoSessaoSchema`, isola por clube, exige `TREINOS_GERIR`, revalida `/treinos/[id]`); o diálogo mantém-se aberto para juntar vários. **(3) `components/treinos/ModoTreino.tsx`:** nova prop opcional `biblioteca`; botão **"＋ Adicionar ao aquecimento"** abaixo da barra de fases (só quando há biblioteca); `Escape` fecha o diálogo em vez de terminar a sessão; o exercício adicionado regressa pelas props e surge no início da sequência (ordem canónica das fases). **(4) `components/treinos/IniciarTreinoBotao.tsx` + `app/(app)/treinos/[id]/page.tsx`:** passam a biblioteca do clube (já carregada no detalhe) ao modo treino. **(5) `tests/treino-aquecimento.test.ts`:** 6 testes da função pura. §8.8.2 ponto 3 alinhada (o modo condução deixa de ser exclusivamente «só de apresentação»: a única escrita é adicionar ao aquecimento). `npm run typecheck` limpo · `npm run lint` limpo · **testes verdes**. **Não toca em auth.**
+- **2026-09-13** — **§8.25 (nova) / §8.11 / §3.7 / §10.4 / Apêndice C** — **Modo Jogo ao Vivo — condução do jogo em beira-campo com cronómetro contínuo, substituições por *tap* e cálculo automático de minutos.** Nova secção **§8.25** que **evolui aditivamente** o registo ao vivo de jogos (§8.11) e reutiliza o modelo de §3.7 (**`EventoJogo`** e **`EstatisticaAtleta`** — sem entidades de estatística novas). **Conceito:** ecrã dedicado (`/jogos/[id]/ao-vivo`), a partir do separador **Ao Vivo** do detalhe do jogo, otimizado telemóvel, **offline-first**: (1) arranque com titulares + posições (nº = tamanho do `formato`) e nº de partes (**2–4**, *default* 2 seniores / 4 jovens sugerido pelo formato); (2) **cronómetro contínuo** (0:00 ao fim, não para em bola fora/faltas), **pausa entre partes** (intervalo) e **pausa manual**; (3) **substituição por *tap*** (`SAIDA`+`ENTRADA` no mesmo segundo) e trocas em bloco no intervalo; (4) **notas** sempre acessíveis (guardadas em `Jogo.relatorio`, chave `notasAoVivo`); (5) **fim do jogo → minutos calculados automaticamente** e escritos em `EstatisticaAtleta` (minutos/utilização). **Cálculo:** função pura `calcularMinutosDeEventos` — soma dos intervalos `[ENTRADA, SAIDA]` por atleta (saída = segundo final se ainda em campo), arredondado a minutos inteiros; utilização TITULAR/UTILIZADO/NAO_UTILIZADO derivada. **Persistência/offline:** estado persistido localmente em tempo real (**IndexedDB**, *fallback* `localStorage`) — retoma exatamente após sair da app; eventos numa **lista imutável (append-only) com *timestamp*** e ***outbox*** sincronizada quando a rede volta (*upsert* idempotente por `clientEventoId`). **Edição manual e inserção retroativa:** editor tabular (atleta | entrada | saída | minutos) com recálculo automático. **Deltas de schema (aditivos, nullable/default + backfill):** novo enum `EstadoJogoAoVivo`; extensão de `TipoEventoJogo` (`INICIO_PARTE`, `FIM_PARTE`, `ENTRADA`, `SAIDA`, `PAUSA`, `RETOMA` — `SUBSTITUICAO` mantido); `EventoJogo.segundoJogo?`/`posicao?`/`clientEventoId?` (+ `@@unique([jogoId, clientEventoId])`); novo model **`SessaoJogoAoVivo`** (1:1 com `Jogo`) para o estado do cronómetro/condução; relação `Jogo.sessaoAoVivo`. **Actions (deltas §7.3):** `iniciarJogoAoVivo`, `iniciarParte`, `terminarParte`, `substituirEmCampo`, `trocaEmBloco`, `pausarJogoAoVivo`/`retomarJogoAoVivo`, `terminarJogoAoVivo`, `guardarNotaJogoAoVivo`, `sincronizarJogoAoVivo`, `editarEventosJogoAoVivo`, `previewMinutosJogo` — todas `ESTATISTICAS_GERIR` no escalão + isolamento multi-tenant. **Integração:** os minutos alimentam a grelha de estatísticas (§8.11) e o tempo de jogo acumulado (§10.1/§8.15); a **grelha manual mantém-se** (o modo ao vivo é forma alternativa de a preencher; convergência *last-write-wins*, §13.4); a **convocatória é gerida à parte** (o modo consome os convocados como *pool*). **Só documentação (bíblia) — sem alteração de código, schema aplicado ou auth; migração/backfill descritos para implementação futura (Apêndice C).**
 - **2026-09-13** — **§23.7 / §23.8** — **Detalhe da competição — gestão de equipas, correção de placar e refresh da lista.** Três correções na UI de competições, **sem alteração de auth**. **(1) [I3] Gestão de equipas no detalhe — novo `components/competicoes/GestaoEquipas.tsx` + tab «Equipas» em `CompeticaoDetalhe.tsx`:** lista os participantes (equipa `PROPRIO` destacada com estrela/badge e **sem** botão de remover), form de **adicionar** (campo `nome` → `adicionarEquipaCompeticao(competicaoId, { nome })`), botão de **remover** por equipa (`removerEquipaCompeticao(equipa.id)`, com `AlertDialog` de confirmação quando a equipa tem confrontos — por FK ou nome legado) e botão **«Gerar quadro»** (`gerarQuadroCompeticao(competicaoId)`, visível quando `formato !== 'LIGA'` ou há equipas sem confrontos e ≥2 equipas). Requer `equipas` no payload de detalhe: `INCLUDE_DETALHE` (em `lib/actions/competicoes.ts`) passa a incluir `equipas` (ordenadas por `ORDER_EQUIPAS`, movido para cima para evitar TDZ). **(2) [I1] `components/jogos/CompeticoesLista.tsx`:** após `apagarCompeticao` com sucesso passa a chamar `router.refresh()` (import `useRouter`), corrigindo a lista que não atualizava. **(3) [I2] Editar golos de confronto — nova action `atualizarGolosConfronto(resultadoId, golosCasa, golosFora)`** (`lib/actions/competicoes.ts`; validação `atualizarGolosConfrontoSchema` em `lib/schemas/competicao.ts` — golos 0–99, `resultadoId` cuid; auth + tenant/`COMPETICOES_GERIR` + `revalidatePath`) chamada a partir de edição **inline** na `LinhaDecidido` de `QuadroAgendamento.tsx` (botão «Golos» → dois campos numéricos + guardar/cancelar), só para confrontos `REALIZADO`. §23.6/§23.7/§23.8 alinhadas. `npm run typecheck` limpo · `npm run lint` limpo · **1547 testes verdes**. **Não toca em auth.**
 - **2026-09-13** — **§8.13.1 / §23.7** — **Navegação — Competições promovida a item de primeiro nível.** A rota de competições (`/jogos/competicoes`), até agora acessível apenas por dentro de **Jogos** (localização confusa), passa a **item primário da navegação de topo**. **Só navegação/apresentação — sem alteração de schema, rotas, actions ou auth (a rota `/jogos/competicoes` mantém-se inalterada).** **(1) `components/layout/Navegacao.tsx`:** adicionado o ícone **`Trophy`** (lucide-react) ao import e um novo item a `ITENS_BASE` — `{ href: "/jogos/competicoes", label: "Competições", icon: Trophy }` — posicionado **entre «Mano-a-Mano» e «Analytics»**. Funciona como os restantes itens: **sidebar** no desktop (expandida/colapsada) e, no móvel, como item do menu **«Mais»** da bottom-nav (os 4 primários — Início · Plantel · Agenda · Exercícios — mantêm-se). O `ativo()` casa `/jogos/competicoes` e sub-rotas (`/jogos/competicoes/nova`, `/jogos/competicoes/[id]`). **(2) §8.13.1 e §23.7 alinhadas** (Competições deixa de estar «inalterada na navegação»). UI 100% pt-PT, TypeScript strict. `npm run typecheck` limpo · `npm run lint` limpo. **Não toca em auth.**
 - **2026-09-12** — **§8.4** — **Reformulação do painel de Definições — agrupamento em 4 secções, renomeação de rótulos (Clube→Marca, Subcategorias→Tipos de exercício, Perfis→Perfis e permissões), breadcrumb consistente.** A página `/definicoes` passa de grelha plana (10 cartões, pós-remoção de Habilidades) para **quatro grupos rotulados** com cabeçalho discreto (maiúsculas, cor *muted*): **Clube** (Marca, Secções, Escalões, Épocas), **Catálogos** (Métricas, Tipos de exercício), **Pessoas e acessos** (Equipa técnica, Perfis e permissões) e **Conta e sistema** (Licença, Integrações). Um grupo sem cartões visíveis (gating por capacidade / `ocultarIndividual`) **não renderiza cabeçalho**. **Rótulos renomeados** (rotas inalteradas): «Clube»→**Marca**, «Subcategorias»→**Tipos de exercício**, «Perfis»→**Perfis e permissões**. **Breadcrumb «‹ Definições» consistente** em todas as sub-páginas via novo componente `components/definicoes/CabecalhoDefinicoes.tsx` (antes só existia em Subcategorias). A **lógica de gating por cartão mantém-se intacta** (só muda o agrupamento visual) e **não há alteração de rotas**. `typecheck`/`lint`/`test` verdes. **Não toca em auth.**
@@ -3506,7 +3652,7 @@ model Jogo {
 2. Passo 3 — **Gerar quadro** (`gerarQuadroCompeticao`, §8.11): LIGA (todos-contra-todos, opção 2 mãos) ou TORNEIO/TAÇA (bracket com byes). Confrontos nascem `AGENDADO`.
 3. Guardar transacionalmente (`criarCompeticaoCompleta`, §8.11).
 
-**Fluxo E — Ver a tabela classificativa.** Separador **Classificação** da competição: tabela ordenada (§23.5) com **destaque visual da equipa própria** (`tipo = PROPRIO`); em TORNEIO/TAÇA mostra-se o **quadro/bracket** (progressão por ronda) em vez de tabela de pontos. Estado vazio: "Ainda sem jogos realizados."
+**Fluxo E — Ver a tabela classificativa.** Separador **Classificação** da competição: tabela ordenada (§23.5) com **destaque visual da equipa própria** (`tipo = PROPRIO`); em TORNEIO/TAÇA mostra-se o **quadro/bracket** (progressão por ronda) em vez de tabela de pontos. Enquanto não há confrontos realizados, a tabela LIGA mostra **todas as equipas inscritas a zeros** (§23.5), não um estado vazio; o estado vazio ("Ainda sem equipas nem jogos") só surge quando a competição não tem sequer participantes.
 
 ### 23.5 Cálculo da classificação (evolução de §10.9)
 
@@ -3530,6 +3676,7 @@ type LinhaClassificacao = {
 ```
 
 **Regras de cálculo:**
+- **Todas as equipas inscritas aparecem (DEVE):** a tabela inclui **todas** as `EquipaCompeticao` da competição, mesmo as que ainda não têm nenhum confronto contado. As equipas sem jogos entram com **todos os campos a zero** (`jogos`/`vitorias`/`empates`/`derrotas`/`golosPro`/`golosContra`/`pontos = 0`), colocadas **no fim da tabela e ordenadas por nome** (a seguir às que já jogaram). Assim, no arranque da época — com todos os confrontos ainda `AGENDADO` — a classificação mostra a grelha completa a zeros em vez de aparecer vazia. `ehProprio` é derivado do participante `PROPRIO` (ou do nome da equipa própria); a `posicao` (1..N) é recalculada sobre o conjunto completo.
 - **Confrontos considerados:** apenas `estado ∈ { REALIZADO, WALKOVER }`. **`AGENDADO` e `CANCELADO` são ignorados** (evolução do filtro de §10.9, que só considerava `REALIZADO`).
 - **Golos:** `REALIZADO` usa `golosCasa`/`golosFora`; **`WALKOVER`** usa o resultado regulamentar `golosWalkover`–0 a favor de `walkoverVencedor` (default **3–0**).
 - **Pontos:** vitória = `Competicao.pontosVitoria` (default **3**, alternativa **2**), empate = `pontosEmpate` (**1**), derrota = `pontosDerrota` (**0**). Um WO nunca é empate.
