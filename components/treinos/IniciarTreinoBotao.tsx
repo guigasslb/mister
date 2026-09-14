@@ -9,6 +9,7 @@ import {
   limparTreinoSuspenso,
   type TreinoSuspenso,
 } from "@/lib/treino-suspenso";
+import type { ExercicioBibliotecaAquecimento } from "@/lib/treino-aquecimento";
 
 /**
  * Botão de arranque do modo treino (Melhoria 3/4.2). Abre o overlay de condução
@@ -27,10 +28,13 @@ import {
 export function IniciarTreinoBotao({
   sessaoId,
   exercicios,
+  biblioteca = [],
   concluido = false,
 }: {
   sessaoId: string;
   exercicios: ExercicioModo[];
+  /** Biblioteca do clube — alimenta o seletor rápido "Adicionar ao aquecimento". */
+  biblioteca?: ExercicioBibliotecaAquecimento[];
   /** Treino já realizado (data no passado): muda o CTA para "Ver treino". */
   concluido?: boolean;
 }) {
@@ -106,6 +110,7 @@ export function IniciarTreinoBotao({
             <ModoTreino
               exercicios={exercicios}
               sessaoId={sessaoId}
+              biblioteca={biblioteca}
               indiceInicial={suspenso ? indiceRetoma : 0}
               segundosIniciais={suspenso ? suspenso.segundos : 0}
               onFinish={terminar}

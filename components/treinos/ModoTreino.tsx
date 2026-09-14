@@ -11,6 +11,7 @@ import {
   RotateCcw,
   SlidersHorizontal,
   LogOut,
+  Plus,
 } from "lucide-react";
 import {
   LABEL_CATEGORIA,
@@ -21,7 +22,9 @@ import {
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
 import { CampoAnimado } from "@/components/campo/CampoAnimado";
 import { AdaptarExercicioDialog } from "@/components/treinos/AdaptarExercicioDialog";
+import { AdicionarAquecimentoDialog } from "@/components/treinos/AdicionarAquecimentoDialog";
 import { guardarTreinoSuspenso, limparTreinoSuspenso } from "@/lib/treino-suspenso";
+import type { ExercicioBibliotecaAquecimento } from "@/lib/treino-aquecimento";
 import {
   SEM_FASE,
   fasesComExercicios,
@@ -140,6 +143,7 @@ const DiagramaGrande = memo(function DiagramaGrande({
 export function ModoTreino({
   exercicios,
   sessaoId,
+  biblioteca = [],
   indiceInicial = 0,
   segundosIniciais = 0,
   onFinish,
@@ -147,6 +151,8 @@ export function ModoTreino({
 }: {
   exercicios: ExercicioModo[];
   sessaoId: string;
+  /** Biblioteca do clube — alimenta o seletor rápido "Adicionar ao aquecimento". */
+  biblioteca?: ExercicioBibliotecaAquecimento[];
   /** Exercício onde arrancar (0-based) — usado ao retomar uma sessão suspensa. */
   indiceInicial?: number;
   /** Segundos já decorridos — usado ao retomar uma sessão suspensa. */
@@ -160,6 +166,7 @@ export function ModoTreino({
   const [segundos, setSegundos] = useState(segundosIniciais);
   const [pausado, setPausado] = useState(false);
   const [adaptarAberto, setAdaptarAberto] = useState(false);
+  const [aquecimentoAberto, setAquecimentoAberto] = useState(false);
 
   // §3.5: ordena pela ordem canónica das fases, preservando a posição original
   // (`ordem`) dentro de cada fase — ver `lib/treino-fases`.
@@ -192,11 +199,11 @@ export function ModoTreino({
     };
   }, []);
 
-  // Escape termina o treino — exceto quando o diálogo de adaptação está aberto
-  // (nesse caso o Escape deve apenas fechar o diálogo, não terminar a sessão).
+  // Escape termina o treino — exceto quando um diálogo (adaptar/aquecimento) está
+  // aberto (nesse caso o Escape deve apenas fechar o diálogo, não terminar a sessão).
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
-      if (ev.key === "Escape" && !adaptarAberto) {
+      if (ev.key === "Escape" && !adaptarAberto && !aquecimentoAberto) {
         // Escape termina definitivamente — limpa o estado suspenso, se existir.
         limparTreinoSuspenso(sessaoId);
         onFinish();
@@ -204,7 +211,7 @@ export function ModoTreino({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onFinish, adaptarAberto, sessaoId]);
+  }, [onFinish, adaptarAberto, aquecimentoAberto, sessaoId]);
 
   const total = exerciciosOrdenados.length;
   const atual = exerciciosOrdenados[indice];
@@ -337,6 +344,21 @@ export function ModoTreino({
         </nav>
       )}
 
+      {/* Adicionar um exercício de aquecimento da biblioteca sem sair da condução
+          (§8.8.2). Só aparece havendo biblioteca. */}
+      {biblioteca.length > 0 && (
+        <div className="flex shrink-0 items-center justify-end border-b border-cinza-100 px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setAquecimentoAberto(true)}
+            className="flex h-11 items-center gap-1.5 rounded-md border border-cinza-200 px-3 text-corpo-sec font-medium text-cinza-700 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <Plus className="h-5 w-5" />
+            Adicionar ao aquecimento
+          </button>
+        </div>
+      )}
+
       {/* Corpo: exercício atual (zona scrollável — min-h-0 é essencial para o
           overflow funcionar dentro do flex-col e não empurrar o footer; o pb-24
           garante folga para o último parágrafo não ficar atrás do footer). */}
@@ -454,6 +476,16 @@ export function ModoTreino({
           }}
           aberto={adaptarAberto}
           onFechar={() => setAdaptarAberto(false)}
+        />
+      )}
+
+      {/* Seletor rápido para adicionar um exercício da biblioteca ao aquecimento. */}
+      {biblioteca.length > 0 && (
+        <AdicionarAquecimentoDialog
+          sessaoId={sessaoId}
+          biblioteca={biblioteca}
+          aberto={aquecimentoAberto}
+          onFechar={() => setAquecimentoAberto(false)}
         />
       )}
     </div>

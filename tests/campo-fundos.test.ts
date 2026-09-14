@@ -28,8 +28,12 @@ describe("LinhasCampo — fundos por formato (§11.5 / Apêndice B)", () => {
     for (const formato of TODOS) {
       const markup = renderToStaticMarkup(createElement(LinhasCampo, { formato }));
       expect(markup).toContain("<g");
-      // Relvado + contorno (dois rects comuns a todos os fundos).
-      expect(contar(markup, "<rect")).toBeGreaterThanOrEqual(2);
+      // Relvado + vinheta radial + contorno (três rects comuns a todos os fundos
+      // desde o redesenho: o `Relvado` acrescentou um <rect> de vinheta que cobre
+      // o campo inteiro com `url(#campo-fundo-vinheta)`, por cima da cor do clube).
+      // Nota: o <defs> (FundoDefs) só contém radialGradient + filter, sem <rect>,
+      // logo não influencia esta contagem por substring.
+      expect(contar(markup, "<rect")).toBeGreaterThanOrEqual(3);
       // Relva = cor do clube (--cor-primaria), com fallback laranja da marca.
       expect(markup).toContain("var(--cor-primaria, #F0531E)");
     }
@@ -60,8 +64,9 @@ describe("LinhasCampo — fundos por formato (§11.5 / Apêndice B)", () => {
     expect(contar(markup, "<circle")).toBe(1);
     // Sem arcos/áreas em path.
     expect(contar(markup, "<path")).toBe(0);
-    // Apenas relvado + contorno (não há rectângulos de área).
-    expect(contar(markup, "<rect")).toBe(2);
+    // Relvado + vinheta + contorno = 3 rects (não há rectângulos de área).
+    // O <rect> de vinheta radial foi acrescentado ao fundo comum no redesenho.
+    expect(contar(markup, "<rect")).toBe(3);
   });
 
   it("FUTEBOL_5_5 tem círculo central e pequenas áreas, sem penáltis", () => {
@@ -70,8 +75,8 @@ describe("LinhasCampo — fundos por formato (§11.5 / Apêndice B)", () => {
     );
     // marca central + círculo central = 2 círculos (sem marcas de penálti)
     expect(contar(markup, "<circle")).toBe(2);
-    // relvado + contorno + 2 pequenas áreas
-    expect(contar(markup, "<rect")).toBe(4);
+    // relvado + vinheta + contorno + 2 pequenas áreas = 5 rects
+    expect(contar(markup, "<rect")).toBe(5);
   });
 
   it("FUTEBOL_7 e FUTEBOL_9 têm grande área e marca de penálti", () => {
@@ -79,8 +84,8 @@ describe("LinhasCampo — fundos por formato (§11.5 / Apêndice B)", () => {
       const markup = renderToStaticMarkup(createElement(LinhasCampo, { formato }));
       // marca central + círculo central + 2 penáltis = 4 círculos
       expect(contar(markup, "<circle")).toBe(4);
-      // relvado + contorno + 2 grandes áreas
-      expect(contar(markup, "<rect")).toBe(4);
+      // relvado + vinheta + contorno + 2 grandes áreas = 5 rects
+      expect(contar(markup, "<rect")).toBe(5);
     }
   });
 
@@ -90,8 +95,8 @@ describe("LinhasCampo — fundos por formato (§11.5 / Apêndice B)", () => {
     );
     // marca central + círculo central + 2 penáltis = 4 círculos
     expect(contar(markup, "<circle")).toBe(4);
-    // relvado + contorno + 2 grandes + 2 pequenas áreas = 6 rects
-    expect(contar(markup, "<rect")).toBe(6);
+    // relvado + vinheta + contorno + 2 grandes + 2 pequenas áreas = 7 rects
+    expect(contar(markup, "<rect")).toBe(7);
     // 2 arcos de grande área (paths)
     expect(contar(markup, "<path")).toBe(2);
   });

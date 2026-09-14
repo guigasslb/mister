@@ -119,29 +119,75 @@ const RELVA = "var(--cor-primaria, #F0531E)";
 const TRACO = 1.5;
 const MEIO_Y = CAMPO_H / 2;
 
+/**
+ * Enriquecimento visual do fundo (mantém a cor do clube): vinheta radial (brilho
+ * central + escurecimento nos bordos → profundidade) e um filtro de relevo ténue
+ * para as linhas ganharem sombra própria sem perder nitidez (a linha original é
+ * pintada por cima da sua sombra). Definido UMA vez em `Relvado` — usado por todos
+ * os fundos. Cor-independente, logo o mesmo id é seguro em qualquer campo.
+ */
+function FundoDefs() {
+  return (
+    <defs>
+      <radialGradient id="campo-fundo-vinheta" cx="50%" cy="42%" r="72%">
+        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.16" />
+        <stop offset="45%" stopColor="#ffffff" stopOpacity="0" />
+        <stop offset="100%" stopColor="#000000" stopOpacity="0.30" />
+      </radialGradient>
+      <filter
+        id="campo-linha-relevo"
+        x="-5%"
+        y="-5%"
+        width="110%"
+        height="110%"
+      >
+        <feDropShadow
+          dx="0"
+          dy="0.5"
+          stdDeviation="0.35"
+          floodColor="#000000"
+          floodOpacity="0.35"
+        />
+      </filter>
+    </defs>
+  );
+}
+
 /** Relvado + contorno + linha de meio-campo + marca central (comum a todos). */
 function Relvado() {
   return (
     <>
+      <FundoDefs />
       <rect x={0} y={0} width={CAMPO_W} height={CAMPO_H} fill={RELVA} />
+      {/* Vinheta/brilho central — enriquece o acento do clube com volume, sem o
+          substituir; as linhas brancas mantêm-se legíveis por cima. */}
       <rect
-        x={4}
-        y={4}
-        width={CAMPO_W - 8}
-        height={CAMPO_H - 8}
-        fill="none"
-        stroke={BRANCO}
-        strokeWidth={TRACO}
+        x={0}
+        y={0}
+        width={CAMPO_W}
+        height={CAMPO_H}
+        fill="url(#campo-fundo-vinheta)"
       />
-      <line
-        x1={CAMPO_W / 2}
-        y1={4}
-        x2={CAMPO_W / 2}
-        y2={CAMPO_H - 4}
-        stroke={BRANCO}
-        strokeWidth={TRACO}
-      />
-      <circle cx={CAMPO_W / 2} cy={MEIO_Y} r={2} fill={BRANCO} />
+      <g filter="url(#campo-linha-relevo)">
+        <rect
+          x={4}
+          y={4}
+          width={CAMPO_W - 8}
+          height={CAMPO_H - 8}
+          fill="none"
+          stroke={BRANCO}
+          strokeWidth={TRACO}
+        />
+        <line
+          x1={CAMPO_W / 2}
+          y1={4}
+          x2={CAMPO_W / 2}
+          y2={CAMPO_H - 4}
+          stroke={BRANCO}
+          strokeWidth={TRACO}
+        />
+        <circle cx={CAMPO_W / 2} cy={MEIO_Y} r={2} fill={BRANCO} />
+      </g>
     </>
   );
 }
@@ -153,8 +199,15 @@ function Baliza({ lado, altura }: { lado: "esq" | "dir"; altura: number }) {
   const d = lado === "esq" ? -prof : prof;
   const y1 = MEIO_Y - altura / 2;
   const y2 = MEIO_Y + altura / 2;
+  const midX = x + d / 2;
   return (
     <g stroke={BRANCO} strokeWidth={TRACO} fill="none">
+      {/* Rede sugerida (fios ténues) para dar profundidade à baliza. */}
+      <g strokeOpacity={0.4} strokeWidth={0.5}>
+        <line x1={midX} y1={y1} x2={midX} y2={y2} />
+        <line x1={x} y1={MEIO_Y - altura / 4} x2={x + d} y2={MEIO_Y - altura / 4} />
+        <line x1={x} y1={MEIO_Y + altura / 4} x2={x + d} y2={MEIO_Y + altura / 4} />
+      </g>
       <line x1={x} y1={y1} x2={x + d} y2={y1} />
       <line x1={x + d} y1={y1} x2={x + d} y2={y2} />
       <line x1={x} y1={y2} x2={x + d} y2={y2} />
@@ -221,6 +274,7 @@ function FundoFutsal5() {
   return (
     <g>
       <Relvado />
+      <g filter="url(#campo-linha-relevo)">
       {/* Círculo central (raio 3m = 30 unidades) */}
       <circle
         cx={CAMPO_W / 2}
@@ -269,6 +323,7 @@ function FundoFutsal5() {
       />
       <circle cx={CAMPO_W - 64} cy={MEIO_Y} r={1.6} fill={BRANCO} />
       <circle cx={CAMPO_W - 100} cy={MEIO_Y} r={1.6} fill={BRANCO} />
+      </g>
     </g>
   );
 }
@@ -295,6 +350,7 @@ function FundoFutebol({ cfg }: { cfg: CfgFutebol }) {
   return (
     <g>
       <Relvado />
+      <g filter="url(#campo-linha-relevo)">
       {cfg.centerR > 0 && (
         <circle
           cx={CAMPO_W / 2}
@@ -325,6 +381,7 @@ function FundoFutebol({ cfg }: { cfg: CfgFutebol }) {
           )}
         </g>
       ))}
+      </g>
     </g>
   );
 }
@@ -448,6 +505,60 @@ function pontosParaPath(pontos: { x: number; y: number }[]): string {
   if (pontos.length === 1) return `M ${pontos[0].x} ${pontos[0].y}`;
   // Linha poligonal simples (quebrada) — suficiente e previsível.
   return pontos.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+}
+
+// ─── Volume das peças (gradientes/sombra partilhados) ────────────────────────
+//
+// Gradientes COR-INDEPENDENTES (branco/preto → transparente) sobrepostos ao
+// preenchimento sólido de cada peça para lhe dar volume esférico/3D, mantendo a
+// cor lógica (equipa/cone) intacta. Como não dependem da cor da peça, o mesmo id
+// é seguro em múltiplas instâncias (conteúdo idêntico → `url(#id)` resolve igual).
+//   · peca-sombra-chao : sombra projetada elíptica no chão (radial escuro→transp.)
+//   · peca-luz         : brilho especular (radial branco no canto superior-esq.)
+//   · peca-rim         : escurecimento do bordo (dá curvatura/volume)
+//   · peca-cone-brilho : gradiente vertical topo-claro→base-escura (faces do cone)
+function PecaDefs() {
+  return (
+    <defs>
+      <radialGradient id="peca-sombra-chao" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stopColor="#000000" stopOpacity="0.42" />
+        <stop offset="60%" stopColor="#000000" stopOpacity="0.22" />
+        <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+      </radialGradient>
+      <radialGradient id="peca-luz" cx="32%" cy="26%" r="72%">
+        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+        <stop offset="42%" stopColor="#ffffff" stopOpacity="0.16" />
+        <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+      </radialGradient>
+      <radialGradient id="peca-rim" cx="50%" cy="52%" r="58%">
+        <stop offset="55%" stopColor="#000000" stopOpacity="0" />
+        <stop offset="88%" stopColor="#000000" stopOpacity="0.16" />
+        <stop offset="100%" stopColor="#000000" stopOpacity="0.44" />
+      </radialGradient>
+      <linearGradient id="peca-cone-brilho" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.6" />
+        <stop offset="30%" stopColor="#ffffff" stopOpacity="0.12" />
+        <stop offset="55%" stopColor="#000000" stopOpacity="0" />
+        <stop offset="100%" stopColor="#000000" stopOpacity="0.42" />
+      </linearGradient>
+    </defs>
+  );
+}
+
+/** Pontos de um polígono regular de `n` lados (topo primeiro). */
+function pontosPoligono(
+  cx: number,
+  cy: number,
+  r: number,
+  n: number,
+  rotDeg = 0,
+): string {
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = ((rotDeg - 90) * Math.PI) / 180 + (i * 2 * Math.PI) / n;
+    out.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`);
+  }
+  return out.join(" ");
 }
 
 // ─── Render de um elemento ───────────────────────────────────────────────────
@@ -584,11 +695,34 @@ export function ElementoSVG({
       return (
         <g>
           {decoracoes}
+          <PecaDefs />
+          {/* Sombra projetada no chão → o token "levanta" do campo. */}
+          <ellipse
+            cx={elemento.x}
+            cy={elemento.y + 8.5}
+            rx={7.6}
+            ry={2.6}
+            fill="url(#peca-sombra-chao)"
+          />
+          {/* Disco base na cor da equipa + sombreado esférico (rim) + brilho. */}
+          <circle cx={elemento.x} cy={elemento.y} r={8} fill={preenchimento} />
+          <circle cx={elemento.x} cy={elemento.y} r={8} fill="url(#peca-rim)" />
+          <circle cx={elemento.x} cy={elemento.y} r={8} fill="url(#peca-luz)" />
+          {/* Bisel interior (luz de bordo) + contorno branco por cima. */}
+          <circle
+            cx={elemento.x}
+            cy={elemento.y}
+            r={6.4}
+            fill="none"
+            stroke="#ffffff"
+            strokeOpacity={0.35}
+            strokeWidth={0.7}
+          />
           <circle
             cx={elemento.x}
             cy={elemento.y}
             r={8}
-            fill={preenchimento}
+            fill="none"
             stroke="#FFFFFF"
             strokeWidth={1.5}
             strokeDasharray={eAdversario ? "3 2" : undefined}
@@ -602,6 +736,9 @@ export function ElementoSVG({
               fontSize={tamanhoEtiqueta}
               fontWeight={700}
               fill="#FFFFFF"
+              stroke="rgba(15,17,23,0.55)"
+              strokeWidth={0.6}
+              paintOrder="stroke"
             >
               {etiqueta}
             </text>
@@ -610,33 +747,71 @@ export function ElementoSVG({
       );
     }
 
-    case "bola":
+    case "bola": {
+      const bx = elemento.x;
+      const by = elemento.y;
+      // Costuras clássicas: do pentágono central até ao bordo (5 gomos).
+      const seams = [];
+      for (let i = 0; i < 5; i++) {
+        const a = ((i * 72 - 90) * Math.PI) / 180;
+        seams.push(
+          <line
+            key={i}
+            x1={bx + 1.5 * Math.cos(a)}
+            y1={by + 1.5 * Math.sin(a)}
+            x2={bx + 3.7 * Math.cos(a)}
+            y2={by + 3.7 * Math.sin(a)}
+            stroke="#15181f"
+            strokeWidth={0.45}
+          />,
+        );
+      }
       return (
         <g>
           {decoracoes}
-          <circle
-            cx={elemento.x}
-            cy={elemento.y}
-            r={4}
-            fill="#FFFFFF"
-            stroke="#1A1D29"
-            strokeWidth={1}
-          />
-          <circle cx={elemento.x} cy={elemento.y} r={1.5} fill="#1A1D29" />
+          <PecaDefs />
+          <ellipse cx={bx} cy={by + 4.4} rx={3.6} ry={1.4} fill="url(#peca-sombra-chao)" />
+          {/* Esfera branca + painéis (pentágono central) + costuras. */}
+          <circle cx={bx} cy={by} r={4} fill="#FFFFFF" />
+          <polygon points={pontosPoligono(bx, by, 1.5, 5, 0)} fill="#15181f" />
+          {seams}
+          {/* Sombreado esférico (core shadow + highlight). */}
+          <circle cx={bx} cy={by} r={4} fill="url(#peca-rim)" />
+          <circle cx={bx} cy={by} r={4} fill="url(#peca-luz)" />
+          <circle cx={bx} cy={by} r={4} fill="none" stroke="#1A1D29" strokeWidth={0.6} />
         </g>
       );
+    }
 
     case "cone": {
       const { hex, stroke } = coneCor(elemento.cor);
+      const cx = elemento.x;
+      const cy = elemento.y;
+      const apexY = cy - 7;
+      const baseY = cy + 5;
+      const baseHalf = 5;
+      // Meia-largura do cone a uma dada altura (interpola apex→base).
+      const halfAt = (yy: number) => baseHalf * ((yy - apexY) / (baseY - apexY));
+      const bandTop = cy - 1.5;
+      const bandBot = cy + 1.2;
+      const htT = halfAt(bandTop);
+      const htB = halfAt(bandBot);
+      const body = `${cx},${apexY} ${cx - baseHalf},${baseY} ${cx + baseHalf},${baseY}`;
+      const band = `${cx - htT},${bandTop} ${cx + htT},${bandTop} ${cx + htB},${bandBot} ${cx - htB},${bandBot}`;
+      const streak = `${cx - 0.3},${cy - 5} ${cx + 0.7},${cy - 5} ${cx - 2.3},${cy + 4.4} ${cx - 3.5},${cy + 4.4}`;
       return (
         <g>
           {decoracoes}
-          <polygon
-            points={`${elemento.x},${elemento.y - 7} ${elemento.x - 5},${elemento.y + 5} ${elemento.x + 5},${elemento.y + 5}`}
-            fill={hex}
-            stroke={stroke}
-            strokeWidth={0.8}
-          />
+          <PecaDefs />
+          {/* Sombra no chão + "pé" elíptico escuro (assenta no solo). */}
+          <ellipse cx={cx + 1} cy={cy + 5.4} rx={6.4} ry={2.1} fill="url(#peca-sombra-chao)" />
+          <ellipse cx={cx} cy={baseY} rx={5.2} ry={1.7} fill={stroke} />
+          {/* Corpo + gradiente vertical (topo claro→base escura). */}
+          <polygon points={body} fill={hex} stroke={stroke} strokeWidth={0.6} strokeLinejoin="round" />
+          <polygon points={body} fill="url(#peca-cone-brilho)" />
+          {/* Banda refletora + brilho especular lateral. */}
+          <polygon points={band} fill="#ffffff" fillOpacity={0.82} />
+          <polygon points={streak} fill="#ffffff" fillOpacity={0.4} />
         </g>
       );
     }
@@ -645,12 +820,32 @@ export function ElementoSVG({
       const horizontal = elemento.orientacao === "horizontal";
       const w = horizontal ? 30 : 6;
       const h = horizontal ? 6 : 30;
+      const x0 = elemento.x - w / 2;
+      const y0 = elemento.y - h / 2;
+      const net = [];
+      for (let i = 1; i < 4; i++) {
+        const gx = x0 + (w * i) / 4;
+        net.push(
+          <line key={`v${i}`} x1={gx} y1={y0} x2={gx} y2={y0 + h} stroke="#ffffff" strokeOpacity={0.35} strokeWidth={0.4} />,
+        );
+      }
+      for (let i = 1; i < 4; i++) {
+        const gy = y0 + (h * i) / 4;
+        net.push(
+          <line key={`h${i}`} x1={x0} y1={gy} x2={x0 + w} y2={gy} stroke="#ffffff" strokeOpacity={0.35} strokeWidth={0.4} />,
+        );
+      }
       return (
         <g>
           {decoracoes}
+          <PecaDefs />
+          <ellipse cx={elemento.x} cy={elemento.y + h / 2 + 1.5} rx={w / 2} ry={2} fill="url(#peca-sombra-chao)" />
+          {/* Rede sugerida (véu + fios) + moldura branca sólida por cima. */}
+          <rect x={x0} y={y0} width={w} height={h} fill="#ffffff" fillOpacity={0.06} />
+          {net}
           <rect
-            x={elemento.x - w / 2}
-            y={elemento.y - h / 2}
+            x={x0}
+            y={y0}
             width={w}
             height={h}
             fill="none"
@@ -675,13 +870,49 @@ export function ElementoSVG({
       const pontos = pontosSemRepetidos(elemento.pontos);
       const d = isConducao ? pathOndulado(pontos) : pontosParaPath(pontos);
       const markerId = `seta-${elemento.id}`;
+      const haloId = `seta-halo-${elemento.id}`;
       const cor = corParaHex(elemento.cor);
       return (
         <g>
           {decoracoes}
           <defs>
             <SetaMarker id={markerId} cor={cor} />
+            {/* Cabeça de halo (contorno branco) — ligeiramente maior, por trás da
+                cabeça colorida → contraste sobre qualquer fundo. */}
+            <marker
+              id={haloId}
+              viewBox="0 0 10 10"
+              markerWidth={16}
+              markerHeight={16}
+              refX={10}
+              refY={5}
+              orient="auto"
+              markerUnits="userSpaceOnUse"
+            >
+              <path
+                d="M0,0 L10,5 L0,10 z"
+                fill="none"
+                stroke="#ffffff"
+                strokeOpacity={0.85}
+                strokeWidth={2.4}
+                strokeLinejoin="round"
+              />
+            </marker>
           </defs>
+          {/* Halo (traço branco largo) por baixo do traço colorido. */}
+          <path
+            d={d}
+            fill="none"
+            stroke="#ffffff"
+            strokeOpacity={0.8}
+            strokeWidth={3.6}
+            strokeDasharray={dash}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            markerEnd={`url(#${haloId})`}
+            pathLength={estiloDesenho ? 1 : undefined}
+            style={estiloDesenho}
+          />
           <path
             d={d}
             fill="none"
@@ -696,12 +927,25 @@ export function ElementoSVG({
       );
     }
 
-    case "linha":
+    case "linha": {
+      const dLinha = pontosParaPath(pontosSemRepetidos(elemento.pontos));
       return (
         <g>
           {decoracoes}
+          {/* Halo branco por baixo para contraste sobre a cor do clube. */}
           <path
-            d={pontosParaPath(pontosSemRepetidos(elemento.pontos))}
+            d={dLinha}
+            fill="none"
+            stroke="#ffffff"
+            strokeOpacity={0.75}
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            pathLength={estiloDesenho ? 1 : undefined}
+            style={estiloDesenho}
+          />
+          <path
+            d={dLinha}
             fill="none"
             stroke={corParaHex(elemento.cor)}
             strokeWidth={1.5}
@@ -710,6 +954,7 @@ export function ElementoSVG({
           />
         </g>
       );
+    }
 
     case "texto":
       return (
@@ -839,6 +1084,9 @@ export function ElementoSVG({
       return (
         <g>
           {decoracoes}
+          <PecaDefs />
+          {/* Sombra do aro no chão → dá-lhe espessura/relevo. */}
+          <ellipse cx={elemento.x} cy={elemento.y + 2} rx={9} ry={4} fill="url(#peca-sombra-chao)" opacity={0.55} />
           <ellipse
             cx={elemento.x}
             cy={elemento.y}
@@ -856,6 +1104,15 @@ export function ElementoSVG({
             fill="none"
             stroke={hex}
             strokeWidth={1.5}
+          />
+          {/* Brilho na parte de cima do aro (reflexo). */}
+          <path
+            d={`M ${elemento.x - 8.4} ${elemento.y - 1.2} A 9 5 0 0 1 ${elemento.x + 8.4} ${elemento.y - 1.2}`}
+            fill="none"
+            stroke="#ffffff"
+            strokeOpacity={0.5}
+            strokeWidth={0.8}
+            strokeLinecap="round"
           />
         </g>
       );

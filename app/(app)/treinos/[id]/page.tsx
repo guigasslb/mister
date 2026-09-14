@@ -275,10 +275,17 @@ export default async function DetalheSessaoPage({
         )}
       </div>
 
-      {/* Melhoria 3/4.2 — arranque do modo treino (condução em campo). */}
+      {/* Melhoria 3/4.2 — arranque do modo treino (condução em campo). A biblioteca
+          alimenta o seletor rápido "Adicionar ao aquecimento" (§8.8.2). */}
       <IniciarTreinoBotao
         sessaoId={s.id}
         concluido={concluido}
+        biblioteca={biblioteca.map((b) => ({
+          id: b.id,
+          nome: b.nome,
+          categoriaPrincipal: b.categoriaPrincipal,
+          duracaoMin: b.duracaoMin,
+        }))}
         exercicios={exerciciosResolvidos.map((e) => ({
           id: e.id,
           nome: e.nome,
