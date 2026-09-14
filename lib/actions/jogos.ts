@@ -25,6 +25,7 @@ import {
   type Jogo,
   type EventoJogo,
   type Modalidade,
+  type TipoJogo,
 } from "@prisma/client";
 
 const PATH = "/jogos";
@@ -133,6 +134,7 @@ export async function listarJogos(
   escalaoId?: string,
   modalidade?: Modalidade,
   estado?: "aberto" | "fechado",
+  tipo?: TipoJogo,
 ): Promise<Resultado<JogoListaItem[]>> {
   const ctx = await contexto();
   if (ctx.estado === "erro") return erro(ctx.erro);
@@ -151,6 +153,10 @@ export async function listarJogos(
   const filtroEstado: Prisma.JogoWhereInput =
     estado === "aberto" ? { fechado: false } : estado === "fechado" ? { fechado: true } : {};
 
+  // Filtro opcional por tipo de jogo (§8.11): OFICIAL ("Oficial"/campeonato) ou
+  // AMIGAVEL ("Amigável"). Ausente → todos.
+  const filtroTipo: Prisma.JogoWhereInput = tipo ? { tipo } : {};
+
   const jogos = await prisma.jogo.findMany({
     where: {
       epocaId: ctx.epoca.id,
@@ -160,6 +166,7 @@ export async function listarJogos(
       // ou atividade pontual). Alimenta o seletor de secção do frontend (Fase 28).
       ...filtroModalidadeJogo(modalidade),
       ...filtroEstado,
+      ...filtroTipo,
     },
     include: INCLUDE_LISTA,
     orderBy: { data: "desc" },

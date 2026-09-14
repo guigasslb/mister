@@ -18,7 +18,9 @@ import {
   Rocket,
   PanelLeftClose,
   PanelLeftOpen,
+  Shield,
   ShieldCheck,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,25 +30,38 @@ const CHAVE_COLAPSO = "mister:sidebar-colapsada";
 // Abaixo (tablet, incl. iPad em paisagem a 1024/1194px) → colapsada por defeito.
 const MQ_DESKTOP = "(min-width: 1280px)";
 
-const ITEM_COMECAR = { href: "/vitoria-rapida", label: "Começar", icon: Rocket };
+// Item de navegação. `excluir` lista sub-rotas que NÃO devem ativar este item —
+// usado quando um item mais específico partilha o mesmo prefixo (ex.: «Jogos»
+// (`/jogos`) não deve ficar ativo em «Competições» (`/jogos/competicoes`), que é
+// um item próprio). §8.13.1.
+type ItemNav = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  excluir?: readonly string[];
+};
+
+const ITEM_COMECAR: ItemNav = { href: "/vitoria-rapida", label: "Começar", icon: Rocket };
 // Backoffice interno (/admin) — SÓ visível a admins de plataforma
 // (Utilizador.isAdmin na BD, §21.1). Colocado no fim da lista, isolado das
 // vistas de clube. O acesso é sempre re-validado server-side por
 // `exigirAdminPlataforma` no layout do grupo (admin); este item é só o atalho.
-const ITEM_ADMIN = { href: "/admin", label: "Backoffice", icon: ShieldCheck };
+const ITEM_ADMIN: ItemNav = { href: "/admin", label: "Backoffice", icon: ShieldCheck };
 
 // Ordem pensada para a bottom-nav (móvel): os 4 primeiros são fixos. A Agenda é
-// a vista central de eventos do produto (treinos + jogos + reuniões, §8.13.1),
-// por isso é item primário — e SUBSTITUI os antigos itens separados de Treinos e
-// Jogos no menu, que eram redundantes com a Agenda. As rotas /treinos e /jogos
-// mantêm-se (vistas de gestão), acessíveis a partir da própria Agenda (detalhes
-// de cada evento + botões «Nova sessão»/«Novo jogo»). O scoping da Agenda pelos
-// escalões legíveis é feito em obterAgendaClube (§6.4, F P2.2) — visível a todos
-// os treinadores autenticados.
-const ITENS_BASE = [
+// a vista central de eventos do produto (treinos + jogos + reuniões, §8.13.1).
+// 🔁 2026-09-13 — «Jogos» (`/jogos`) volta a ser item de navegação, a seguir à
+// Agenda e antes de Exercícios: a vista de gestão de jogos passa a ser alcançável
+// diretamente pelo menu (além do acesso pela Agenda). `excluir` evita que fique
+// ativo em `/jogos/competicoes` (item próprio «Competições»). A rota /treinos
+// mantém-se como vista de gestão acessível a partir da própria Agenda. O scoping
+// pelos escalões legíveis é feito server-side (§6.4/§6.5) — visível a todos os
+// treinadores autenticados.
+const ITENS_BASE: ItemNav[] = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
   { href: "/plantel", label: "Plantel", icon: Users },
   { href: "/agenda", label: "Agenda", icon: CalendarRange },
+  { href: "/jogos", label: "Jogos", icon: Shield, excluir: ["/jogos/competicoes"] },
   { href: "/exercicios", label: "Exercícios", icon: Dumbbell },
   { href: "/mano-a-mano", label: "Mano-a-Mano", icon: Swords },
   { href: "/jogos/competicoes", label: "Competições", icon: Trophy },
@@ -147,6 +162,15 @@ export function Navegacao({
   const ativo = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
+  // Estado ativo de um item, respeitando `excluir` (sub-rotas que pertencem a
+  // outro item mais específico — ex.: /jogos/competicoes não ativa «Jogos»).
+  const ativoDe = (item: ItemNav) => {
+    if (!ativo(item.href)) return false;
+    if (item.excluir?.some((p) => pathname === p || pathname.startsWith(p + "/")))
+      return false;
+    return true;
+  };
+
   return (
     <>
       {/* ── Sidebar (tablet / PC) ──
@@ -183,8 +207,9 @@ export function Navegacao({
           </button>
         </div>
         <ul className="flex flex-col gap-1 px-3">
-          {ITENS.map(({ href, label, icon: Icon }) => {
-            const on = ativo(href);
+          {ITENS.map((item) => {
+            const { href, label, icon: Icon } = item;
+            const on = ativoDe(item);
             return (
               <li key={href}>
                 <Link
@@ -217,14 +242,16 @@ export function Navegacao({
               onClick={() => setMaisAberto(false)}
             />
             <div className="absolute bottom-full left-0 right-0 z-40 border-t border-cinza-200 bg-white shadow-md">
-              {ITENS_MAIS.map(({ href, label, icon: Icon }) => (
+              {ITENS_MAIS.map((item) => {
+                const { href, label, icon: Icon } = item;
+                return (
                 <Link
                   key={href}
                   href={href}
                   onClick={() => setMaisAberto(false)}
                   className={cn(
                     "flex min-h-[44px] items-center gap-3 px-6 py-2 text-corpo font-medium",
-                    ativo(href)
+                    ativoDe(item)
                       ? "bg-primary/10 text-primary"
                       : "text-cinza-600 active:bg-primary/5",
                   )}
@@ -232,14 +259,16 @@ export function Navegacao({
                   <Icon className="h-5 w-5" />
                   <span>{label}</span>
                 </Link>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
 
         <div className="flex h-16 items-stretch">
-          {ITENS_BOTTOM.map(({ href, label, icon: Icon }) => {
-            const on = ativo(href);
+          {ITENS_BOTTOM.map((item) => {
+            const { href, label, icon: Icon } = item;
+            const on = ativoDe(item);
             return (
               <Link
                 key={href}
@@ -259,7 +288,7 @@ export function Navegacao({
             );
           })}
           {(() => {
-            const on = maisAberto || ITENS_MAIS.some(({ href }) => ativo(href));
+            const on = maisAberto || ITENS_MAIS.some((item) => ativoDe(item));
             return (
               <button
                 onClick={() => setMaisAberto((v) => !v)}
