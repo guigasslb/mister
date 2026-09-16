@@ -911,6 +911,39 @@ function CampoMetrica({
     );
   }
 
+  // ESCALA_1_3: 1 a 3 → botões toggle inline
+  if (metrica.tipo === "ESCALA_1_3") {
+    return (
+      <div className="space-y-1">
+        {label}
+        <div
+          className="flex gap-1.5"
+          role="group"
+          aria-label={metrica.nome}
+        >
+          {[1, 2, 3].map((n) => {
+            const ativo = valor === n;
+            return (
+              <button
+                key={n}
+                type="button"
+                aria-pressed={ativo}
+                onClick={() => onChange(ativo ? null : n)}
+                className={`flex h-11 min-w-[44px] flex-1 items-center justify-center rounded-md border text-corpo font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                  ativo
+                    ? "border-primary bg-primary text-white"
+                    : "border-cinza-200 text-cinza-700 hover:bg-primary/5"
+                }`}
+              >
+                {n}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // NUMERO
   return (
     <div className="space-y-1">

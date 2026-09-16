@@ -16,6 +16,7 @@ import {
   type SuspensaoPendente,
   type EstatisticaInput,
 } from "@/lib/schemas/jogo";
+import { valorMetricaValido } from "@/lib/schemas/metrica";
 import { modalidadeEfetiva, filtroModalidadeJogo } from "@/lib/modalidade-escalao";
 import { derivarEstatisticasDeEventos } from "@/lib/eventos-para-estatisticas";
 import {
@@ -491,9 +492,23 @@ export async function guardarEstatisticas(
   // Métricas ativas do clube (para validar os metricaId recebidos)
   const metricasAtivas = await prisma.metricaConfig.findMany({
     where: { clubeId },
-    select: { id: true },
+    select: { id: true, tipo: true },
   });
   const idsMetricasValidas = new Set(metricasAtivas.map((m) => m.id));
+  // Tipo por métrica — revalida o valor em função do tipo (§8.4): BOOLEANO 0/1,
+  // ESCALA 1..5, ESCALA_1_3 1..3, NUMERO ≥ 0 (não confia na UI).
+  const tipoPorMetrica = new Map(metricasAtivas.map((m) => [m.id, m.tipo]));
+  for (const e of validos) {
+    for (const v of e.valoresMetricas ?? []) {
+      const tipo = tipoPorMetrica.get(v.metricaId);
+      if (!tipo) continue; // métrica desconhecida — filtrada na gravação
+      if (!valorMetricaValido(tipo, v.valor)) {
+        return erro("Valor inválido para o tipo de métrica.", {
+          [e.atletaId]: "Valor inválido para o tipo de métrica.",
+        });
+      }
+    }
+  }
 
   await prisma.$transaction(async (tx) => {
     for (const e of validos) {

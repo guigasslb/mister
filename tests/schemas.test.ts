@@ -522,6 +522,10 @@ describe("presencaSchema", () => {
     expect(presencaSchema.safeParse({ atletaId: CUID, estado: "FERIAS" }).success).toBe(false);
   });
 
+  it("aceita estado null (limpar/remover a presença — Repor)", () => {
+    expect(presencaSchema.safeParse({ atletaId: CUID, estado: null }).success).toBe(true);
+  });
+
   it("aceita motivo de falta (F1) e null", () => {
     for (const motivo of ["LESAO", "DOENCA", "OUTRO", "SEM_JUSTIFICACAO", null]) {
       expect(
@@ -612,5 +616,47 @@ describe("sessaoExercicioOverrideSchema — overrides do plano imprimível", () 
     expect(
       sessaoExercicioOverrideSchema.safeParse({ espacoOverride: "y".repeat(61) }).success,
     ).toBe(false);
+  });
+});
+
+import { valorMetricaValido, LABEL_TIPO } from "@/lib/schemas/metrica";
+
+describe("valorMetricaValido (§8.4 — limites de valor por tipo)", () => {
+  it("ESCALA_1_3 aceita 1, 2 e 3", () => {
+    expect(valorMetricaValido("ESCALA_1_3", 1)).toBe(true);
+    expect(valorMetricaValido("ESCALA_1_3", 2)).toBe(true);
+    expect(valorMetricaValido("ESCALA_1_3", 3)).toBe(true);
+  });
+
+  it("ESCALA_1_3 rejeita 0, 4 e valores fora do intervalo", () => {
+    expect(valorMetricaValido("ESCALA_1_3", 0)).toBe(false);
+    expect(valorMetricaValido("ESCALA_1_3", 4)).toBe(false);
+    expect(valorMetricaValido("ESCALA_1_3", -1)).toBe(false);
+  });
+
+  it("ESCALA_1_3 rejeita valores não-inteiros", () => {
+    expect(valorMetricaValido("ESCALA_1_3", 2.5)).toBe(false);
+  });
+
+  it("ESCALA mantém o intervalo 1..5", () => {
+    expect(valorMetricaValido("ESCALA", 5)).toBe(true);
+    expect(valorMetricaValido("ESCALA", 6)).toBe(false);
+    expect(valorMetricaValido("ESCALA", 0)).toBe(false);
+  });
+
+  it("BOOLEANO aceita 0/1 e rejeita o resto", () => {
+    expect(valorMetricaValido("BOOLEANO", 0)).toBe(true);
+    expect(valorMetricaValido("BOOLEANO", 1)).toBe(true);
+    expect(valorMetricaValido("BOOLEANO", 2)).toBe(false);
+  });
+
+  it("NUMERO aceita inteiros ≥ 0", () => {
+    expect(valorMetricaValido("NUMERO", 0)).toBe(true);
+    expect(valorMetricaValido("NUMERO", 42)).toBe(true);
+    expect(valorMetricaValido("NUMERO", -1)).toBe(false);
+  });
+
+  it("LABEL_TIPO cobre todos os tipos, incluindo ESCALA_1_3", () => {
+    expect(LABEL_TIPO.ESCALA_1_3).toBeTruthy();
   });
 });

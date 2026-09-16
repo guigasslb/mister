@@ -100,6 +100,11 @@ export function MarcadorPresencas({
   const presentes = valores.filter((r) => r.estado != null && PRESENTES.has(r.estado)).length;
   const faltas = valores.filter((r) => r.estado != null && !PRESENTES.has(r.estado)).length;
 
+  // Há alguma presença marcada? Base para habilitar "Repor" (limpar tudo): só faz
+  // sentido quando existe pelo menos um atleta marcado — inclui presenças já
+  // guardadas, permitindo limpar marcações feitas por engano após guardar.
+  const haMarcacoes = valores.some((r) => r.estado != null);
+
   function mudarEstado(atletaId: string, estado: EstadoPresenca) {
     if (soLeitura) return;
     setRegistos((prev) => ({
@@ -152,23 +157,38 @@ export function MarcadorPresencas({
     });
   }
 
-  /** Repõe o estado tal como estava guardado (descarta alterações não guardadas). */
+  /**
+   * Limpa todas as presenças, repondo cada atleta a "por marcar" (estado null).
+   * Quando havia presenças guardadas, o estado passa a diferir do servidor
+   * (`alterado` fica true) e o botão "Guardar presenças" persiste a limpeza —
+   * `marcarPresencas` remove os registos correspondentes. Serve para desfazer
+   * marcações feitas por engano (§8.5).
+   */
   function repor() {
-    setRegistos(construirInicial());
+    if (soLeitura) return;
+    setRegistos((prev) => {
+      const proximo: Record<string, RegistoPresenca> = {};
+      for (const id of Object.keys(prev))
+        proximo[id] = { estado: null, motivo: null, justificacao: null };
+      return proximo;
+    });
   }
 
   function guardar() {
     // Guardas defensivas: nada a fazer se a sessão está fechada ou sem alterações.
     if (soLeitura || !alterado) return;
-    // Atletas por marcar (estado null) são ignorados: se o treinador não marcou,
-    // não se grava nada para esse atleta.
+    // Envia-se um registo por atleta quando:
+    //  - está marcado (estado != null) → upsert no servidor; ou
+    //  - foi limpo mas tinha presença guardada (existe em `presencasIniciais`)
+    //    → estado null sinaliza a remoção do registo (Repor).
+    // Atletas por marcar que nunca tiveram registo são ignorados (nada a fazer).
     const payload = atletas
-      .filter((a) => registos[a.id].estado != null)
+      .filter((a) => registos[a.id].estado != null || presencasIniciais[a.id] != null)
       .map((a) => {
         const r = registos[a.id];
         return {
           atletaId: a.id,
-          estado: r.estado as EstadoPresenca,
+          estado: r.estado, // null → limpar (remover) no servidor
           motivo: r.motivo,
           justificacao: r.justificacao?.trim() ? r.justificacao : undefined,
         };
@@ -217,7 +237,7 @@ export function MarcadorPresencas({
             <ListChecks className="h-4 w-4" />
             Marcar todos presentes
           </Button>
-          <Button type="button" variant="ghost" onClick={repor} disabled={!alterado}>
+          <Button type="button" variant="ghost" onClick={repor} disabled={!haMarcacoes}>
             <RotateCcw className="h-4 w-4" />
             Repor
           </Button>

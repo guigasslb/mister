@@ -1521,6 +1521,7 @@ enum TipoMetrica {
   NUMERO
   BOOLEANO
   ESCALA // 1 a 5
+  ESCALA_1_3 // 1 a 3
 }
 
 // §8.20: onde a métrica configurável é registada. JOGO = grelha de estatísticas

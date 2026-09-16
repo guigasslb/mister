@@ -1054,7 +1054,7 @@ interface ValorMetricaEquipaLinha {
 
 /**
  * Constrói rankings por métrica configurável para toda a equipa.
- * Agrega por atleta (BOOLEANO conta registos ≠ 0; NUMERO soma; ESCALA média),
+ * Agrega por atleta (BOOLEANO conta registos ≠ 0; NUMERO soma; ESCALA/ESCALA_1_3 média),
  * ordena decrescente e devolve o top 10 por métrica.
  */
 function montarRankingsMetricas(valores: ValorMetricaEquipaLinha[]): RankingMetrica[] {
@@ -1088,7 +1088,7 @@ function montarRankingsMetricas(valores: ValorMetricaEquipaLinha[]): RankingMetr
           const valor =
             m.tipo === "BOOLEANO"
               ? a.trues
-              : m.tipo === "ESCALA"
+              : m.tipo === "ESCALA" || m.tipo === "ESCALA_1_3"
                 ? a.jogos > 0
                   ? a.soma / a.jogos
                   : 0

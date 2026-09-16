@@ -5,7 +5,11 @@ import { prisma } from "@/lib/db";
 import { obterClubeIdAtual } from "@/lib/epoca-context";
 import { exigirCapacidade, podeLerEscalao } from "@/lib/permissoes";
 import { ok, erro, erroDeValidacao, type Resultado } from "@/lib/utils";
-import { metricaSchema, guardarMetricasSessaoSchema } from "@/lib/schemas/metrica";
+import {
+  metricaSchema,
+  guardarMetricasSessaoSchema,
+  valorMetricaValido,
+} from "@/lib/schemas/metrica";
 import type { MetricaConfig } from "@prisma/client";
 
 const PATH = "/definicoes/metricas";
@@ -232,9 +236,12 @@ export async function guardarMetricasSessao(
   // Só métricas de treino ativas do clube são aceites.
   const metricasValidas = await prisma.metricaConfig.findMany({
     where: { clubeId, ativa: true, contexto: { in: ["TREINO", "AMBOS"] } },
-    select: { id: true, aplicaSoGuardaRedes: true },
+    select: { id: true, aplicaSoGuardaRedes: true, tipo: true },
   });
   const idsValidos = new Set(metricasValidas.map((m) => m.id));
+  // Tipo por métrica — usado para revalidar o valor (§8.4: BOOLEANO 0/1,
+  // ESCALA 1..5, ESCALA_1_3 1..3, NUMERO ≥ 0).
+  const tipoPorMetrica = new Map(metricasValidas.map((m) => [m.id, m.tipo]));
   // §8.24.3 (RN-GR-2): métricas que só se aplicam a guarda-redes.
   const metricasSoGR = new Set(
     metricasValidas.filter((m) => m.aplicaSoGuardaRedes).map((m) => m.id),
@@ -266,6 +273,20 @@ export async function guardarMetricasSessao(
       });
     }
   }
+  // §8.4: revalida o valor de cada métrica em função do seu tipo (não confia na
+  // UI). Ex.: ESCALA_1_3 só aceita 1..3; ESCALA só 1..5; BOOLEANO 0/1.
+  for (const linha of linhasValidas) {
+    for (const v of linha.valores) {
+      const tipo = tipoPorMetrica.get(v.metricaId);
+      if (!tipo) continue; // métrica desconhecida — ignorada mais à frente
+      if (!valorMetricaValido(tipo, v.valor)) {
+        return erro("Valor inválido para o tipo de métrica.", {
+          [linha.atletaId]: "Valor inválido para o tipo de métrica.",
+        });
+      }
+    }
+  }
+
   const atletasSubmetidos = linhasValidas.map((l) => l.atletaId);
 
   const novos = linhasValidas.flatMap((linha) =>

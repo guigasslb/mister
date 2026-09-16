@@ -161,6 +161,31 @@ describe("guardarMetricasSessao", () => {
     });
   });
 
+  it("§8.4: rejeita valor fora do intervalo para métrica ESCALA_1_3", async () => {
+    p.metricaConfig.findMany.mockResolvedValue([
+      { id: METRICA_A, nome: "Atitude", tipo: "ESCALA_1_3", ordem: 0, aplicaSoGuardaRedes: false },
+    ]);
+    const r = await guardarMetricasSessao(SESSAO, [
+      { atletaId: ATLETA_1, valores: [{ metricaId: METRICA_A, valor: 4 }] },
+    ]);
+    expect(r.sucesso).toBe(false);
+    expect(p.valorMetricaSessao.deleteMany).not.toHaveBeenCalled();
+    expect(p.valorMetricaSessao.createMany).not.toHaveBeenCalled();
+  });
+
+  it("§8.4: aceita valor 3 para métrica ESCALA_1_3", async () => {
+    p.metricaConfig.findMany.mockResolvedValue([
+      { id: METRICA_A, nome: "Atitude", tipo: "ESCALA_1_3", ordem: 0, aplicaSoGuardaRedes: false },
+    ]);
+    const r = await guardarMetricasSessao(SESSAO, [
+      { atletaId: ATLETA_1, valores: [{ metricaId: METRICA_A, valor: 3 }] },
+    ]);
+    expect(r.sucesso).toBe(true);
+    expect(p.valorMetricaSessao.createMany).toHaveBeenCalledWith({
+      data: [{ metricaId: METRICA_A, sessaoId: SESSAO, atletaId: ATLETA_1, valor: 3 }],
+    });
+  });
+
   it("§8.24.3 (RN-GR-2): rejeita métrica de GR num atleta não-GR", async () => {
     // METRICA_A passa a ser exclusiva de GR; ATLETA_1 não é GR (FIXO).
     p.metricaConfig.findMany.mockResolvedValue([

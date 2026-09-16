@@ -149,7 +149,9 @@ export const LABEL_MOTIVO_FALTA: Record<(typeof MOTIVOS_FALTA)[number], string> 
 
 export const presencaSchema = z.object({
   atletaId: z.string().cuid(),
-  estado: z.enum(ESTADOS_PRESENCA),
+  // `estado` a null significa "limpar/remover a presença" deste atleta (Repor —
+  // §8.5): o registo guardado é apagado no servidor. Um estado não-nulo faz upsert.
+  estado: z.enum(ESTADOS_PRESENCA).nullable(),
   // Motivo da falta (F1 — lesões como motivo, secção 8.5).
   motivo: z.enum(MOTIVOS_FALTA).nullable().optional(),
   justificacao: z.string().max(300).optional(),

@@ -694,9 +694,18 @@ export async function marcarPresencas(
   const membro = await obterMembroAtual();
   const marcadoPorId = membro?.membroId ?? null;
 
+  // Estado a null → limpar (Repor): o registo do atleta é removido. Estado
+  // não-nulo → upsert. Construímos as operações do lote conforme cada caso.
   // F1: a presença guarda o escalão da sessão (analytics por escalão) e o motivo da falta.
-  await prisma.$transaction(
-    parsed.data.map((p) =>
+  const operacoes: Prisma.PrismaPromise<unknown>[] = [];
+  const idsParaLimpar: string[] = [];
+  for (const p of parsed.data) {
+    if (p.estado === null) {
+      // Marcado para limpeza — apagado em lote abaixo (deleteMany idempotente).
+      idsParaLimpar.push(p.atletaId);
+      continue;
+    }
+    operacoes.push(
       prisma.presenca.upsert({
         where: { sessaoId_atletaId: { sessaoId, atletaId: p.atletaId } },
         create: {
@@ -716,8 +725,17 @@ export async function marcarPresencas(
           marcadoPorId,
         },
       }),
-    ),
-  );
+    );
+  }
+  // Apaga as presenças limpas (idempotente: nada a remover se o atleta ainda não
+  // tinha registo guardado).
+  if (idsParaLimpar.length > 0) {
+    operacoes.push(
+      prisma.presenca.deleteMany({ where: { sessaoId, atletaId: { in: idsParaLimpar } } }),
+    );
+  }
+
+  if (operacoes.length > 0) await prisma.$transaction(operacoes);
   revalidatePath(`${PATH}/${sessaoId}`);
   return ok(undefined);
 }

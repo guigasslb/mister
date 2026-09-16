@@ -389,6 +389,31 @@ function CampoMetrica({
     );
   }
 
+  if (tipo === "ESCALA_1_3") {
+    return (
+      <div className="flex gap-1.5" role="group" aria-label="Escala 1 a 3">
+        {[1, 2, 3].map((n) => {
+          const ativo = valor === n;
+          return (
+            <button
+              key={n}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => onChange(ativo ? null : n)}
+              className={`flex h-11 w-11 items-center justify-center rounded-md border text-corpo font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                ativo
+                  ? "border-primary bg-primary text-white"
+                  : "border-cinza-200 text-cinza-700 hover:bg-primary/5"
+              }`}
+            >
+              {n}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <Input
       type="number"

@@ -129,10 +129,11 @@ const MEIO_Y = CAMPO_H / 2;
 function FundoDefs() {
   return (
     <defs>
-      <radialGradient id="campo-fundo-vinheta" cx="50%" cy="42%" r="72%">
-        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.16" />
-        <stop offset="45%" stopColor="#ffffff" stopOpacity="0" />
-        <stop offset="100%" stopColor="#000000" stopOpacity="0.30" />
+      <radialGradient id="campo-fundo-vinheta" cx="50%" cy="42%" r="75%">
+        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.18" />
+        <stop offset="42%" stopColor="#ffffff" stopOpacity="0" />
+        <stop offset="78%" stopColor="#000000" stopOpacity="0.12" />
+        <stop offset="100%" stopColor="#000000" stopOpacity="0.36" />
       </radialGradient>
       <filter
         id="campo-linha-relevo"
@@ -168,6 +169,15 @@ function Relvado() {
         height={CAMPO_H}
         fill="url(#campo-fundo-vinheta)"
       />
+      {/* Ripado do pavilhão: linhas horizontais finas (textura de soalho/parquet)
+          por cima do acento do clube. Muito ténues para não competir com as
+          marcações brancas do campo (que se mantêm intactas). */}
+      <g stroke={BRANCO} strokeOpacity={0.06} strokeWidth={0.5}>
+        {Array.from({ length: Math.floor(CAMPO_H / 10) - 1 }, (_, i) => {
+          const y = (i + 1) * 10;
+          return <line key={i} x1={0} y1={y} x2={CAMPO_W} y2={y} />;
+        })}
+      </g>
       <g filter="url(#campo-linha-relevo)">
         <rect
           x={4}
@@ -692,52 +702,152 @@ export function ElementoSVG({
       // caber dentro do círculo do jogador (r=8). Números/rótulos curtos mantêm 8.
       const tamanhoEtiqueta =
         etiqueta != null && etiqueta.length > 3 ? 5 : etiqueta != null && etiqueta.length > 2 ? 6 : 8;
+      const cx = elemento.x;
+      const cy = elemento.y;
+      // §11.3 (visual 3/4): figura humana estilizada vista em ângulo 3/4 (de
+      // trás/costas, como um jogador de camisola numerada), mas ANCORADA no ponto
+      // lógico (cx,cy) — o TRONCO fica centrado no ponto (o número assenta nas
+      // "costas"), coerente com o hit-test em círculo r≈8 à volta de (cx,cy).
+      // Cabeça acima, pernas abaixo; nada disto altera o centro lógico nem o raio.
+      // Tom de pele: neutro (adversário → cinza-ardósia; próprio → pele quente).
+      const peleFill = eAdversario ? "#94A3B8" : "#EAC7A2";
+      const peleStroke = eAdversario ? "#1E293B" : "#8A5A38";
+      // Geometria da figura, toda relativa a (cx,cy). O tronco é a "caixa" do
+      // número: ombros em cima (largos), cintura em baixo (estreita) → silhueta.
+      const headR = 3.2;
+      const headCy = cy - 8;
+      const torsoTop = cy - 4.8;
+      const torsoBot = cy + 5.2;
+      const ombroHalf = 7; // meia-largura aos ombros
+      const cinturaHalf = 4.8; // meia-largura à cintura
+      const golaHalf = 2.1; // meia-abertura da gola (pescoço)
+      // Camisola vista de trás: dois ombros arredondados com entalhe de gola ao
+      // centro, laterais a estreitar até à bainha curva na cintura.
+      const camisola =
+        `M ${cx - ombroHalf} ${torsoTop + 1.3}` +
+        ` Q ${cx - ombroHalf} ${torsoTop - 0.3} ${cx - ombroHalf + 1.7} ${torsoTop - 0.5}` +
+        ` L ${cx - golaHalf} ${torsoTop - 0.7}` +
+        ` Q ${cx} ${torsoTop + 1.5} ${cx + golaHalf} ${torsoTop - 0.7}` +
+        ` L ${cx + ombroHalf - 1.7} ${torsoTop - 0.5}` +
+        ` Q ${cx + ombroHalf} ${torsoTop - 0.3} ${cx + ombroHalf} ${torsoTop + 1.3}` +
+        ` L ${cx + cinturaHalf} ${torsoBot}` +
+        ` Q ${cx} ${torsoBot + 1.7} ${cx - cinturaHalf} ${torsoBot}` +
+        ` Z`;
+      // Calções: pequeno trapézio abaixo da bainha (tom escurecido da camisola).
+      const calcaoTop = torsoBot - 0.4;
+      const calcaoBot = torsoBot + 2.6;
+      const calcao =
+        `M ${cx - cinturaHalf} ${calcaoTop}` +
+        ` L ${cx + cinturaHalf} ${calcaoTop}` +
+        ` L ${cx + cinturaHalf - 0.7} ${calcaoBot}` +
+        ` L ${cx - cinturaHalf + 0.7} ${calcaoBot}` +
+        ` Z`;
       return (
         <g>
           {decoracoes}
           <PecaDefs />
-          {/* Sombra projetada no chão → o token "levanta" do campo. */}
+          {/* Sombra projetada no chão (aos pés) → a figura "levanta" do campo. */}
           <ellipse
-            cx={elemento.x}
-            cy={elemento.y + 8.5}
-            rx={7.6}
-            ry={2.6}
+            cx={cx}
+            cy={cy + 9.6}
+            rx={6.6}
+            ry={2.2}
             fill="url(#peca-sombra-chao)"
           />
-          {/* Disco base na cor da equipa + sombreado esférico (rim) + brilho. */}
-          <circle cx={elemento.x} cy={elemento.y} r={8} fill={preenchimento} />
-          <circle cx={elemento.x} cy={elemento.y} r={8} fill="url(#peca-rim)" />
-          <circle cx={elemento.x} cy={elemento.y} r={8} fill="url(#peca-luz)" />
-          {/* Bisel interior (luz de bordo) + contorno branco por cima. */}
+          {/* Pernas (tom de pele) — sugerem figura de pé, vista de trás. */}
+          <line
+            x1={cx - 2.3}
+            y1={calcaoBot - 0.4}
+            x2={cx - 2.3}
+            y2={cy + 9}
+            stroke={peleFill}
+            strokeWidth={2.2}
+            strokeLinecap="round"
+          />
+          <line
+            x1={cx + 2.3}
+            y1={calcaoBot - 0.4}
+            x2={cx + 2.3}
+            y2={cy + 9}
+            stroke={peleFill}
+            strokeWidth={2.2}
+            strokeLinecap="round"
+          />
+          {/* Calções (por trás da bainha do tronco). */}
+          <path d={calcao} fill={preenchimento} />
+          <path d={calcao} fill="#000000" fillOpacity={0.28} />
+          <line
+            x1={cx}
+            y1={calcaoTop + 0.4}
+            x2={cx}
+            y2={calcaoBot - 0.2}
+            stroke="#000000"
+            strokeOpacity={0.3}
+            strokeWidth={0.5}
+          />
+          {/* Mangas/braços: elipses verticais nos ombros (assomam nos lados). */}
+          <ellipse cx={cx - ombroHalf + 0.3} cy={cy - 2.4} rx={2.4} ry={3.2} fill={preenchimento} />
+          <ellipse cx={cx + ombroHalf - 0.3} cy={cy - 2.4} rx={2.4} ry={3.2} fill={preenchimento} />
+          <ellipse cx={cx - ombroHalf + 0.3} cy={cy - 2.4} rx={2.4} ry={3.2} fill="url(#peca-rim)" />
+          <ellipse cx={cx + ombroHalf - 0.3} cy={cy - 2.4} rx={2.4} ry={3.2} fill="url(#peca-rim)" />
+          {/* Antebraços/mãos (pele) a sair das mangas. */}
+          <circle cx={cx - ombroHalf + 0.1} cy={cy + 0.6} r={1.4} fill={peleFill} />
+          <circle cx={cx + ombroHalf - 0.1} cy={cy + 0.6} r={1.4} fill={peleFill} />
+          {/* Cabeça (tom de pele) acima dos ombros + sombreado esférico. */}
+          <circle cx={cx} cy={headCy} r={headR} fill={peleFill} />
+          <circle cx={cx} cy={headCy} r={headR} fill="url(#peca-rim)" />
+          <circle cx={cx} cy={headCy} r={headR} fill="url(#peca-luz)" />
           <circle
-            cx={elemento.x}
-            cy={elemento.y}
-            r={6.4}
+            cx={cx}
+            cy={headCy}
+            r={headR}
+            fill="none"
+            stroke={peleStroke}
+            strokeWidth={0.6}
+            strokeOpacity={0.9}
+          />
+          {/* Pescoço (liga a cabeça ao tronco, por trás da gola). */}
+          <rect
+            x={cx - 1.4}
+            y={headCy + headR - 0.6}
+            width={2.8}
+            height={2.4}
+            fill={peleFill}
+          />
+          {/* Tronco/camisola na cor da equipa (carrega o número nas costas) +
+              sombreado esférico (rim, lado sombra) + brilho especular (luz). */}
+          <path d={camisola} fill={preenchimento} />
+          <path d={camisola} fill="url(#peca-rim)" />
+          <path d={camisola} fill="url(#peca-luz)" />
+          {/* Gola em C (costas) sob a cabeça → reforça a leitura de "camisola". */}
+          <path
+            d={`M ${cx - golaHalf - 0.3} ${torsoTop - 0.2} Q ${cx} ${torsoTop + 2.2} ${cx + golaHalf + 0.3} ${torsoTop - 0.2}`}
             fill="none"
             stroke="#ffffff"
-            strokeOpacity={0.35}
-            strokeWidth={0.7}
+            strokeOpacity={0.6}
+            strokeWidth={0.9}
+            strokeLinecap="round"
           />
-          <circle
-            cx={elemento.x}
-            cy={elemento.y}
-            r={8}
+          {/* Contorno da camisola (branco; tracejado distingue o adversário). */}
+          <path
+            d={camisola}
             fill="none"
             stroke="#FFFFFF"
-            strokeWidth={1.5}
+            strokeWidth={1.3}
             strokeDasharray={eAdversario ? "3 2" : undefined}
+            strokeLinejoin="round"
           />
           {etiqueta != null && (
             <text
-              x={elemento.x}
-              y={elemento.y}
+              x={cx}
+              y={cy + 0.6}
               textAnchor="middle"
               dominantBaseline="central"
               fontSize={tamanhoEtiqueta}
               fontWeight={700}
               fill="#FFFFFF"
-              stroke="rgba(15,17,23,0.55)"
-              strokeWidth={0.6}
+              stroke="rgba(15,17,23,0.6)"
+              strokeWidth={0.7}
               paintOrder="stroke"
             >
               {etiqueta}
@@ -750,35 +860,55 @@ export function ElementoSVG({
     case "bola": {
       const bx = elemento.x;
       const by = elemento.y;
-      // Costuras clássicas: do pentágono central até ao bordo (5 gomos).
+      const R = 4;
+      const PRETO = "#15181f";
+      // Padrão clássico de bola de futebol legível a ~8px: pentágono central preto
+      // + 5 costuras finas até ao bordo + 5 pequenos pentágonos parciais junto à
+      // borda (entre costuras). Tudo contido dentro da esfera (sem recorte branco,
+      // que criava um efeito "estrela"); o sombreado esférico é aplicado por cima.
+      const rCentral = 1.5;
+      const centro = pontosPoligono(bx, by, rCentral, 5, 0);
       const seams = [];
       for (let i = 0; i < 5; i++) {
         const a = ((i * 72 - 90) * Math.PI) / 180;
         seams.push(
           <line
             key={i}
-            x1={bx + 1.5 * Math.cos(a)}
-            y1={by + 1.5 * Math.sin(a)}
-            x2={bx + 3.7 * Math.cos(a)}
-            y2={by + 3.7 * Math.sin(a)}
-            stroke="#15181f"
-            strokeWidth={0.45}
+            x1={bx + rCentral * 0.9 * Math.cos(a)}
+            y1={by + rCentral * 0.9 * Math.sin(a)}
+            x2={bx + 3.5 * Math.cos(a)}
+            y2={by + 3.5 * Math.sin(a)}
+            stroke={PRETO}
+            strokeWidth={0.4}
+            strokeLinecap="round"
           />,
+        );
+      }
+      const patches = [];
+      for (let i = 0; i < 5; i++) {
+        // Entre costuras (offset 36°); pequenos e bem dentro do bordo (< R).
+        const a = ((i * 72 - 90 + 36) * Math.PI) / 180;
+        const px = bx + 3.0 * Math.cos(a);
+        const py = by + 3.0 * Math.sin(a);
+        // Vértice apontado para fora (aresta plana virada ao centro).
+        patches.push(
+          <polygon key={i} points={pontosPoligono(px, py, 0.85, 5, (a * 180) / Math.PI + 90)} fill={PRETO} />,
         );
       }
       return (
         <g>
           {decoracoes}
           <PecaDefs />
-          <ellipse cx={bx} cy={by + 4.4} rx={3.6} ry={1.4} fill="url(#peca-sombra-chao)" />
-          {/* Esfera branca + painéis (pentágono central) + costuras. */}
-          <circle cx={bx} cy={by} r={4} fill="#FFFFFF" />
-          <polygon points={pontosPoligono(bx, by, 1.5, 5, 0)} fill="#15181f" />
+          <ellipse cx={bx} cy={by + 4.4} rx={3.7} ry={1.4} fill="url(#peca-sombra-chao)" />
+          {/* Esfera branca + painéis (pentágono central + costuras + bordo). */}
+          <circle cx={bx} cy={by} r={R} fill="#FFFFFF" />
           {seams}
-          {/* Sombreado esférico (core shadow + highlight). */}
-          <circle cx={bx} cy={by} r={4} fill="url(#peca-rim)" />
-          <circle cx={bx} cy={by} r={4} fill="url(#peca-luz)" />
-          <circle cx={bx} cy={by} r={4} fill="none" stroke="#1A1D29" strokeWidth={0.6} />
+          <polygon points={centro} fill={PRETO} />
+          {patches}
+          {/* Sombreado esférico (core shadow + highlight) + contorno. */}
+          <circle cx={bx} cy={by} r={R} fill="url(#peca-rim)" />
+          <circle cx={bx} cy={by} r={R} fill="url(#peca-luz)" />
+          <circle cx={bx} cy={by} r={R} fill="none" stroke="#1A1D29" strokeWidth={0.6} />
         </g>
       );
     }
@@ -787,31 +917,44 @@ export function ElementoSVG({
       const { hex, stroke } = coneCor(elemento.cor);
       const cx = elemento.x;
       const cy = elemento.y;
-      const apexY = cy - 7;
+      const apexY = cy - 7.5;
       const baseY = cy + 5;
-      const baseHalf = 5;
+      const baseHalf = 5.2;
       // Meia-largura do cone a uma dada altura (interpola apex→base).
       const halfAt = (yy: number) => baseHalf * ((yy - apexY) / (baseY - apexY));
-      const bandTop = cy - 1.5;
-      const bandBot = cy + 1.2;
+      const bandTop = cy - 1.8;
+      const bandBot = cy + 1;
       const htT = halfAt(bandTop);
       const htB = halfAt(bandBot);
-      const body = `${cx},${apexY} ${cx - baseHalf},${baseY} ${cx + baseHalf},${baseY}`;
+      // Corpo com apex arredondado: quase-triângulo cujo topo é uma curva suave.
+      const body =
+        `M ${cx - baseHalf} ${baseY}` +
+        ` L ${cx - 1.1} ${apexY + 1.2}` +
+        ` Q ${cx} ${apexY - 0.6} ${cx + 1.1} ${apexY + 1.2}` +
+        ` L ${cx + baseHalf} ${baseY} Z`;
       const band = `${cx - htT},${bandTop} ${cx + htT},${bandTop} ${cx + htB},${bandBot} ${cx - htB},${bandBot}`;
-      const streak = `${cx - 0.3},${cy - 5} ${cx + 0.7},${cy - 5} ${cx - 2.3},${cy + 4.4} ${cx - 3.5},${cy + 4.4}`;
+      const streak = `${cx - 0.3},${cy - 5} ${cx + 0.7},${cy - 5} ${cx - 2.6},${cy + 4.4} ${cx - 3.8},${cy + 4.4}`;
       return (
         <g>
           {decoracoes}
           <PecaDefs />
-          {/* Sombra no chão + "pé" elíptico escuro (assenta no solo). */}
-          <ellipse cx={cx + 1} cy={cy + 5.4} rx={6.4} ry={2.1} fill="url(#peca-sombra-chao)" />
-          <ellipse cx={cx} cy={baseY} rx={5.2} ry={1.7} fill={stroke} />
+          {/* Sombra projetada no chão. */}
+          <ellipse cx={cx + 1.4} cy={cy + 5.8} rx={7.2} ry={2.3} fill="url(#peca-sombra-chao)" />
+          {/* Base/flange quadrada sugerida por elipse larga (o cone assenta nela). */}
+          <ellipse cx={cx} cy={baseY + 0.8} rx={6.3} ry={2} fill={hex} stroke={stroke} strokeWidth={0.5} />
+          <ellipse cx={cx} cy={baseY + 0.8} rx={6.3} ry={2} fill="url(#peca-rim)" />
+          {/* "Pé" elíptico escuro (contacto com o solo). */}
+          <ellipse cx={cx} cy={baseY} rx={5.2} ry={1.6} fill={stroke} />
           {/* Corpo + gradiente vertical (topo claro→base escura). */}
-          <polygon points={body} fill={hex} stroke={stroke} strokeWidth={0.6} strokeLinejoin="round" />
-          <polygon points={body} fill="url(#peca-cone-brilho)" />
-          {/* Banda refletora + brilho especular lateral. */}
-          <polygon points={band} fill="#ffffff" fillOpacity={0.82} />
-          <polygon points={streak} fill="#ffffff" fillOpacity={0.4} />
+          <path d={body} fill={hex} stroke={stroke} strokeWidth={0.6} strokeLinejoin="round" />
+          <path d={body} fill="url(#peca-cone-brilho)" />
+          {/* Banda refletora + fio superior + brilho especular lateral. */}
+          <polygon points={band} fill="#ffffff" fillOpacity={0.85} />
+          <polygon points={band} fill="none" stroke={stroke} strokeWidth={0.3} strokeOpacity={0.35} />
+          <polygon points={streak} fill="#ffffff" fillOpacity={0.42} />
+          {/* Tampa arredondada do topo (realça o vértice em vez de bico agudo). */}
+          <circle cx={cx} cy={apexY + 0.6} r={1} fill={hex} stroke={stroke} strokeWidth={0.4} />
+          <circle cx={cx} cy={apexY + 0.6} r={1} fill="url(#peca-luz)" />
         </g>
       );
     }
@@ -919,6 +1062,8 @@ export function ElementoSVG({
             stroke={cor}
             strokeWidth={2}
             strokeDasharray={dash}
+            strokeLinecap="round"
+            strokeLinejoin="round"
             markerEnd={`url(#${markerId})`}
             pathLength={estiloDesenho ? 1 : undefined}
             style={estiloDesenho}
@@ -949,6 +1094,8 @@ export function ElementoSVG({
             fill="none"
             stroke={corParaHex(elemento.cor)}
             strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
             pathLength={estiloDesenho ? 1 : undefined}
             style={estiloDesenho}
           />
@@ -985,9 +1132,24 @@ export function ElementoSVG({
       const comprimento = degraus * cell;
       const meiaLargura = 6; // meia-largura da escada (separação dos trilhos)
       const x0 = -comprimento / 2;
+      // Sombra do degrau (fio escuro por baixo, ligeiramente deslocado → relevo).
+      const ESCADINHA_SOMBRA = "#8A6D00";
+      const rungsSombra = [];
       const rungs = [];
       for (let i = 0; i <= degraus; i++) {
         const rx = x0 + i * cell;
+        rungsSombra.push(
+          <line
+            key={`s${i}`}
+            x1={rx + 0.5}
+            y1={-meiaLargura + 0.6}
+            x2={rx + 0.5}
+            y2={meiaLargura + 0.6}
+            stroke={ESCADINHA_SOMBRA}
+            strokeWidth={1.2}
+            strokeOpacity={0.6}
+          />,
+        );
         rungs.push(
           <line
             key={i}
@@ -997,6 +1159,7 @@ export function ElementoSVG({
             y2={meiaLargura}
             stroke={ESCADINHA_COR}
             strokeWidth={1}
+            strokeLinecap="round"
           />,
         );
       }
@@ -1006,6 +1169,26 @@ export function ElementoSVG({
           <g
             transform={`translate(${elemento.x} ${elemento.y}) rotate(${elemento.angulo})`}
           >
+            {/* Sombra dos trilhos + degraus (relevo sobre o piso). */}
+            <line
+              x1={x0 + 0.5}
+              y1={-meiaLargura + 0.6}
+              x2={-x0 + 0.5}
+              y2={-meiaLargura + 0.6}
+              stroke={ESCADINHA_SOMBRA}
+              strokeWidth={1.6}
+              strokeOpacity={0.6}
+            />
+            <line
+              x1={x0 + 0.5}
+              y1={meiaLargura + 0.6}
+              x2={-x0 + 0.5}
+              y2={meiaLargura + 0.6}
+              stroke={ESCADINHA_SOMBRA}
+              strokeWidth={1.6}
+              strokeOpacity={0.6}
+            />
+            {rungsSombra}
             {/* Trilhos (lados compridos) */}
             <line
               x1={x0}
@@ -1014,6 +1197,7 @@ export function ElementoSVG({
               y2={-meiaLargura}
               stroke={ESCADINHA_COR}
               strokeWidth={1.4}
+              strokeLinecap="round"
             />
             <line
               x1={x0}
@@ -1022,8 +1206,19 @@ export function ElementoSVG({
               y2={meiaLargura}
               stroke={ESCADINHA_COR}
               strokeWidth={1.4}
+              strokeLinecap="round"
             />
             {rungs}
+            {/* Realce fino no topo dos trilhos (luz). */}
+            <line
+              x1={x0}
+              y1={-meiaLargura - 0.4}
+              x2={-x0}
+              y2={-meiaLargura - 0.4}
+              stroke="#FFF6C2"
+              strokeWidth={0.4}
+              strokeOpacity={0.7}
+            />
           </g>
         </g>
       );
@@ -1036,12 +1231,26 @@ export function ElementoSVG({
       const topo = -altura / 2;
       const base = altura / 2;
       const meia = largura / 2;
+      const BARRAS_SOMBRA = "#1E3A8A"; // azul escuro (relevo/lado sombreado)
       return (
         <g>
           {decoracoes}
+          <PecaDefs />
           <g
             transform={`translate(${elemento.x} ${elemento.y}) rotate(${elemento.angulo})`}
           >
+            {/* Sombra projetada no chão (aos pés das hastes). */}
+            <ellipse
+              cx={0}
+              cy={base + 0.8}
+              rx={meia + 1.5}
+              ry={1.6}
+              fill="url(#peca-sombra-chao)"
+            />
+            {/* Contorno escuro (lado sombreado) por baixo → dá volume às barras. */}
+            <line x1={-meia + 0.5} y1={topo + 0.5} x2={meia + 0.5} y2={topo + 0.5} stroke={BARRAS_SOMBRA} strokeWidth={2.4} strokeLinecap="round" />
+            <line x1={-meia + 0.5} y1={topo} x2={-meia + 0.5} y2={base + 0.4} stroke={BARRAS_SOMBRA} strokeWidth={2.4} strokeLinecap="round" />
+            <line x1={meia + 0.5} y1={topo} x2={meia + 0.5} y2={base + 0.4} stroke={BARRAS_SOMBRA} strokeWidth={2.4} strokeLinecap="round" />
             {/* Barra horizontal superior */}
             <line
               x1={-meia}
@@ -1069,6 +1278,17 @@ export function ElementoSVG({
               y2={base}
               stroke={BARRAS_COR}
               strokeWidth={2}
+              strokeLinecap="round"
+            />
+            {/* Realce de luz na barra superior. */}
+            <line
+              x1={-meia + 1}
+              y1={topo - 0.5}
+              x2={meia - 1}
+              y2={topo - 0.5}
+              stroke="#BFDBFE"
+              strokeWidth={0.6}
+              strokeOpacity={0.8}
               strokeLinecap="round"
             />
           </g>

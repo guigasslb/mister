@@ -75,7 +75,7 @@ beforeEach(() => {
     { id: GR1, posicoes: ["GUARDA_REDES"], participacoes: [{ id: "part1" }] },
   ]);
   p.metricaConfig.findMany.mockResolvedValue([
-    { id: METRICA_GR, aplicaSoGuardaRedes: true, contexto: "TREINO" },
+    { id: METRICA_GR, aplicaSoGuardaRedes: true, contexto: "TREINO", tipo: "ESCALA" },
   ]);
   // $transaction interativo: executa o callback com o próprio mock como tx.
   p.sessao.create.mockResolvedValue({ id: SESSAO });
@@ -138,7 +138,7 @@ describe("criarSessaoExternaGR", () => {
 
   it("rejeita métrica que não é de GR/treino (RN-GR-2)", async () => {
     p.metricaConfig.findMany.mockResolvedValue([
-      { id: METRICA_GR, aplicaSoGuardaRedes: false, contexto: "TREINO" },
+      { id: METRICA_GR, aplicaSoGuardaRedes: false, contexto: "TREINO", tipo: "ESCALA" },
     ]);
     const r = await criarSessaoExternaGR({
       ...inputBase(),

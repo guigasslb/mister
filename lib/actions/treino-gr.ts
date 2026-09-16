@@ -9,6 +9,7 @@ import {
   SessaoExternaGRSchema,
   type SessaoExternaGRFormData,
 } from "@/lib/schemas/treino";
+import { valorMetricaValido } from "@/lib/schemas/metrica";
 import type { TipoMetrica } from "@prisma/client";
 
 const PATH = "/treinos";
@@ -102,7 +103,7 @@ async function validarMetricasGR(
   const metricaIds = [...new Set(metricas.map((m) => m.metricaId))];
   const configs = await prisma.metricaConfig.findMany({
     where: { id: { in: metricaIds }, clubeId },
-    select: { id: true, aplicaSoGuardaRedes: true, contexto: true },
+    select: { id: true, aplicaSoGuardaRedes: true, contexto: true, tipo: true },
   });
   const mapa = new Map(configs.map((c) => [c.id, c]));
 
@@ -116,6 +117,10 @@ async function validarMetricasGR(
       return "Só métricas técnicas de GR (treino) podem ser registadas nesta sessão.";
     if (!participantesSet.has(m.atletaId))
       return "A métrica refere um atleta que não participa na sessão.";
+    // §8.4: revalida o valor em função do tipo (ESCALA_1_3 1..3, ESCALA 1..5,
+    // BOOLEANO 0/1, NUMERO ≥ 0) — não confia na UI.
+    if (!valorMetricaValido(config.tipo, m.valor))
+      return "Valor inválido para o tipo de métrica.";
   }
   return null;
 }

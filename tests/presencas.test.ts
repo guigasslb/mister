@@ -56,4 +56,16 @@ describe("lib/presencas — presencasAlteradas", () => {
     };
     expect(presencasAlteradas(inicial, atual)).toBe(true);
   });
+
+  it("Repor: limpar presenças guardadas conta como alteração (habilita Guardar)", () => {
+    // Estado carregado do servidor: dois atletas com presença guardada.
+    const inicial: Record<string, RegistoPresenca> = {
+      a: { estado: "PRESENTE", motivo: null, justificacao: null },
+      b: { estado: "FALTA", motivo: "DOENCA", justificacao: null },
+    };
+    // Após "Repor": tudo por marcar (estado null) — difere do servidor, pelo que
+    // "Guardar presenças" fica ativo para persistir a remoção.
+    const aposRepor: Record<string, RegistoPresenca> = { a: vazio(), b: vazio() };
+    expect(presencasAlteradas(inicial, aposRepor)).toBe(true);
+  });
 });
