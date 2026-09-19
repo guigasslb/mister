@@ -207,9 +207,14 @@ export default async function DetalheSessaoPage({
     .filter((e) => e.categoriaPrincipal === "GUARDA_REDES")
     .map((e) => ({
       id: e.id,
+      // Id do exercício original para o link ao detalhe (null = só snapshot §4.2.1).
+      exercicioId: e.exercicioId || null,
       nome: e.nome,
       duracaoMin: e.duracaoMin,
       parteTreino: e.parteTreino,
+      categoriaPrincipal: e.categoriaPrincipal,
+      // Diagrama para a miniatura de campo, igual à lista principal (§4.4).
+      diagrama: e.diagrama,
     }));
   const guardaRedesPresentes = s.presencas
     .filter(

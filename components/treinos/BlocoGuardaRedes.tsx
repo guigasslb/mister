@@ -1,11 +1,23 @@
-import { Clock } from "lucide-react";
-import { LABEL_PARTE_TREINO, type ParteTreinoValor } from "@/lib/schemas/exercicio";
+import Link from "next/link";
+import { Clock, ChevronRight } from "lucide-react";
+import {
+  LABEL_CATEGORIA,
+  LABEL_PARTE_TREINO,
+  type ParteTreinoValor,
+} from "@/lib/schemas/exercicio";
+import { DiagramaCartao } from "@/components/campo/DiagramaCartao";
+import type { CategoriaExercicioPrincipal } from "@prisma/client";
 
 type ExercicioGR = {
   id: string;
+  // Id do exercício original (link para o detalhe); null quando só há snapshot
+  // histórico (§4.2.1) — nesse caso o card não é clicável.
+  exercicioId: string | null;
   nome: string;
   duracaoMin: number | null;
   parteTreino: ParteTreinoValor | null;
+  categoriaPrincipal: CategoriaExercicioPrincipal | null;
+  diagrama: unknown;
 };
 
 type GuardaRedes = {
@@ -19,6 +31,9 @@ type GuardaRedes = {
  * exercícios de `categoriaPrincipal=GUARDA_REDES` da sessão e lista os guarda-redes
  * presentes (PRESENTE/ATRASADO com posição GR). Derivado da categoria — sem flag
  * nova em SessaoExercicio (RN-GR-3): se não houver exercícios GR, não é renderizado.
+ *
+ * Os exercícios usam o mesmo cartão visual da lista principal (§4.4): miniatura de
+ * campo + nome + categoria + fase + duração, clicáveis para o detalhe do exercício.
  */
 export function BlocoGuardaRedes({
   exercicios,
@@ -66,33 +81,63 @@ export function BlocoGuardaRedes({
         </div>
       )}
 
-      {/* Exercícios de GR da sessão */}
+      {/* Exercícios de GR da sessão — mesmo cartão da lista principal (§4.4). */}
       <div className="mt-4">
         <p className="text-legenda font-medium uppercase tracking-wide text-cinza-400">
           Exercícios de guarda-redes
         </p>
-        <ul className="mt-2 divide-y divide-cinza-100">
-          {exercicios.map((e) => (
-            <li
-              key={e.id}
-              className="flex flex-wrap items-center justify-between gap-2 py-2.5"
-            >
-              <span className="min-w-0 text-corpo text-cinza-900">{e.nome}</span>
-              <span className="flex flex-shrink-0 items-center gap-3 text-legenda text-cinza-500">
-                {e.parteTreino && (
-                  <span className="rounded bg-cinza-100 px-1.5 py-0.5 text-cinza-600">
-                    {LABEL_PARTE_TREINO[e.parteTreino]}
+        <ul className="mt-2 space-y-2">
+          {exercicios.map((e) => {
+            const meta = (
+              <>
+                <DiagramaCartao diagrama={e.diagrama} nome={e.nome} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-corpo font-medium text-cinza-900">
+                    {e.nome}
                   </span>
-                )}
-                {e.duracaoMin != null && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" />
-                    {e.duracaoMin} min
+                  <span className="block text-legenda text-cinza-500">
+                    {e.categoriaPrincipal
+                      ? LABEL_CATEGORIA[e.categoriaPrincipal]
+                      : "Sem categoria"}
+                    {e.duracaoMin ? ` · ${e.duracaoMin} min` : ""}
                   </span>
+                  <span className="mt-1 flex flex-wrap items-center gap-2 text-legenda text-cinza-500">
+                    {e.parteTreino && (
+                      <span className="rounded bg-cinza-100 px-1.5 py-0.5 text-cinza-600">
+                        {LABEL_PARTE_TREINO[e.parteTreino]}
+                      </span>
+                    )}
+                    {e.duracaoMin != null && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5" />
+                        {e.duracaoMin} min
+                      </span>
+                    )}
+                  </span>
+                </span>
+              </>
+            );
+
+            return (
+              <li
+                key={e.id}
+                className="overflow-hidden rounded-md border border-cinza-200 bg-white shadow-card"
+              >
+                {e.exercicioId ? (
+                  <Link
+                    href={`/exercicios/${e.exercicioId}`}
+                    className="flex items-center gap-2 p-2.5 transition-colors hover:bg-cinza-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    {meta}
+                    <ChevronRight className="h-4 w-4 flex-shrink-0 text-cinza-400" />
+                  </Link>
+                ) : (
+                  // Só snapshot histórico (§4.2.1): sem exercício original para linkar.
+                  <div className="flex items-center gap-2 p-2.5">{meta}</div>
                 )}
-              </span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </div>
     </section>

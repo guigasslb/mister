@@ -37,12 +37,11 @@ import {
 import {
   LABEL_CATEGORIA,
   CATEGORIAS,
-  diagramaSchema,
   PARTES_TREINO,
   LABEL_PARTE_TREINO,
   type ParteTreinoValor,
 } from "@/lib/schemas/exercicio";
-import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
+import { DiagramaCartao } from "@/components/campo/DiagramaCartao";
 import { ModalDiagramaExercicio } from "@/components/treinos/ModalDiagramaExercicio";
 import { AdaptarExercicioDialog } from "@/components/treinos/AdaptarExercicioDialog";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
@@ -114,48 +113,6 @@ const LABEL_FASE: Record<FaseKey, string> = {
   ...LABEL_PARTE_TREINO,
   [SEM_FASE]: "Sem fase",
 };
-
-/** Miniatura do diagrama, ou placeholder cinzento se o exercício não tiver campo. */
-function DiagramaCartao({
-  diagrama,
-  nome,
-  largura = 112,
-  className = "w-24 sm:w-28",
-}: {
-  diagrama: unknown;
-  nome: string;
-  largura?: number;
-  className?: string;
-}) {
-  const diag = diagramaSchema.safeParse(diagrama);
-  const temDiagrama = diag.success && diag.data.elementos.length > 0;
-
-  if (temDiagrama && diag.success) {
-    return (
-      <div
-        className={`flex-shrink-0 overflow-hidden rounded border border-cinza-200 ${className}`}
-      >
-        <MiniaturaCampo diagrama={diag.data} largura={largura} className="w-full" />
-      </div>
-    );
-  }
-  return (
-    <div
-      className={`flex h-16 flex-shrink-0 items-center justify-center rounded border border-dashed border-cinza-300 bg-cinza-50 ${className}`}
-      aria-label={`${nome} sem diagrama`}
-    >
-      <svg viewBox="0 0 24 24" className="h-6 w-6 text-cinza-300" fill="currentColor">
-        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <path
-          d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1"
-        />
-      </svg>
-    </div>
-  );
-}
 
 export function GestorExercicios({
   sessaoId,
