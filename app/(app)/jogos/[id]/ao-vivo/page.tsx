@@ -6,7 +6,6 @@ import { obterClubeAtivo } from "@/lib/permissoes";
 import { prisma } from "@/lib/db";
 import { maxTitulares, MINUTOS_POR_PARTE } from "@/lib/estatisticas";
 import { parseRelatorio } from "@/lib/relatorio-jogo";
-import { eEscalaoFormacaoJovem } from "@/lib/schemas/social";
 import {
   reconstruirEmCampo,
   type EventoLocal,
@@ -14,6 +13,7 @@ import {
   type TipoEventoAoVivo,
 } from "@/lib/jogo-ao-vivo-local";
 import { JogoAoVivo, type ConvocadoAoVivo } from "@/components/jogos/ao-vivo/JogoAoVivo";
+import type { Posicao } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Modo Jogo ao Vivo" };
 
@@ -66,9 +66,19 @@ export default async function ModoJogoAoVivoPage({
 
   const tamanhoFormato = maxTitulares(j.formato, j.modalidade);
   const duracaoParteMins = j.formato ? MINUTOS_POR_PARTE[j.formato] : 20;
-  // Default de partes: formação jovem tende a 4; seniores/futsal a 2 (§8.25.2).
-  const numeroPartesSugerido = eEscalaoFormacaoJovem(j.escalao.nome) ? 4 : 2;
+  // 🔁 v7 (§8.25.8): o nº de partes é definido na criação/edição do jogo; o Modo
+  // Jogo ao Vivo herda-o (já não se escolhe no arranque).
+  const numeroPartes = j.numeroPartes;
   const notasIniciais = parseRelatorio(j.relatorio).notasAoVivo;
+
+  // Arranque pré-carregado (§8.25.3): usa os titulares + posições do plano tático
+  // do jogo, se existir. Sem plano tático, fica vazio e o treinador escolhe a
+  // partir do pool de convocados (comportamento anterior). Limitado ao tamanho do
+  // formato; o treinador pode ajustar antes de iniciar.
+  const titularesIniciais: { atletaId: string; posicao: Posicao | null }[] = j.convocatorias
+    .filter((c) => c.convocado && c.titularPrevisto)
+    .slice(0, tamanhoFormato)
+    .map((c) => ({ atletaId: c.atletaId, posicao: c.posicaoPrevista ?? null }));
 
   // Hidratação a partir do servidor (se já existe sessão). O cliente dá precedência
   // ao estado local (offline-first) — isto é só o ponto de partida noutro dispositivo.
@@ -113,7 +123,8 @@ export default async function ModoJogoAoVivoPage({
       formato={j.formato}
       convocados={convocados}
       tamanhoFormato={tamanhoFormato}
-      numeroPartesSugerido={numeroPartesSugerido}
+      numeroPartes={numeroPartes}
+      titularesIniciais={titularesIniciais}
       duracaoParteMins={duracaoParteMins}
       notasIniciais={notasIniciais}
       sessaoServidor={sessaoServidor}

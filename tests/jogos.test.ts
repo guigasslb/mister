@@ -325,6 +325,18 @@ describe("registarEventoJogo", () => {
     expect(prisma.eventoJogo.create).toHaveBeenCalledOnce();
   });
 
+  it("recalcula o placar ao registar um GOLO (recalcularResultadoJogo partilhado)", async () => {
+    mocked(prisma.eventoJogo.create).mockResolvedValue({ id: "ev1" });
+    mocked(prisma.eventoJogo.count).mockResolvedValue(1);
+    const r = await registarEventoJogo(EVENTO_VALIDO);
+    expect(r.sucesso).toBe(true);
+    // O placar é sincronizado a partir da contagem de eventos GOLO/GOLO_SOFRIDO.
+    expect(prisma.jogo.update).toHaveBeenCalledWith({
+      where: { id: JOGO_ID },
+      data: { golosMarcados: 1, golosSofridos: 1 },
+    });
+  });
+
   it("rejeita atleta que não pertence ao jogo", async () => {
     mocked(prisma.convocatoria.findFirst).mockResolvedValue(null);
     mocked(prisma.atletaEscalao.count).mockResolvedValue(0);

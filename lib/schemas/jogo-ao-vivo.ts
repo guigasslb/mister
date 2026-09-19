@@ -8,9 +8,10 @@ import { Posicao } from "@prisma/client";
  */
 
 /**
- * Tipos de `EventoJogo` que pertencem ao Modo Jogo ao Vivo (subconjunto aditivo de
- * `TipoEventoJogo`, §8.25.8). Os eventos clássicos (GOLO, CARTAO_*, …) são geridos
- * pelas actions de `lib/actions/jogos.ts` e não são tocados aqui.
+ * Tipos de `EventoJogo` do **cronómetro / quintetos** do Modo Jogo ao Vivo
+ * (subconjunto aditivo de `TipoEventoJogo`, §8.25.8). São as primitivas que
+ * sustentam o cálculo de minutos por intervalos ao segundo. A edição retroativa
+ * (§8.25.6) opera exclusivamente sobre este subconjunto.
  */
 export const TIPOS_EVENTO_AO_VIVO = [
   "INICIO_PARTE",
@@ -22,6 +23,43 @@ export const TIPOS_EVENTO_AO_VIVO = [
 ] as const;
 
 export type TipoEventoAoVivo = (typeof TIPOS_EVENTO_AO_VIVO)[number];
+
+/**
+ * 🔁 v7 Fase B (§8.25.3/§8.25.7): tipos de **captura ao vivo** de golos,
+ * assistências e disciplina, agora registáveis no Modo Jogo ao Vivo (deixam de
+ * viver só no separador clássico). São contabilizados pelo motor único
+ * (`derivarEstatisticas`, §10.4) exatamente como os eventos clássicos.
+ */
+export const TIPOS_EVENTO_CAPTURA_AO_VIVO = [
+  "GOLO",
+  "GOLO_SOFRIDO",
+  "ASSISTENCIA",
+  "CARTAO_AMARELO",
+  "CARTAO_VERMELHO",
+] as const;
+
+export type TipoEventoCapturaAoVivo =
+  (typeof TIPOS_EVENTO_CAPTURA_AO_VIVO)[number];
+
+/**
+ * Universo de tipos aceites na **sincronização** da *outbox* do Modo Jogo ao Vivo
+ * (§8.25.4): cronómetro/quintetos + captura de golos/assistências/disciplina.
+ */
+export const TIPOS_EVENTO_SYNC = [
+  ...TIPOS_EVENTO_AO_VIVO,
+  ...TIPOS_EVENTO_CAPTURA_AO_VIVO,
+] as const;
+
+export type TipoEventoSync = (typeof TIPOS_EVENTO_SYNC)[number];
+
+/** Tipos que exigem `atletaId` obrigatório no *sync* (RN-JV-8, decisão 2026-09-20). */
+const TIPOS_EXIGEM_ATLETA: readonly string[] = [
+  "ENTRADA",
+  "SAIDA",
+  "ASSISTENCIA",
+  "CARTAO_AMARELO",
+  "CARTAO_VERMELHO",
+];
 
 // ─── 1. iniciarJogoAoVivo ──────────────────────────────────────────────────────
 
@@ -88,19 +126,28 @@ export const notaAoVivoSchema = z.string().max(5000);
 /**
  * Evento ao vivo vindo do cliente (offline-first). `clientEventoId` é OBRIGATÓRIO
  * (RN-JV-8) — é a chave de idempotência do *sync* (`@@unique([jogoId,
- * clientEventoId])`). ENTRADA/SAIDA exigem `atletaId`.
+ * clientEventoId])`).
+ *
+ * Aceita o cronómetro/quintetos **e** a captura de golos/assistências/disciplina
+ * (Fase B, §8.25.3). Regras de `atletaId` (decisão do supervisor, 2026-09-20 —
+ * modelo simples por toque):
+ *  - `ENTRADA`/`SAIDA`, `ASSISTENCIA`, `CARTAO_AMARELO`/`CARTAO_VERMELHO` **exigem** `atletaId`;
+ *  - `GOLO` e `GOLO_SOFRIDO` aceitam `atletaId` a `null` (golo sem autor / sem GR);
+ *  - `atletaSecundarioId` só é significativo no `GOLO` (o assistente, opcional).
  */
 export const eventoAoVivoClienteSchema = z
   .object({
-    tipo: z.enum(TIPOS_EVENTO_AO_VIVO),
+    tipo: z.enum(TIPOS_EVENTO_SYNC),
     segundoJogo: z.number().int().min(0),
     atletaId: z.string().cuid().nullable().optional(),
+    // Assistente do golo (Fase B): só usado quando `tipo === "GOLO"`.
+    atletaSecundarioId: z.string().cuid().nullable().optional(),
     parte: z.number().int().min(1).max(4).nullable().optional(),
     posicao: z.nativeEnum(Posicao).nullable().optional(),
     clientEventoId: z.string().min(1, "clientEventoId é obrigatório (idempotência)."),
   })
-  .refine((e) => !(e.tipo === "ENTRADA" || e.tipo === "SAIDA") || !!e.atletaId, {
-    message: "ENTRADA/SAIDA requerem atletaId.",
+  .refine((e) => !TIPOS_EXIGEM_ATLETA.includes(e.tipo) || !!e.atletaId, {
+    message: "Este tipo de evento requer atletaId.",
     path: ["atletaId"],
   });
 

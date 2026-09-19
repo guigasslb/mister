@@ -104,11 +104,9 @@ export function CampoAoVivo({
                   <span className="block truncate text-corpo-sec font-medium text-white/90">
                     {a.nome}
                   </span>
-                  {a.minutos > 0 && (
-                    <span className="text-legenda tabular-nums text-white/50">
-                      {a.minutos}′ jogados
-                    </span>
-                  )}
+                  <span className="text-legenda tabular-nums text-white/50">
+                    {a.minutos}′ jogados
+                  </span>
                 </span>
               </li>
             ))}

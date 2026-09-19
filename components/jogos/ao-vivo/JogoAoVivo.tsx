@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, CloudOff, Loader2, Trophy, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, CloudOff, Goal, Loader2, Trophy, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -20,6 +20,7 @@ import { CronometroJogo } from "@/components/jogos/ao-vivo/CronometroJogo";
 import { CampoAoVivo, type AtletaAoVivo } from "@/components/jogos/ao-vivo/CampoAoVivo";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { ModalSubstituicao } from "@/components/jogos/ao-vivo/ModalSubstituicao";
+import { ModalAcoesJogador } from "@/components/jogos/ao-vivo/ModalAcoesJogador";
 import { BarraControloJogo } from "@/components/jogos/ao-vivo/BarraControloJogo";
 import {
   guardarNotaJogoAoVivo,
@@ -37,9 +38,12 @@ import {
   type EstadoLocalCompleto,
   type EventoLocal,
   type SessaoLocal,
-  type TipoEventoAoVivo,
+  type TipoEventoLocal,
 } from "@/lib/jogo-ao-vivo-local";
-import { calcularMinutosDeEventos } from "@/lib/minutos-jogo";
+import {
+  calcularMinutosDeEventos,
+  type TipoEventoJogoAoVivo,
+} from "@/lib/minutos-jogo";
 import { ArranqueAoVivo } from "@/components/jogos/ao-vivo/ArranqueAoVivo";
 import { LABEL_CASA_FORA } from "@/lib/schemas/jogo";
 import type { CasaFora, FormatoJogo, Modalidade, Posicao } from "@prisma/client";
@@ -64,7 +68,10 @@ interface JogoAoVivoProps {
   formato: FormatoJogo | null;
   convocados: ConvocadoAoVivo[];
   tamanhoFormato: number;
-  numeroPartesSugerido: number;
+  /** Nº de partes herdado do jogo (§8.25.8) — já não se escolhe no arranque. */
+  numeroPartes: number;
+  /** Pré-seleção do arranque vinda do plano tático (titulares + posições). */
+  titularesIniciais: { atletaId: string; posicao: Posicao | null }[];
   duracaoParteMins: number;
   notasIniciais: string;
   /** Estado hidratado do servidor (se já existir uma sessão); local tem precedência. */
@@ -87,6 +94,8 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
   const [online, setOnline] = useState(true);
   const [ocupado, setOcupado] = useState(false);
   const [saiId, setSaiId] = useState<string | null>(null);
+  // Jogador tocado para o menu de ações (Golo/Cartão/Substituir) — Fase B.
+  const [acoesId, setAcoesId] = useState<string | null>(null);
   const [confirmarTerminar, setConfirmarTerminar] = useState(false);
   // Só há `document.body` no cliente: guarda para o portal (evita mismatch de hidratação).
   const [montado, setMontado] = useState(false);
@@ -257,15 +266,21 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
 
   // ── Helpers de construção de eventos ─────────────────────────────────────────
   function novoEvento(
-    tipo: TipoEventoAoVivo,
+    tipo: TipoEventoLocal,
     segundoJogo: number,
-    extra?: { atletaId?: string | null; posicao?: Posicao | null; parte?: number | null },
+    extra?: {
+      atletaId?: string | null;
+      atletaSecundarioId?: string | null;
+      posicao?: Posicao | null;
+      parte?: number | null;
+    },
   ): EventoLocal {
     return {
       clientEventoId: gerarClientEventoId(),
       tipo,
       segundoJogo,
       atletaId: extra?.atletaId ?? null,
+      atletaSecundarioId: extra?.atletaSecundarioId ?? null,
       posicao: extra?.posicao ?? null,
       parte: extra?.parte ?? null,
       criadoEm: Date.now(),
@@ -274,10 +289,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
   }
 
   // ── Transições (§8.25.3) ─────────────────────────────────────────────────────
-  function iniciar(
-    titulares: { atletaId: string; posicao: Posicao | null }[],
-    numeroPartes: number,
-  ) {
+  function iniciar(titulares: { atletaId: string; posicao: Posicao | null }[]) {
     const agora = Date.now();
     const eventos: EventoLocal[] = [
       novoEvento("INICIO_PARTE", 0, { parte: 1 }),
@@ -287,7 +299,8 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
     ];
     const sessao: SessaoLocal = {
       jogoId,
-      numeroPartes,
+      // §8.25.8: o nº de partes é herdado do jogo, não escolhido no arranque.
+      numeroPartes: props.numeroPartes,
       duracaoParteMins: props.duracaoParteMins,
       estado: "EM_CURSO",
       parteAtual: 1,
@@ -332,6 +345,69 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
     setSaiId(null);
     const entra = convocadoPorId.get(entraId);
     toast.success(`Entra ${entra?.nome ?? "atleta"}`);
+  }
+
+  // ── Registo desportivo por toque (Fase B) ────────────────────────────────────
+  // Golo/cartão entram na mesma outbox append-only e sincronizam pelo caminho
+  // normal; o backend persiste como EventoJogo e atualiza o placar. O segundo e a
+  // parte são automáticos (cronómetro corrente). A assistência vai embutida no GOLO.
+  function registarGolo(marcadorId: string, assistenteId: string | null) {
+    if (!estado) return;
+    const s = estado.sessao;
+    const seg = segundoCorrente(s);
+    persistir({
+      jogoId,
+      sessao: { ...s, atualizadoEm: Date.now() },
+      eventos: [
+        ...estado.eventos,
+        novoEvento("GOLO", seg, {
+          atletaId: marcadorId,
+          atletaSecundarioId: assistenteId,
+          parte: s.parteAtual,
+        }),
+      ],
+    });
+    setAcoesId(null);
+    const marcador = convocadoPorId.get(marcadorId);
+    const assistente = assistenteId ? convocadoPorId.get(assistenteId) : null;
+    toast.success(
+      assistente
+        ? `Golo de ${marcador?.nome ?? "atleta"} (ass. ${assistente.nome})`
+        : `Golo de ${marcador?.nome ?? "atleta"}`,
+    );
+  }
+
+  function registarGoloSofrido() {
+    if (!estado) return;
+    const s = estado.sessao;
+    const seg = segundoCorrente(s);
+    persistir({
+      jogoId,
+      sessao: { ...s, atualizadoEm: Date.now() },
+      eventos: [...estado.eventos, novoEvento("GOLO_SOFRIDO", seg, { parte: s.parteAtual })],
+    });
+    toast("Golo sofrido");
+  }
+
+  function registarCartao(
+    atletaId: string,
+    tipo: "CARTAO_AMARELO" | "CARTAO_VERMELHO",
+  ) {
+    if (!estado) return;
+    const s = estado.sessao;
+    const seg = segundoCorrente(s);
+    persistir({
+      jogoId,
+      sessao: { ...s, atualizadoEm: Date.now() },
+      eventos: [...estado.eventos, novoEvento(tipo, seg, { atletaId, parte: s.parteAtual })],
+    });
+    setAcoesId(null);
+    const atleta = convocadoPorId.get(atletaId);
+    toast(
+      tipo === "CARTAO_AMARELO"
+        ? `Cartão amarelo — ${atleta?.nome ?? "atleta"}`
+        : `Cartão vermelho — ${atleta?.nome ?? "atleta"}`,
+    );
   }
 
   function terminarParte() {
@@ -437,11 +513,21 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
   const sessao = estado?.sessao ?? null;
   const segAtual = sessao ? segundoCorrente(sessao) : 0;
 
+  // Placar ao vivo (§ Fase B): contagem dos eventos locais de golo.
+  let golosMarcados = 0;
+  let golosSofridos = 0;
+  for (const e of estado?.eventos ?? []) {
+    if (e.tipo === "GOLO") golosMarcados += 1;
+    else if (e.tipo === "GOLO_SOFRIDO") golosSofridos += 1;
+  }
+
   const minutosPorAtleta = new Map<string, number>();
   if (estado) {
     for (const m of calcularMinutosDeEventos(
+      // Só as primitivas da linha do tempo contam para os minutos; os eventos de
+      // registo (GOLO/CARTAO_*) são ignorados pelo motor (o cast é seguro).
       estado.eventos.map((e) => ({
-        tipo: e.tipo,
+        tipo: e.tipo as TipoEventoJogoAoVivo,
         segundoJogo: e.segundoJogo,
         atletaId: e.atletaId ?? undefined,
         parte: e.parte ?? undefined,
@@ -526,7 +612,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
           <ArranqueAoVivo
             convocados={convocados}
             tamanhoFormato={props.tamanhoFormato}
-            numeroPartesSugerido={props.numeroPartesSugerido}
+            titularesIniciais={props.titularesIniciais}
             modalidade={props.modalidade}
             jogoId={jogoId}
             onIniciar={iniciar}
@@ -556,12 +642,46 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
                   <CloudOff className="h-4 w-4" aria-hidden /> Pausado
                 </p>
               )}
+
+              {/* Placar ao vivo (Fase B): derivado dos eventos de golo locais. */}
+              <div className="mt-4 flex items-center justify-center gap-4 border-t border-white/10 pt-4">
+                <div className="text-center">
+                  <p className="max-w-[9rem] truncate text-legenda uppercase tracking-wide text-white/60">
+                    {props.clubeNome || "A nossa equipa"}
+                  </p>
+                  <p className="text-titulo-pagina font-bold tabular-nums text-white">
+                    {golosMarcados}
+                  </p>
+                </div>
+                <span className="text-corpo font-semibold text-white/40">–</span>
+                <div className="text-center">
+                  <p className="max-w-[9rem] truncate text-legenda uppercase tracking-wide text-white/60">
+                    {props.adversario}
+                  </p>
+                  <p className="text-titulo-pagina font-bold tabular-nums text-white">
+                    {golosSofridos}
+                  </p>
+                </div>
+              </div>
+              {sessao.estado === "EM_CURSO" && (
+                <div className="mt-3 flex justify-center">
+                  <Button
+                    onClick={registarGoloSofrido}
+                    variant="outline"
+                    size="sm"
+                    className="min-h-[44px] border-white/25 bg-white/10 text-white hover:bg-white/20"
+                  >
+                    <Goal className="h-4 w-4" />
+                    Golo sofrido
+                  </Button>
+                </div>
+              )}
             </div>
 
             <CampoAoVivo
               emCampo={emCampoAtletas}
               banco={bancoAtletas}
-              onTapEmCampo={setSaiId}
+              onTapEmCampo={setAcoesId}
               interativo={sessao.estado === "EM_CURSO" || sessao.estado === "INTERVALO"}
             />
           </div>
@@ -589,6 +709,26 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
           />
         </footer>
       )}
+
+      {/* Menu de ações do jogador (Golo / Cartão / Substituir) — Fase B */}
+      <ModalAcoesJogador
+        jogador={
+          acoesId
+            ? toAtletaAoVivo(
+                acoesId,
+                sessao?.emCampo.find((j) => j.atletaId === acoesId)?.posicao ?? null,
+              )
+            : null
+        }
+        outrosEmCampo={emCampoAtletas.filter((a) => a.id !== acoesId)}
+        onGolo={registarGolo}
+        onCartao={registarCartao}
+        onSubstituir={(atletaId) => {
+          setAcoesId(null);
+          setSaiId(atletaId);
+        }}
+        onFechar={() => setAcoesId(null)}
+      />
 
       {/* Modal de substituição */}
       <ModalSubstituicao

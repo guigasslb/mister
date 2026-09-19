@@ -17,34 +17,41 @@ import type { ConvocadoAoVivo } from "@/components/jogos/ao-vivo/JogoAoVivo";
 
 /**
  * Ecrã de arranque do Modo Jogo ao Vivo (§8.25.3, passo 1). O treinador escolhe
- * os titulares (nº exato = tamanho do formato — RN-JV-1), atribui posições e o
- * número de partes (2–4), e toca «Iniciar Parte 1». Se houver menos convocados
- * que o tamanho do formato, o arranque fica bloqueado (RN-JV-1) com um CTA para a
- * convocatória.
+ * os titulares (nº exato = tamanho do formato — RN-JV-1), atribui posições e toca
+ * «Iniciar Parte 1». O nº de partes já não se escolhe aqui: é herdado do jogo
+ * (§8.25.8). O arranque vem **pré-carregado** com os titulares/posições do plano
+ * tático (`titularesIniciais`), se existir; senão fica vazio (pool de convocados).
+ * Se houver menos convocados que o tamanho do formato, o arranque fica bloqueado
+ * (RN-JV-1) com um CTA para a convocatória.
  */
 export function ArranqueAoVivo({
   convocados,
   tamanhoFormato,
-  numeroPartesSugerido,
+  titularesIniciais,
   modalidade,
   jogoId,
   onIniciar,
 }: {
   convocados: ConvocadoAoVivo[];
   tamanhoFormato: number;
-  numeroPartesSugerido: number;
+  /** Pré-seleção vinda do plano tático (titulares + posições previstas). */
+  titularesIniciais: { atletaId: string; posicao: Posicao | null }[];
   modalidade: Modalidade;
   jogoId: string;
-  onIniciar: (
-    titulares: { atletaId: string; posicao: Posicao | null }[],
-    numeroPartes: number,
-  ) => void;
+  onIniciar: (titulares: { atletaId: string; posicao: Posicao | null }[]) => void;
 }) {
   const [selecionados, setSelecionados] = useState<Map<string, Posicao | null>>(
-    new Map(),
-  );
-  const [numeroPartes, setNumeroPartes] = useState(
-    Math.min(4, Math.max(2, numeroPartesSugerido)),
+    () => {
+      // Arranque pré-carregado do plano tático: só considera atletas que ainda
+      // constam do pool de convocados e respeita o tamanho do formato.
+      const idsConvocados = new Set(convocados.map((c) => c.id));
+      const inicial = new Map<string, Posicao | null>();
+      for (const t of titularesIniciais) {
+        if (inicial.size >= tamanhoFormato) break;
+        if (idsConvocados.has(t.atletaId)) inicial.set(t.atletaId, t.posicao);
+      }
+      return inicial;
+    },
   );
 
   const posicoesDisponiveis = posicoesPorModalidade(modalidade);
@@ -73,7 +80,7 @@ export function ArranqueAoVivo({
       atletaId,
       posicao,
     }));
-    onIniciar(titulares, numeroPartes);
+    onIniciar(titulares);
   }
 
   if (convocadosInsuficientes) {
@@ -168,30 +175,6 @@ export function ArranqueAoVivo({
           );
         })}
       </ul>
-
-      <div className="space-y-2">
-        <h2 className="text-subtitulo text-white">Número de partes</h2>
-        <div className="flex gap-2" role="group" aria-label="Número de partes">
-          {[2, 3, 4].map((n) => {
-            const ativo = numeroPartes === n;
-            return (
-              <button
-                key={n}
-                type="button"
-                aria-pressed={ativo}
-                onClick={() => setNumeroPartes(n)}
-                className={`flex h-12 flex-1 items-center justify-center rounded-xl border text-corpo font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 ${
-                  ativo
-                    ? "border-primary bg-primary text-white"
-                    : "border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
-                }`}
-              >
-                {n} partes
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       <Button
         onClick={iniciar}

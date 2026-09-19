@@ -20,6 +20,7 @@ import {
 import { valorMetricaValido } from "@/lib/schemas/metrica";
 import { modalidadeEfetiva, filtroModalidadeJogo } from "@/lib/modalidade-escalao";
 import { derivarEstatisticas } from "@/lib/derivar-estatisticas";
+import { recalcularResultadoJogo } from "@/lib/placar-jogo";
 import {
   Prisma,
   type Epoca,
@@ -721,25 +722,6 @@ export async function definirCapitao(
 }
 
 // ─── Modo ao vivo (registo de eventos) ───────────────────────────────────────
-
-/**
- * Recalcula o resultado do jogo (`golosMarcados`/`golosSofridos`) a partir da
- * contagem de eventos `GOLO`/`GOLO_SOFRIDO`. Mantém o placar sincronizado com o
- * registo ao vivo. Corre dentro de uma transação (recebe o `tx`).
- */
-async function recalcularResultadoJogo(
-  tx: Prisma.TransactionClient,
-  jogoId: string,
-): Promise<void> {
-  const [golosMarcados, golosSofridos] = await Promise.all([
-    tx.eventoJogo.count({ where: { jogoId, tipo: "GOLO" } }),
-    tx.eventoJogo.count({ where: { jogoId, tipo: "GOLO_SOFRIDO" } }),
-  ]);
-  await tx.jogo.update({
-    where: { id: jogoId },
-    data: { golosMarcados, golosSofridos },
-  });
-}
 
 /**
  * Regista um evento ao vivo (golo, cartão, substituição com bloco, timeout…).

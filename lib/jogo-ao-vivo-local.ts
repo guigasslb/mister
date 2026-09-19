@@ -31,7 +31,7 @@ export type EstadoJogoAoVivo =
   | "PAUSADO"
   | "TERMINADO";
 
-/** Primitivas de evento do Modo Jogo ao Vivo (§8.25.8). */
+/** Primitivas da linha do tempo do Modo Jogo ao Vivo (§8.25.8). */
 export type TipoEventoAoVivo =
   | "INICIO_PARTE"
   | "FIM_PARTE"
@@ -41,15 +41,33 @@ export type TipoEventoAoVivo =
   | "RETOMA";
 
 /**
+ * Eventos de registo desportivo captados por toque no Modo Jogo ao Vivo (Fase B da
+ * unificação do registo de jogo). Entram na **mesma** *outbox* e sincronizam pelo
+ * mesmo caminho das primitivas; o backend persiste-os como `EventoJogo` e atualiza
+ * o placar. A assistência vai **embutida** no `GOLO` via `atletaSecundarioId`
+ * (motor único de derivação de estatísticas — Fase A), não gera evento separado.
+ */
+export type TipoEventoRegisto =
+  | "GOLO"
+  | "GOLO_SOFRIDO"
+  | "CARTAO_AMARELO"
+  | "CARTAO_VERMELHO";
+
+/** União de todos os tipos de evento local (linha do tempo + registo). */
+export type TipoEventoLocal = TipoEventoAoVivo | TipoEventoRegisto;
+
+/**
  * Evento local (append-only). `segundoJogo` é o segundo absoluto do cronómetro
  * contínuo (0 = apito inicial da Parte 1). `pendente` = ainda por sincronizar
  * com o servidor (*outbox*). `clientEventoId` garante *sync* idempotente.
+ * `atletaSecundarioId` só é usado pelo `GOLO` (assistente, opcional).
  */
 export interface EventoLocal {
   clientEventoId: string;
-  tipo: TipoEventoAoVivo;
+  tipo: TipoEventoLocal;
   segundoJogo: number;
   atletaId?: string | null;
+  atletaSecundarioId?: string | null;
   posicao?: Posicao | null;
   parte?: number | null;
   criadoEm: number;

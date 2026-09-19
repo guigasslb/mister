@@ -67,6 +67,7 @@ type JogoParaEdicao = Pick<
   | "adversario"
   | "casaFora"
   | "tipo"
+  | "numeroPartes"
   | "escalaoId"
   | "competicaoId"
   | "formato"
@@ -94,6 +95,9 @@ export function JogoForm({
   const [escalaoId, setEscalaoId] = useState<string>(jogo?.escalaoId ?? "");
   const [casaFora, setCasaFora] = useState<CasaFora>(jogo?.casaFora ?? "CASA");
   const [tipo, setTipo] = useState<TipoJogo>(jogo?.tipo ?? "OFICIAL");
+  // 🔁 v7 (§8.25.8): nº de partes do jogo (1–4). O Modo Jogo ao Vivo herda-o ao
+  // iniciar. Default 2 (padrão de futsal/seniores; formação jovem costuma usar 4).
+  const [numeroPartes, setNumeroPartes] = useState<number>(jogo?.numeroPartes ?? 2);
   const [competicaoId, setCompeticaoId] = useState<string>(
     jogo?.competicaoId ?? SEM_COMPETICAO,
   );
@@ -198,6 +202,7 @@ export function JogoForm({
       adversario: String(fd.get("adversario")),
       casaFora,
       tipo,
+      numeroPartes,
       escalaoId: escalaoId || undefined,
       competicaoId: competicaoId === SEM_COMPETICAO ? null : competicaoId,
       // Só se envia o formato em futebol; em futsal o backend deriva FUTSAL_5.
@@ -284,6 +289,28 @@ export function JogoForm({
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Número de partes</Label>
+        <Select
+          value={String(numeroPartes)}
+          onValueChange={(v) => setNumeroPartes(Number(v))}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[1, 2, 3, 4].map((n) => (
+              <SelectItem key={n} value={String(n)}>
+                {n} {n === 1 ? "parte" : "partes"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-legenda text-cinza-500">
+          O Modo Jogo ao Vivo usa este valor. Futsal/seniores: 2; formação jovem: normalmente 4.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

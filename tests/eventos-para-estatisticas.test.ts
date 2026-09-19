@@ -375,3 +375,58 @@ describe("derivarEstatisticas — bug P0 (convergência e não-sobrescrita)", ()
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FASE B — captura ao vivo de golos/assistências/disciplina (com `segundoJogo`).
+// Garante que os eventos capturados no Modo Jogo ao Vivo (que trazem `segundoJogo`)
+// entram na contagem por atleta do motor único, sem interferir com os minutos.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("derivarEstatisticas — captura ao vivo (Fase B, §8.25.3)", () => {
+  const capt = (
+    tipo: EventoParaDerivacao["tipo"],
+    atletaId: string | null,
+    segundoJogo: number,
+  ): EventoParaDerivacao => evento({ tipo, atletaId, segundoJogo, parte: 1 });
+
+  it("golos/assist/cartões com segundoJogo contam por atleta (e no placar)", () => {
+    const eventos: EventoParaDerivacao[] = [
+      inicio(0),
+      entra(A, 0),
+      entra(B, 0),
+      capt("GOLO", A, 5 * M),
+      capt("ASSISTENCIA", B, 5 * M), // materializada a partir do golo (par golo+assist)
+      capt("CARTAO_AMARELO", A, 10 * M),
+      capt("GOLO", A, 22 * M),
+      capt("GOLO_SOFRIDO", null, 30 * M),
+      capt("CARTAO_VERMELHO", B, 38 * M),
+      fim(40 * M),
+    ];
+    const r = derivarEstatisticas(eventos, [convocado(A), convocado(B)], false, "FUTSAL_5");
+
+    // Contadores por atleta (a fase de contagem NÃO filtra por segundoJogo).
+    expect(r.estatisticas.get(A)?.golos).toBe(2);
+    expect(r.estatisticas.get(A)?.cartaoAmarelo).toBe(1);
+    expect(r.estatisticas.get(B)?.assistencias).toBe(1);
+    expect(r.estatisticas.get(B)?.cartaoVermelho).toBe(1);
+
+    // Placar coerente com a contagem de eventos.
+    expect(r.golosMarcados).toBe(2);
+    expect(r.golosSofridos).toBe(1);
+
+    // Os minutos continuam a derivar do cronómetro (captura não interfere).
+    expect(r.estatisticas.get(A)?.minutos).toBe(40);
+    expect(r.estatisticas.get(B)?.minutos).toBe(40);
+  });
+
+  it("golo sem autor conta para o placar mas não afeta nenhum atleta", () => {
+    const eventos: EventoParaDerivacao[] = [
+      inicio(0),
+      entra(A, 0),
+      capt("GOLO", null, 7 * M),
+      fim(40 * M),
+    ];
+    const r = derivarEstatisticas(eventos, [convocado(A)], false, "FUTSAL_5");
+    expect(r.golosMarcados).toBe(1);
+    expect(r.estatisticas.get(A)?.golos).toBe(0);
+  });
+});

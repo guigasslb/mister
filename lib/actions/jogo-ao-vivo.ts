@@ -17,6 +17,7 @@ import {
   derivarEstatisticas,
   type EventoParaDerivacao,
 } from "@/lib/derivar-estatisticas";
+import { recalcularResultadoJogo } from "@/lib/placar-jogo";
 import {
   parseRelatorio,
   serializarRelatorio,
@@ -774,11 +775,32 @@ export async function guardarNotaJogoAoVivo(
 
 // ─── 10. sincronizarJogoAoVivo ─────────────────────────────────────────────────
 
+/** Linha de `EventoJogo` a inserir no *sync* (formato uniforme para `createMany`). */
+type LinhaEventoSync = {
+  jogoId: string;
+  parte: number;
+  tipo: TipoEventoJogo;
+  segundoJogo: number;
+  atletaId: string | null;
+  atletaSecundarioId: string | null;
+  posicao: Posicao | null;
+  clientEventoId: string;
+};
+
 /**
  * Sincroniza a *outbox* offline (§8.25.4): faz *upsert* idempotente dos eventos por
  * `clientEventoId` (`createMany` + `skipDuplicates`, RN-JV-8/11) e reconcilia o
- * estado da `SessaoJogoAoVivo` derivado dos eventos (*last-write-wins*). Devolve o
- * estado atual da sessão.
+ * estado da `SessaoJogoAoVivo` derivado dos eventos (*last-write-wins*).
+ *
+ * 🔁 v7 Fase B (§8.25.3): além do cronómetro/quintetos, persiste a **captura ao
+ * vivo** de golos/assistências/disciplina. Um `GOLO` com `atletaSecundarioId`
+ * (assistente) materializa também um evento `ASSISTENCIA` autónomo — é assim que
+ * o motor único o contabiliza (§10.4; só conta `ASSISTENCIA` autónomas e ignora
+ * `atletaSecundarioId`, pelo que não há dupla contagem), coerente com o registo
+ * clássico. Quando o lote inclui `GOLO`/`GOLO_SOFRIDO`, o placar do jogo é
+ * recalculado a partir da contagem de eventos (`recalcularResultadoJogo`).
+ *
+ * Devolve o estado atual da sessão.
  */
 export async function sincronizarJogoAoVivo(
   jogoId: string,
@@ -794,23 +816,57 @@ export async function sincronizarJogoAoVivo(
 
   const comParte = comParteResolvida(parsed.data);
 
-  const atualizada = await prisma.$transaction(async (tx) => {
-    if (comParte.length > 0) {
-      await tx.eventoJogo.createMany({
-        data: comParte.map((e) => ({
+  // Linhas a inserir: um evento por entrada + a ASSISTÊNCIA derivada do golo.
+  const linhas: LinhaEventoSync[] = comParte.flatMap((e) => {
+    const linha: LinhaEventoSync = {
+      jogoId,
+      parte: e.parteResolvida,
+      tipo: e.tipo as TipoEventoJogo,
+      segundoJogo: e.segundoJogo,
+      atletaId: e.atletaId ?? null,
+      // O assistente fica no golo (rasto do par); a contagem faz-se no evento
+      // ASSISTENCIA autónomo abaixo (o motor único ignora `atletaSecundarioId`).
+      atletaSecundarioId:
+        e.tipo === "GOLO" ? e.atletaSecundarioId ?? null : null,
+      posicao: (e.posicao ?? null) as Posicao | null,
+      clientEventoId: e.clientEventoId,
+    };
+    if (e.tipo === "GOLO" && e.atletaSecundarioId) {
+      return [
+        linha,
+        {
           jogoId,
           parte: e.parteResolvida,
-          tipo: e.tipo as TipoEventoJogo,
+          tipo: TipoEventoJogo.ASSISTENCIA,
           segundoJogo: e.segundoJogo,
-          atletaId: e.atletaId ?? null,
-          posicao: (e.posicao ?? null) as Posicao | null,
-          clientEventoId: e.clientEventoId,
-        })),
+          atletaId: e.atletaSecundarioId,
+          atletaSecundarioId: null,
+          posicao: null,
+          // Idempotência estável: derivada do `clientEventoId` do golo.
+          clientEventoId: `${e.clientEventoId}::assist`,
+        } satisfies LinhaEventoSync,
+      ];
+    }
+    return [linha];
+  });
+
+  const temGolos = comParte.some(
+    (e) => e.tipo === "GOLO" || e.tipo === "GOLO_SOFRIDO",
+  );
+
+  const atualizada = await prisma.$transaction(async (tx) => {
+    if (linhas.length > 0) {
+      await tx.eventoJogo.createMany({
+        data: linhas,
         skipDuplicates: true, // idempotência por @@unique([jogoId, clientEventoId])
       });
     }
 
-    // Reconciliação do estado a partir de TODOS os eventos persistidos.
+    // Placar coerente com a contagem de eventos (§10.4). Idempotente: re-sync não
+    // duplica eventos (skipDuplicates) logo não altera o placar.
+    if (temGolos) await recalcularResultadoJogo(tx, jogoId);
+
+    // Reconciliação do estado a partir dos eventos de cronómetro persistidos.
     const todos = await tx.eventoJogo.findMany({
       where: { jogoId, tipo: { in: TIPOS_AO_VIVO } },
       select: { tipo: true, segundoJogo: true, parte: true, criadoEm: true },
