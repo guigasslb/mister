@@ -90,6 +90,13 @@ export const LABEL_TIPO_EVENTO: Record<TipoEventoJogo, string> = {
   CANTO: "Canto",
   FORA_DE_JOGO: "Fora-de-jogo",
   DESARME: "Desarme",
+  // Modo Jogo ao Vivo (§8.25.8)
+  INICIO_PARTE: "Início da parte",
+  FIM_PARTE: "Fim da parte",
+  ENTRADA: "Entrada",
+  SAIDA: "Saída",
+  PAUSA: "Pausa",
+  RETOMA: "Retoma",
 };
 
 /** Alias retrocompatível (usado no registo ao vivo). */

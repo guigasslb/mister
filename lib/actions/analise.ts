@@ -1572,6 +1572,13 @@ const EVENTO_TIPOS: Record<TipoEventoJogo, TipoEventoJogo> = {
   CANTO: "CANTO",
   FORA_DE_JOGO: "FORA_DE_JOGO",
   DESARME: "DESARME",
+  // Modo Jogo ao Vivo (§8.25.8)
+  INICIO_PARTE: "INICIO_PARTE",
+  FIM_PARTE: "FIM_PARTE",
+  ENTRADA: "ENTRADA",
+  SAIDA: "SAIDA",
+  PAUSA: "PAUSA",
+  RETOMA: "RETOMA",
 };
 
 const SESSAO_TIPOS: Record<TipoSessao, TipoSessao> = {

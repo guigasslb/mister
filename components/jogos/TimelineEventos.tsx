@@ -17,6 +17,13 @@ export const EMOJI_EVENTO: Record<TipoEventoJogo, string> = {
   CANTO: "🚩",
   FORA_DE_JOGO: "🚫",
   DESARME: "🛡️",
+  // Modo Jogo ao Vivo (§8.25.8)
+  INICIO_PARTE: "▶️",
+  FIM_PARTE: "⏹️",
+  ENTRADA: "🟢",
+  SAIDA: "🔴",
+  PAUSA: "⏸️",
+  RETOMA: "⏯️",
 };
 
 export type EventoTimeline = {
