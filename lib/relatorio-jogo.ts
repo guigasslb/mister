@@ -13,12 +13,19 @@ export type RelatorioEstruturado = {
   analiseTatica: string;
   destaques: string;
   proximoJogo: string;
+  /**
+   * Notas tiradas em beira-campo no Modo Jogo ao Vivo (§8.25.3/§8.25.8). Vive na
+   * mesma coluna `Jogo.relatorio` (chave `notasAoVivo`), sem coluna nova. Vazio por
+   * omissão; preservada por (de)serialização para não colidir com o relatório.
+   */
+  notasAoVivo: string;
 };
 
 export const RELATORIO_VAZIO: RelatorioEstruturado = {
   analiseTatica: "",
   destaques: "",
   proximoJogo: "",
+  notasAoVivo: "",
 };
 
 function eString(valor: unknown): valor is string {
@@ -41,12 +48,14 @@ export function parseRelatorio(raw: string | null | undefined): RelatorioEstrutu
         obj &&
         (eString(obj.analiseTatica) ||
           eString(obj.destaques) ||
-          eString(obj.proximoJogo))
+          eString(obj.proximoJogo) ||
+          eString(obj.notasAoVivo))
       ) {
         return {
           analiseTatica: eString(obj.analiseTatica) ? obj.analiseTatica : "",
           destaques: eString(obj.destaques) ? obj.destaques : "",
           proximoJogo: eString(obj.proximoJogo) ? obj.proximoJogo : "",
+          notasAoVivo: eString(obj.notasAoVivo) ? obj.notasAoVivo : "",
         };
       }
     } catch {
@@ -54,7 +63,7 @@ export function parseRelatorio(raw: string | null | undefined): RelatorioEstrutu
     }
   }
 
-  return { analiseTatica: texto, destaques: "", proximoJogo: "" };
+  return { analiseTatica: texto, destaques: "", proximoJogo: "", notasAoVivo: "" };
 }
 
 /**
@@ -65,8 +74,13 @@ export function serializarRelatorio(r: RelatorioEstruturado): string {
   const analiseTatica = r.analiseTatica.trim();
   const destaques = r.destaques.trim();
   const proximoJogo = r.proximoJogo.trim();
-  if (!analiseTatica && !destaques && !proximoJogo) return "";
-  return JSON.stringify({ analiseTatica, destaques, proximoJogo });
+  const notasAoVivo = r.notasAoVivo.trim();
+  if (!analiseTatica && !destaques && !proximoJogo && !notasAoVivo) return "";
+  // As notas ao vivo só são incluídas quando existem — mantém a serialização
+  // byte-idêntica ao comportamento anterior para relatórios sem notas (§8.25.8).
+  const base: Record<string, string> = { analiseTatica, destaques, proximoJogo };
+  if (notasAoVivo) base.notasAoVivo = notasAoVivo;
+  return JSON.stringify(base);
 }
 
 /**

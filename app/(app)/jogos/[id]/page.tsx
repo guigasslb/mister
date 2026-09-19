@@ -153,6 +153,48 @@ export default async function DetalheJogoPage({
     atletaSecundarioId: e.atletaSecundarioId,
   }));
 
+  // §8.25: estado da sessão do Modo Jogo ao Vivo. O botão de entrada aparece
+  // enquanto o jogo não terminou; o editor manual de minutos (§8.25.6) fica
+  // disponível depois de a sessão terminar.
+  const sessaoAoVivo = await prisma.sessaoJogoAoVivo.findUnique({
+    where: { jogoId: j.id },
+    select: { estado: true },
+  });
+  const sessaoAoVivoTerminada = sessaoAoVivo?.estado === "TERMINADO";
+  const mostrarModoAoVivo = !sessaoAoVivoTerminada && !j.fechado;
+
+  // Seed do editor tabular: um intervalo por atleta (1ª ENTRADA → última SAIDA),
+  // derivado dos eventos ao vivo (segundo absoluto → minutos inteiros).
+  const intervalosAoVivo = new Map<string, { entrada: number; saida: number }>();
+  for (const e of j.eventos) {
+    if (e.segundoJogo == null || !e.atletaId) continue;
+    if (e.tipo !== "ENTRADA" && e.tipo !== "SAIDA") continue;
+    const atual = intervalosAoVivo.get(e.atletaId) ?? {
+      entrada: Number.POSITIVE_INFINITY,
+      saida: 0,
+    };
+    if (e.tipo === "ENTRADA") atual.entrada = Math.min(atual.entrada, e.segundoJogo);
+    else atual.saida = Math.max(atual.saida, e.segundoJogo);
+    intervalosAoVivo.set(e.atletaId, atual);
+  }
+  const linhasMinutosAoVivo = sessaoAoVivoTerminada
+    ? convocadosIniciais.map((atletaId) => {
+        const atleta = atletas.find((a) => a.id === atletaId);
+        const intervalo = intervalosAoVivo.get(atletaId);
+        return {
+          atletaId,
+          nome: atleta?.nome ?? "Atleta",
+          numero:
+            atleta?.participacaoContexto?.numero ?? j.numeroPorAtleta[atletaId] ?? null,
+          entradaMin:
+            intervalo && Number.isFinite(intervalo.entrada)
+              ? Math.round(intervalo.entrada / 60)
+              : null,
+          saidaMin: intervalo && intervalo.saida > 0 ? Math.round(intervalo.saida / 60) : null,
+        };
+      })
+    : [];
+
   // BUG-P1-04: as suspensões referem-se ao PRÓXIMO jogo do escalão (aquele para o
   // qual a convocatória está a ser preparada). Só as calculamos/mostramos quando o
   // jogo aberto é esse próximo jogo — nunca em jogos já realizados ou noutros futuros.
@@ -284,6 +326,9 @@ export default async function DetalheJogoPage({
         escalaoJovem={escalaoJovemDisciplina}
         quadroInicial={quadroInicial}
         podeGerirQuadro={podeGerirQuadro}
+        mostrarModoAoVivo={mostrarModoAoVivo}
+        sessaoAoVivoTerminada={sessaoAoVivoTerminada}
+        linhasMinutosAoVivo={linhasMinutosAoVivo}
       />
     </div>
   );

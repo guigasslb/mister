@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { Ban, Check, TriangleAlert, Wand2 } from "lucide-react";
+import { Ban, Check, Radio, TriangleAlert, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +41,10 @@ import { parseRelatorio, serializarRelatorio } from "@/lib/relatorio-jogo";
 import { blocoParaMinutos } from "@/lib/modalidade-escalao";
 import { PlanoTatico } from "@/components/jogos/PlanoTatico";
 import { RegistoAoVivo } from "@/components/jogos/RegistoAoVivo";
+import {
+  EditorManualMinutos,
+  type LinhaMinutos,
+} from "@/components/jogos/ao-vivo/EditorManualMinutos";
 import { ScoutingJogo } from "@/components/jogos/ScoutingJogo";
 import { TimelineEventos, type EventoTimeline } from "@/components/jogos/TimelineEventos";
 import type { DiagramaCampo } from "@/lib/schemas/exercicio";
@@ -116,6 +121,9 @@ export function JogoDetalhe({
   escalaoJovem = false,
   quadroInicial = null,
   podeGerirQuadro = false,
+  mostrarModoAoVivo = false,
+  sessaoAoVivoTerminada = false,
+  linhasMinutosAoVivo = [],
 }: {
   jogoId: string;
   atletas: Atleta[];
@@ -142,6 +150,12 @@ export function JogoDetalhe({
   // QuadroTatico.diagrama) + gating por MODELO_JOGO_GERIR.
   quadroInicial?: { id: string; diagrama: DiagramaCampo | null } | null;
   podeGerirQuadro?: boolean;
+  // §8.25: Modo Jogo ao Vivo. `mostrarModoAoVivo` liga o botão de entrada no
+  // separador "Ao Vivo" (só quando o jogo não está terminado). Quando a sessão ao
+  // vivo já terminou, o editor manual de minutos (§8.25.6) aparece nas estatísticas.
+  mostrarModoAoVivo?: boolean;
+  sessaoAoVivoTerminada?: boolean;
+  linhasMinutosAoVivo?: LinhaMinutos[];
 }) {
   const eFutebol = modalidade === "FUTEBOL";
   const suspensaoPorAtleta = new Map(suspensoes.map((s) => [s.atletaId, s]));
@@ -461,6 +475,25 @@ export function JogoDetalhe({
 
       {/* ─── Ao Vivo (registo de eventos) ─── */}
       <TabsContent value="aovivo" className="space-y-4">
+        {/* §8.25: entrada para o ecrã dedicado de condução (cronómetro + minutos
+            automáticos). Só quando a convocatória existe e o jogo não terminou. */}
+        {mostrarModoAoVivo && convocadosSalvos.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-lg border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="flex items-center gap-1.5 text-subtitulo text-cinza-900">
+                <Radio className="h-4 w-4 text-primary" />
+                Modo Jogo ao Vivo
+              </p>
+              <p className="text-corpo-sec text-cinza-600">
+                Cronómetro contínuo, substituições por toque e minutos calculados
+                automaticamente no fim.
+              </p>
+            </div>
+            <Button asChild className="min-h-[44px] flex-shrink-0">
+              <Link href={`/jogos/${jogoId}/ao-vivo`}>Abrir modo jogo</Link>
+            </Button>
+          </div>
+        )}
         {convocadosSalvos.length === 0 ? (
           <p className="rounded-md border border-dashed border-cinza-300 p-4 text-center text-corpo-sec text-cinza-500">
             Define a convocatória primeiro para registar eventos ao vivo.
@@ -489,6 +522,14 @@ export function JogoDetalhe({
           </p>
         ) : (
           <>
+            {/* §8.25.6: editor manual de minutos — disponível depois de a sessão
+                do Modo Jogo ao Vivo terminar (edição/inserção retroativa). */}
+            {sessaoAoVivoTerminada && linhasMinutosAoVivo.length > 0 && (
+              <EditorManualMinutos
+                jogoId={jogoId}
+                linhasIniciais={linhasMinutosAoVivo}
+              />
+            )}
             {/* Fix de produto: alimenta a grelha a partir dos eventos ao vivo.
                 Só faz sentido com eventos registados. */}
             {eventos.length > 0 && (
