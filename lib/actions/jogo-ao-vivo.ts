@@ -14,6 +14,10 @@ import {
   type TipoEventoJogoAoVivo,
 } from "@/lib/minutos-jogo";
 import {
+  derivarEstatisticas,
+  type EventoParaDerivacao,
+} from "@/lib/derivar-estatisticas";
+import {
   parseRelatorio,
   serializarRelatorio,
 } from "@/lib/relatorio-jogo";
@@ -32,7 +36,6 @@ import {
   type Epoca,
   type Posicao,
   type SessaoJogoAoVivo,
-  type Utilizacao,
 } from "@prisma/client";
 
 /**
@@ -186,68 +189,63 @@ function paraEventoAoVivo(e: {
   };
 }
 
-/**
- * Deriva minutos + utilização por atleta a partir dos eventos (RN-JV-6/7/10):
- *  - TITULAR: entrou no `INICIO_PARTE` da Parte 1 (mesmo segundo).
- *  - UTILIZADO: entrou depois.
- *  - NAO_UTILIZADO: nunca entrou (0 minutos) — resolvido pelo caller que cruza com
- *    a convocatória (a função pura só conhece quem entrou).
- */
-function derivarMinutosEUtilizacao(
-  eventos: EventoAoVivo[],
-  segundoFinal: number,
-): Map<string, { minutos: number; utilizacao: Utilizacao }> {
-  const minutos = calcularMinutosDeEventos(eventos, segundoFinal);
-
-  // Segundo de arranque da Parte 1 (RN-JV-10): quem tem ENTRADA nesse segundo é titular.
-  const inicioParte1 = eventos
-    .filter((e) => e.tipo === "INICIO_PARTE" && (e.parte ?? 1) === 1)
-    .reduce<number | null>(
-      (min, e) => (min === null ? e.segundoJogo : Math.min(min, e.segundoJogo)),
-      null,
-    );
-  const segundoTitular = inicioParte1 ?? 0;
-  const titulares = new Set(
-    eventos
-      .filter((e) => e.tipo === "ENTRADA" && e.segundoJogo === segundoTitular && e.atletaId)
-      .map((e) => e.atletaId as string),
-  );
-
-  const mapa = new Map<string, { minutos: number; utilizacao: Utilizacao }>();
-  for (const m of minutos) {
-    mapa.set(m.atletaId, {
-      minutos: m.minutos,
-      utilizacao: titulares.has(m.atletaId) ? "TITULAR" : "UTILIZADO",
-    });
-  }
-  return mapa;
+/** Converte um evento ao vivo persistido no formato do motor único de derivação. */
+function paraEventoDerivacao(e: {
+  tipo: TipoEventoJogo;
+  atletaId: string | null;
+  segundoJogo: number | null;
+  parte: number | null;
+}): EventoParaDerivacao {
+  return {
+    tipo: e.tipo,
+    atletaId: e.atletaId,
+    atletaSecundarioId: null,
+    bloco: null,
+    minuto: null,
+    segundoJogo: e.segundoJogo,
+    parte: e.parte,
+  };
 }
 
 /**
- * Escreve os minutos/utilização calculados em `EstatisticaAtleta` (RN-JV-13): só
- * atualiza registos que **já existem** (a convocatória define quem tem registo; a
- * grelha manual converge por *last-write-wins*). Corre dentro da transação recebida.
+ * Escreve os minutos/utilização em `EstatisticaAtleta` a partir do motor único de
+ * derivação (§10.4 — precedência intervalos > blocos > null). Faz **upsert de
+ * todos os convocados** (RN-JV-13 alargada, decisão 2026-09-19): não perde os
+ * minutos ao vivo quando a grelha de estatísticas nunca chegou a ser aberta.
+ *
+ * Só escreve `minutos`/`utilizacao` — os contadores da grelha (golos, cartões,
+ * métricas…) são **preservados** (last-write-wins da edição manual, §13.4). Corre
+ * dentro da transação recebida.
  */
 async function persistirMinutos(
   tx: Prisma.TransactionClient,
-  jogoId: string,
-  eventos: EventoAoVivo[],
-  segundoFinal: number,
+  jogo: JogoAoVivo,
+  eventos: EventoParaDerivacao[],
 ): Promise<void> {
-  const mapa = derivarMinutosEUtilizacao(eventos, segundoFinal);
-
-  const existentes = await tx.estatisticaAtleta.findMany({
-    where: { jogoId },
-    select: { atletaId: true },
+  const convocados = await tx.convocatoria.findMany({
+    where: { jogoId: jogo.id, convocado: true },
+    select: { atletaId: true, titularPrevisto: true },
   });
 
-  for (const { atletaId } of existentes) {
-    const calc = mapa.get(atletaId);
-    await tx.estatisticaAtleta.update({
-      where: { jogoId_atletaId: { jogoId, atletaId } },
-      data: calc
-        ? { minutos: calc.minutos, utilizacao: calc.utilizacao }
-        : { minutos: 0, utilizacao: "NAO_UTILIZADO" }, // RN-JV-9
+  const eFutebol =
+    modalidadeEfetiva(jogo.modalidadeAtividade, jogo.escalao.seccao?.modalidade) ===
+    "FUTEBOL";
+
+  const { estatisticas } = derivarEstatisticas(
+    eventos,
+    convocados,
+    eFutebol,
+    jogo.formato,
+  );
+
+  for (const { atletaId } of convocados) {
+    const calc = estatisticas.get(atletaId);
+    const minutos = calc?.minutos ?? null;
+    const utilizacao = calc?.utilizacao ?? "NAO_UTILIZADO";
+    await tx.estatisticaAtleta.upsert({
+      where: { jogoId_atletaId: { jogoId: jogo.id, atletaId } },
+      create: { jogoId: jogo.id, atletaId, minutos, utilizacao },
+      update: { minutos, utilizacao },
     });
   }
 }
@@ -723,17 +721,12 @@ export async function terminarJogoAoVivo(
       },
     });
 
-    // Recalcula minutos com o registo completo e persiste (RN-JV-6/13).
+    // Recalcula minutos com o registo completo e persiste (RN-JV-6/13, §10.4).
     const eventosFinais = await tx.eventoJogo.findMany({
       where: { jogoId, tipo: { in: TIPOS_AO_VIVO } },
       select: { tipo: true, atletaId: true, segundoJogo: true, parte: true },
     });
-    await persistirMinutos(
-      tx,
-      jogoId,
-      eventosFinais.map(paraEventoAoVivo),
-      segundo,
-    );
+    await persistirMinutos(tx, acesso.jogo, eventosFinais.map(paraEventoDerivacao));
 
     return tx.sessaoJogoAoVivo.update({
       where: { jogoId },
@@ -890,12 +883,6 @@ export async function editarEventosJogoAoVivo(
   if (acesso.estado === "erro") return erro(acesso.erro);
 
   const comParte = comParteResolvida(parsed.data);
-  // Segundo final = maior segundo de FIM_PARTE, senão o maior segundo de qualquer evento.
-  const segundoFinal =
-    comParte.reduce(
-      (max, e) => (e.tipo === "FIM_PARTE" ? Math.max(max, e.segundoJogo) : max),
-      0,
-    ) || comParte.reduce((max, e) => Math.max(max, e.segundoJogo), 0);
 
   await prisma.$transaction(async (tx) => {
     await tx.eventoJogo.deleteMany({ where: { jogoId, tipo: { in: TIPOS_AO_VIVO } } });
@@ -913,16 +900,13 @@ export async function editarEventosJogoAoVivo(
       });
     }
 
+    // O motor único (§10.4) deriva o segundo final internamente (maior FIM_PARTE,
+    // senão maior segundo) — mesma regra de antes, sem duplicar o cálculo aqui.
     const eventosFinais = await tx.eventoJogo.findMany({
       where: { jogoId, tipo: { in: TIPOS_AO_VIVO } },
       select: { tipo: true, atletaId: true, segundoJogo: true, parte: true },
     });
-    await persistirMinutos(
-      tx,
-      jogoId,
-      eventosFinais.map(paraEventoAoVivo),
-      segundoFinal,
-    );
+    await persistirMinutos(tx, acesso.jogo, eventosFinais.map(paraEventoDerivacao));
   });
 
   pathsJogo(jogoId);

@@ -167,4 +167,50 @@ describe("calcularMinutosDeEventos (§8.25.5)", () => {
 
     expect(eventos).toEqual(copia);
   });
+
+  it("8. jogo de 4 partes (cronómetro contínuo) — atleta joga tudo", () => {
+    const segundoFinal = 60 * 60; // 4 × 15 min
+    const eventos: EventoAoVivo[] = [
+      inicio(0, 1),
+      entrada("a1", 0),
+      fim(15 * 60, 1),
+      inicio(15 * 60, 2),
+      fim(30 * 60, 2),
+      inicio(30 * 60, 3),
+      fim(45 * 60, 3),
+      inicio(45 * 60, 4),
+      fim(segundoFinal, 4),
+    ];
+
+    const resultado = calcularMinutosDeEventos(eventos, segundoFinal);
+
+    expect(resultado).toEqual([
+      {
+        atletaId: "a1",
+        minutos: 60,
+        intervalos: [{ entrada: 0, saida: segundoFinal }],
+      },
+    ]);
+  });
+
+  it("9. PAUSA/RETOMA não alteram os intervalos (cronómetro já é contínuo)", () => {
+    const segundoFinal = 30 * 60;
+    const eventos: EventoAoVivo[] = [
+      inicio(0),
+      entrada("a1", 0),
+      { tipo: "PAUSA", segundoJogo: 12 * 60 },
+      { tipo: "RETOMA", segundoJogo: 12 * 60 },
+      fim(segundoFinal),
+    ];
+
+    const resultado = calcularMinutosDeEventos(eventos, segundoFinal);
+
+    expect(resultado).toEqual([
+      {
+        atletaId: "a1",
+        minutos: 30,
+        intervalos: [{ entrada: 0, saida: segundoFinal }],
+      },
+    ]);
+  });
 });

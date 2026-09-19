@@ -19,7 +19,7 @@ import {
 } from "@/lib/schemas/jogo";
 import { valorMetricaValido } from "@/lib/schemas/metrica";
 import { modalidadeEfetiva, filtroModalidadeJogo } from "@/lib/modalidade-escalao";
-import { derivarEstatisticasDeEventos } from "@/lib/eventos-para-estatisticas";
+import { derivarEstatisticas } from "@/lib/derivar-estatisticas";
 import {
   Prisma,
   type Epoca,
@@ -876,6 +876,10 @@ export async function previewEstatisticasDeEventos(
     modalidadeEfetiva(jogo.modalidadeAtividade, jogo.escalao?.seccao?.modalidade) ===
     "FUTEBOL";
 
+  // Lê o registo COMPLETO (clássico + Modo Jogo ao Vivo): o motor único entende
+  // `segundoJogo` (intervalos ao segundo) E `bloco` (legado), com precedência
+  // intervalos > blocos > null (§10.4). Corrige o bug P0 em que os minutos
+  // precisos do cronómetro eram descartados por o derivador desconhecer `segundoJogo`.
   const eventos = await prisma.eventoJogo.findMany({
     where: { jogoId },
     orderBy: ORDER_EVENTOS,
@@ -885,6 +889,8 @@ export async function previewEstatisticasDeEventos(
       atletaSecundarioId: true,
       bloco: true,
       minuto: true,
+      segundoJogo: true,
+      parte: true,
     },
   });
 
@@ -893,7 +899,7 @@ export async function previewEstatisticasDeEventos(
     select: { atletaId: true, titularPrevisto: true },
   });
 
-  const { estatisticas } = derivarEstatisticasDeEventos(
+  const { estatisticas } = derivarEstatisticas(
     eventos,
     convocados,
     eFutebol,
