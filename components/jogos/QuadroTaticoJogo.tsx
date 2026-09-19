@@ -9,6 +9,7 @@ import { EditorCampo } from "@/components/campo/EditorCampo";
 import { CampoDesenho } from "@/components/campo/CampoDesenho";
 import { criarQuadroTatico, atualizarQuadroTatico } from "@/lib/actions/modeloJogo";
 import { NOME_QUADRO_PLANO_JOGO } from "@/lib/schemas/modeloJogo";
+import { sobreporNomesTitulares } from "@/lib/formacao";
 import { DIAGRAMA_VAZIO_V2, type DiagramaCampo } from "@/lib/schemas/exercicio";
 import type { FormatoJogo } from "@prisma/client";
 
@@ -54,7 +55,16 @@ export function QuadroTaticoJogo({
   // é um prop recomputado a cada render, por isso ao marcar/posicionar titulares o
   // campo atualiza-se de imediato (correção da regressão em que os titulares não
   // apareciam por defeito no quadro).
-  const baseVisivel = gravado ?? diagramaFormacao;
+  //
+  // §11.5: sobrepõe SEMPRE os nomes vivos dos titulares (por id de token). O nome é
+  // identidade do atleta, não posição — sem esta sobreposição o nome só apareceria
+  // enquanto o quadro nunca tivesse sido guardado, pois o `gravado` sombreia a
+  // formação viva (bug "o nome não aparece em runtime"). Na formação viva é um
+  // no-op (já traz os nomes); num quadro gravado, injeta-os nos tokens existentes.
+  const baseVisivel = sobreporNomesTitulares(
+    gravado ?? diagramaFormacao,
+    diagramaFormacao,
+  );
 
   // Buffer de edição do EditorCampo — (re)inicializado ao abrir o editor.
   const [diagrama, setDiagrama] = useState<DiagramaCampo>(baseVisivel);

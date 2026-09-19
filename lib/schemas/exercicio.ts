@@ -34,6 +34,11 @@ const jogadorSchema = z.object({
   // figura no campo. Ausente → sem legenda (retrocompatível: exercícios e
   // diagramas antigos não a têm; não substitui o número, que continua no tronco).
   etiquetaPosicao: z.string().max(6).optional(),
+  // Nome do atleta (plano de jogo, §11.5): apresentado em letra pequena por cima
+  // da cabeça da figura no campo. Curto (primeiro nome / primeiros chars) para não
+  // transbordar. Ausente → sem nome (retrocompatível: exercícios e diagramas antigos
+  // não o têm; não substitui o número, que continua no tronco, nem a pílula de posição).
+  nomeAtleta: z.string().max(20).optional(),
   // Equipa a que o jogador pertence (opcional; convenção da secção 11.3).
   equipa: z.enum(["propria", "adversario", "neutro"]).optional(),
 });

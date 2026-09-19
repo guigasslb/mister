@@ -17,6 +17,9 @@ export type TitularFormacao = {
   id: string;
   numero: number | null;
   posicao: Posicao | null;
+  // Nome do atleta (§11.5): alimenta a etiqueta por cima da figura. Opcional/
+  // retrocompatível — ausente → sem nome no campo.
+  nome?: string | null;
 };
 
 /** Linha de formação: sector + coordenada x no espaço 400×200 do campo (§11.5). */
@@ -176,10 +179,51 @@ export function construirDiagramaFormacao(
         equipa: "propria",
         // Legenda visível da posição tática (abreviatura), por baixo da figura.
         etiquetaPosicao: ABREV_POSICAO[posicao],
+        // Nome do atleta por cima da cabeça (§11.5): primeiro nome, truncado a 12
+        // chars para não transbordar a figura. Ausente/vazio → sem nome.
+        ...(t.nome
+          ? { nomeAtleta: t.nome.split(" ")[0].slice(0, 12) }
+          : {}),
         ...(t.numero != null ? { numero: t.numero } : {}),
       });
     });
   });
 
   return { versao: 2, elementos, campo: formato ?? undefined };
+}
+
+/**
+ * Sobrepõe os nomes vivos dos titulares aos tokens de jogador de um diagrama,
+ * emparelhando por `id` de token (§11.5). O nome é uma sobreposição de IDENTIDADE
+ * (que atleta é aquele token), independente da posição no campo — por isso tem de
+ * ser aplicada mesmo a um quadro tático JÁ GRAVADO.
+ *
+ * Correção do bug "o nome não aparece": no plano de jogo o quadro visível é o
+ * gravado (`QuadroTatico.diagrama`) assim que existe, sombreando a formação viva.
+ * Sem esta sobreposição, o nome do atleta só apareceria enquanto o quadro nunca
+ * tivesse sido guardado; depois da primeira gravação desaparecia. Os nomes são
+ * lidos de `fonte` (a formação derivada dos titulares atuais) e aplicados a `alvo`.
+ *
+ * Tokens de `alvo` sem correspondência em `fonte` (adversários, jogadores extra
+ * adicionados à mão) ficam intactos. Lógica pura e testável.
+ */
+export function sobreporNomesTitulares(
+  alvo: DiagramaCampo,
+  fonte: DiagramaCampo,
+): DiagramaCampo {
+  const nomesPorId = new Map<string, string>();
+  for (const el of fonte.elementos) {
+    if (el.tipo === "jogador" && el.nomeAtleta) {
+      nomesPorId.set(el.id, el.nomeAtleta);
+    }
+  }
+  if (nomesPorId.size === 0) return alvo;
+  return {
+    ...alvo,
+    elementos: alvo.elementos.map((el) =>
+      el.tipo === "jogador" && nomesPorId.has(el.id)
+        ? { ...el, nomeAtleta: nomesPorId.get(el.id) }
+        : el,
+    ),
+  };
 }

@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   construirDiagramaFormacao,
   formacaoPadrao,
+  sobreporNomesTitulares,
   type TitularFormacao,
 } from "@/lib/formacao";
+import type { DiagramaCampo } from "@/lib/schemas/exercicio";
 
 function tit(
   id: string,
@@ -102,6 +104,74 @@ describe("construirDiagramaFormacao — todos os titulares no campo (§11.5)", (
     expect(d.campo).toBe("FUTEBOL_11");
     // Distribui pelas 4 linhas de futebol (GR, defesa, meio, ataque).
     expect(xsJogadores(d)).toEqual(new Set([35, 115, 205, 315]));
+  });
+});
+
+describe("sobreporNomesTitulares — nome aparece mesmo em quadro gravado (§11.5)", () => {
+  // Formação viva derivada dos titulares atuais (traz os nomes).
+  const fonte = construirDiagramaFormacao(
+    [
+      { id: "gr", numero: 1, posicao: "GUARDA_REDES", nome: "Gabriel Silva" },
+      { id: "fx", numero: 4, posicao: "FIXO", nome: "Joao Costa" },
+    ],
+    "FUTSAL",
+    "FUTSAL_5",
+  );
+
+  it("injeta os nomes nos tokens de um quadro GRAVADO sem nomes (bug do runtime)", () => {
+    // Quadro gravado antes da feature: mesmos ids, mas sem `nomeAtleta`.
+    const gravado: DiagramaCampo = {
+      versao: 2,
+      campo: "FUTSAL_5",
+      elementos: [
+        { id: "gr", tipo: "jogador", x: 40, y: 100, cor: "azul", numero: 1 },
+        { id: "fx", tipo: "jogador", x: 130, y: 90, cor: "azul", numero: 4 },
+      ],
+    };
+    const out = sobreporNomesTitulares(gravado, fonte);
+    const m = new Map(
+      out.elementos
+        .filter((e) => e.tipo === "jogador")
+        .map((e) => [e.id, e.nomeAtleta]),
+    );
+    expect(m.get("gr")).toBe("Gabriel");
+    expect(m.get("fx")).toBe("Joao");
+    // Não altera as posições gravadas (só sobrepõe a identidade/nome).
+    const gr = out.elementos.find((e) => e.id === "gr")!;
+    expect(gr.tipo === "jogador" && gr.x).toBe(40);
+  });
+
+  it("não toca em tokens sem correspondência (adversário/jogador extra)", () => {
+    const gravado: DiagramaCampo = {
+      versao: 2,
+      elementos: [
+        { id: "gr", tipo: "jogador", x: 40, y: 100, cor: "azul", numero: 1 },
+        {
+          id: "adv1",
+          tipo: "jogador",
+          x: 300,
+          y: 100,
+          cor: "vermelho",
+          equipa: "adversario",
+        },
+      ],
+    };
+    const out = sobreporNomesTitulares(gravado, fonte);
+    const adv = out.elementos.find((e) => e.id === "adv1")!;
+    expect("nomeAtleta" in adv && adv.nomeAtleta).toBeFalsy();
+  });
+
+  it("sem titulares com nome → devolve o diagrama tal como está (no-op)", () => {
+    const semNomes = construirDiagramaFormacao(
+      [{ id: "gr", numero: 1, posicao: "GUARDA_REDES" }],
+      "FUTSAL",
+      "FUTSAL_5",
+    );
+    const alvo: DiagramaCampo = {
+      versao: 2,
+      elementos: [{ id: "gr", tipo: "jogador", x: 40, y: 100, cor: "azul" }],
+    };
+    expect(sobreporNomesTitulares(alvo, semNomes)).toBe(alvo);
   });
 });
 

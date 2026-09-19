@@ -127,6 +127,7 @@ export function PlanoTatico({
       id: c.id,
       numero: c.numero,
       posicao: linhaDe(c.id).posicaoPrevista,
+      nome: c.nome,
     })),
     modalidade,
     formato,

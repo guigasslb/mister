@@ -744,6 +744,18 @@ export function ElementoSVG({
           : null;
       const posLargura = etiquetaPos ? Math.max(9, etiquetaPos.length * 2.7 + 4) : 0;
       const posTopo = legBotY + 3;
+      // Nome do atleta (§11.5): letra pequena por cima da cabeça, quando o elemento
+      // o traz (plano de jogo). Ausente/vazio → não renderiza nada (retrocompatível:
+      // exercícios e diagramas antigos não o definem). Legibilidade sobre o fundo:
+      // contorno escuro (stroke + paintOrder), tal como o número no tronco.
+      const nomeAtleta =
+        "nomeAtleta" in elemento &&
+        elemento.nomeAtleta != null &&
+        elemento.nomeAtleta !== ""
+          ? elemento.nomeAtleta
+          : null;
+      // Baseline ~10u acima do topo da figura (topo da cabeça = headCy − headR).
+      const nomeY = headCy - headR - 3;
       // Camisola vista de trás: ombros arredondados largos com entalhe de gola ao
       // centro, laterais a estreitar até à bainha curva na cintura (perspetiva 3D).
       const camisola =
@@ -891,6 +903,25 @@ export function ElementoSVG({
                 {etiquetaPos}
               </text>
             </g>
+          )}
+          {/* Nome do atleta por cima da cabeça (§11.5) — letra pequena, branca com
+              contorno escuro para contraste sobre o fundo do campo. Não interfere
+              com o número (tronco) nem com a pílula de posição (aos pés). */}
+          {nomeAtleta != null && (
+            <text
+              x={cx}
+              y={nomeY}
+              textAnchor="middle"
+              dominantBaseline="alphabetic"
+              fontSize={4.6}
+              fontWeight={700}
+              fill="#FFFFFF"
+              stroke="rgba(15,17,23,0.85)"
+              strokeWidth={0.9}
+              paintOrder="stroke"
+            >
+              {nomeAtleta}
+            </text>
           )}
         </g>
       );
