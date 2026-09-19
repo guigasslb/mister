@@ -6,9 +6,15 @@ import { Check, ListChecks, Lock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { marcarPresencas } from "@/lib/actions/treinos";
-import { MOTIVOS_FALTA, LABEL_MOTIVO_FALTA } from "@/lib/schemas/treino";
+import {
+  MOTIVOS_FALTA,
+  LABEL_MOTIVO_FALTA,
+  TIPOS_AUSENCIA,
+  LABEL_TIPO_AUSENCIA,
+  estadoImplicaAusencia,
+} from "@/lib/schemas/treino";
 import { presencasAlteradas, type RegistoPresenca } from "@/lib/presencas";
-import type { EstadoPresenca, MotivoFalta } from "@prisma/client";
+import type { EstadoPresenca, MotivoFalta, TipoAusencia } from "@prisma/client";
 
 type Atleta = {
   id: string;
@@ -27,6 +33,9 @@ export type PresencaInicial = {
   estado: EstadoPresenca;
   motivo: MotivoFalta | null;
   justificacao: string | null;
+  // §8.8.2 — classificação da ausência (só preenchida em estados de não-comparência).
+  tipoAusencia: TipoAusencia | null;
+  notaAusencia: string | null;
 };
 
 const PRESENTES = new Set<EstadoPresenca>(["PRESENTE", "ATRASADO"]);
@@ -76,7 +85,13 @@ export function MarcadorPresencas({
           existente.motivo ?? (existente.justificacao?.trim() ? "OUTRO" : null);
         inicial[a.id] = { ...existente, motivo };
       } else {
-        inicial[a.id] = { estado: null, motivo: null, justificacao: null };
+        inicial[a.id] = {
+          estado: null,
+          motivo: null,
+          justificacao: null,
+          tipoAusencia: null,
+          notaAusencia: null,
+        };
       }
     }
     return inicial;
@@ -107,15 +122,22 @@ export function MarcadorPresencas({
 
   function mudarEstado(atletaId: string, estado: EstadoPresenca) {
     if (soLeitura) return;
-    setRegistos((prev) => ({
-      ...prev,
-      [atletaId]: {
-        estado,
-        // Motivo/justificação só se aplicam a ausências — limpam quando presente.
-        motivo: COM_JUSTIFICACAO.has(estado) ? prev[atletaId].motivo : null,
-        justificacao: COM_JUSTIFICACAO.has(estado) ? prev[atletaId].justificacao : null,
-      },
-    }));
+    setRegistos((prev) => {
+      const eAusencia = estadoImplicaAusencia(estado);
+      return {
+        ...prev,
+        [atletaId]: {
+          estado,
+          // Motivo/justificação só se aplicam a ausências — limpam quando presente.
+          motivo: COM_JUSTIFICACAO.has(estado) ? prev[atletaId].motivo : null,
+          justificacao: COM_JUSTIFICACAO.has(estado) ? prev[atletaId].justificacao : null,
+          // §8.8.2 — tipo/nota de ausência mantêm-se nos estados de não-comparência
+          // e limpam-se assim que o atleta passa a presente/atrasado.
+          tipoAusencia: eAusencia ? (prev[atletaId].tipoAusencia ?? null) : null,
+          notaAusencia: eAusencia ? (prev[atletaId].notaAusencia ?? null) : null,
+        },
+      };
+    });
   }
 
   function mudarJustificacao(atletaId: string, valor: string) {
@@ -146,13 +168,40 @@ export function MarcadorPresencas({
     });
   }
 
-  /** Marca todos os atletas como PRESENTE (limpa motivos/justificações). */
+  /**
+   * Seleciona (ou alterna) o tipo de ausência (§8.8.2). Toggle: clicar no tipo
+   * já ativo remove-o. A nota livre mantém-se — aplica-se a qualquer tipo.
+   */
+  function mudarTipoAusencia(atletaId: string, tipo: TipoAusencia) {
+    if (soLeitura) return;
+    setRegistos((prev) => {
+      const atual = prev[atletaId];
+      const novoTipo = atual.tipoAusencia === tipo ? null : tipo;
+      return { ...prev, [atletaId]: { ...atual, tipoAusencia: novoTipo } };
+    });
+  }
+
+  function mudarNotaAusencia(atletaId: string, valor: string) {
+    if (soLeitura) return;
+    setRegistos((prev) => ({
+      ...prev,
+      [atletaId]: { ...prev[atletaId], notaAusencia: valor },
+    }));
+  }
+
+  /** Marca todos os atletas como PRESENTE (limpa motivos/justificações e ausência). */
   function marcarTodosPresentes() {
     if (soLeitura) return;
     setRegistos((prev) => {
       const proximo: Record<string, RegistoPresenca> = {};
       for (const id of Object.keys(prev))
-        proximo[id] = { estado: "PRESENTE", motivo: null, justificacao: null };
+        proximo[id] = {
+          estado: "PRESENTE",
+          motivo: null,
+          justificacao: null,
+          tipoAusencia: null,
+          notaAusencia: null,
+        };
       return proximo;
     });
   }
@@ -169,7 +218,13 @@ export function MarcadorPresencas({
     setRegistos((prev) => {
       const proximo: Record<string, RegistoPresenca> = {};
       for (const id of Object.keys(prev))
-        proximo[id] = { estado: null, motivo: null, justificacao: null };
+        proximo[id] = {
+          estado: null,
+          motivo: null,
+          justificacao: null,
+          tipoAusencia: null,
+          notaAusencia: null,
+        };
       return proximo;
     });
   }
@@ -191,6 +246,9 @@ export function MarcadorPresencas({
           estado: r.estado, // null → limpar (remover) no servidor
           motivo: r.motivo,
           justificacao: r.justificacao?.trim() ? r.justificacao : undefined,
+          // §8.8.2 — tipo/nota de ausência (o servidor limpa-os se o estado não for ausência).
+          tipoAusencia: r.tipoAusencia ?? null,
+          notaAusencia: r.notaAusencia?.trim() ? r.notaAusencia : undefined,
         };
       });
     startTransition(async () => {
@@ -248,6 +306,7 @@ export function MarcadorPresencas({
         {atletas.map((a) => {
           const registo = registos[a.id];
           const comJustificacao = registo.estado != null && COM_JUSTIFICACAO.has(registo.estado);
+          const eAusencia = registo.estado != null && estadoImplicaAusencia(registo.estado);
           return (
             <li
               key={a.id}
@@ -342,6 +401,59 @@ export function MarcadorPresencas({
                       />
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* §8.8.2 — Tipo de ausência (aplica-se a todos os estados de
+                  não-comparência, incl. Lesionado) + nota livre opcional. */}
+              {eAusencia && (
+                <div className="mt-2 space-y-2 border-t border-cinza-100 pt-2">
+                  <span className="block text-legenda text-cinza-500">
+                    Tipo de ausência (opcional)
+                  </span>
+                  <div
+                    role="group"
+                    aria-label={`Tipo de ausência de ${a.nome}`}
+                    className="flex flex-wrap gap-1.5"
+                  >
+                    {TIPOS_AUSENCIA.map((t) => {
+                      const ativo = registo.tipoAusencia === t;
+                      return (
+                        <Button
+                          key={t}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-pressed={ativo}
+                          disabled={soLeitura}
+                          onClick={() => mudarTipoAusencia(a.id, t)}
+                          className={
+                            ativo ? "border-primary bg-primary/5 text-primary" : ""
+                          }
+                        >
+                          {LABEL_TIPO_AUSENCIA[t]}
+                        </Button>
+                      );
+                    })}
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor={`nota-ausencia-${a.id}`}
+                      className="mb-1 block text-legenda text-cinza-500"
+                    >
+                      Nota da ausência (opcional)
+                    </label>
+                    <Input
+                      id={`nota-ausencia-${a.id}`}
+                      value={registo.notaAusencia ?? ""}
+                      onChange={(ev) => mudarNotaAusencia(a.id, ev.target.value)}
+                      disabled={soLeitura}
+                      maxLength={200}
+                      placeholder="Ex.: entorse no tornozelo, viagem de trabalho…"
+                      className="h-11"
+                    />
+                  </div>
                 </div>
               )}
             </li>

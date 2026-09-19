@@ -12,6 +12,7 @@ import {
   notasSessaoSchema,
   sessaoExercicioOverrideSchema,
   parteTreinoSessaoSchema,
+  estadoImplicaAusencia,
 } from "@/lib/schemas/treino";
 import { alcanceSchema } from "@/lib/schemas/planoSemanal";
 import { construirSnapshotExercicio } from "@/lib/snapshot-exercicio";
@@ -705,6 +706,13 @@ export async function marcarPresencas(
       idsParaLimpar.push(p.atletaId);
       continue;
     }
+    // §8.8.2 — tipo/nota de ausência só se aplicam a estados de não-comparência.
+    // Fora disso limpam-se sempre (defesa: o schema já rejeita valores incoerentes,
+    // mas garantimos que a gravação nunca mantém lixo de uma marcação anterior).
+    const eAusencia = estadoImplicaAusencia(p.estado);
+    const tipoAusencia = eAusencia ? (p.tipoAusencia ?? null) : null;
+    const notaAusencia =
+      eAusencia && p.notaAusencia?.trim() ? p.notaAusencia.trim() : null;
     operacoes.push(
       prisma.presenca.upsert({
         where: { sessaoId_atletaId: { sessaoId, atletaId: p.atletaId } },
@@ -715,6 +723,8 @@ export async function marcarPresencas(
           estado: p.estado,
           motivo: p.motivo ?? null,
           justificacao: p.justificacao ?? null,
+          tipoAusencia,
+          notaAusencia,
           marcadoPorId,
         },
         update: {
@@ -722,6 +732,8 @@ export async function marcarPresencas(
           estado: p.estado,
           motivo: p.motivo ?? null,
           justificacao: p.justificacao ?? null,
+          tipoAusencia,
+          notaAusencia,
           marcadoPorId,
         },
       }),

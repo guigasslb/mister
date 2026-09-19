@@ -42,6 +42,54 @@ describe("lib/presencas — presencasAlteradas", () => {
     expect(presencasAlteradas(inicial, diferentes)).toBe(true);
   });
 
+  it("deteta mudança de tipo de ausência", () => {
+    const base: RegistoPresenca = {
+      estado: "LESIONADO",
+      motivo: null,
+      justificacao: null,
+      tipoAusencia: null,
+      notaAusencia: null,
+    };
+    const inicial: Record<string, RegistoPresenca> = { a: { ...base } };
+    const atual: Record<string, RegistoPresenca> = { a: { ...base, tipoAusencia: "LESAO" } };
+    expect(presencasAlteradas(inicial, atual)).toBe(true);
+  });
+
+  it("nota de ausência null, vazia ou só com espaços são equivalentes", () => {
+    const base: RegistoPresenca = {
+      estado: "FALTA",
+      motivo: null,
+      justificacao: null,
+      tipoAusencia: "OUTRO",
+      notaAusencia: null,
+    };
+    const inicial: Record<string, RegistoPresenca> = { a: { ...base, notaAusencia: null } };
+    const atual: Record<string, RegistoPresenca> = { a: { ...base, notaAusencia: "   " } };
+    expect(presencasAlteradas(inicial, atual)).toBe(false);
+  });
+
+  it("deteta mudança real da nota de ausência (ignora espaços nas pontas)", () => {
+    const base: RegistoPresenca = {
+      estado: "FALTA_JUSTIFICADA",
+      motivo: null,
+      justificacao: null,
+      tipoAusencia: "OUTRO",
+      notaAusencia: "consulta",
+    };
+    const inicial: Record<string, RegistoPresenca> = { a: { ...base } };
+    const iguais: Record<string, RegistoPresenca> = { a: { ...base, notaAusencia: "  consulta  " } };
+    const diferentes: Record<string, RegistoPresenca> = { a: { ...base, notaAusencia: "viagem" } };
+    expect(presencasAlteradas(inicial, iguais)).toBe(false);
+    expect(presencasAlteradas(inicial, diferentes)).toBe(true);
+  });
+
+  it("campos de ausência ausentes (undefined) equivalem a null", () => {
+    // Registos/fixtures antigos não trazem tipoAusencia/notaAusencia.
+    const antigo: RegistoPresenca = { estado: "FALTA", motivo: "DOENCA", justificacao: null };
+    const novo: RegistoPresenca = { ...antigo, tipoAusencia: null, notaAusencia: null };
+    expect(presencasAlteradas({ a: antigo }, { a: novo })).toBe(false);
+  });
+
   it("deteta atleta presente só num dos mapas", () => {
     const inicial: Record<string, RegistoPresenca> = { a: vazio() };
     const atual: Record<string, RegistoPresenca> = { a: vazio(), b: vazio() };

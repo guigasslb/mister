@@ -82,6 +82,9 @@ export default async function DetalheSessaoPage({
       estado: p.estado,
       motivo: p.motivo,
       justificacao: p.justificacao,
+      // §8.8.2 — classificação da ausência (só preenchida em estados de ausência).
+      tipoAusencia: p.tipoAusencia,
+      notaAusencia: p.notaAusencia,
     };
 
   const foraDaEpoca =
