@@ -188,7 +188,20 @@ export function GestorExercicios({
   >(null);
   const [exercicioAdaptar, setExercicioAdaptar] = useState<ExercicioSessao | null>(null);
 
-  const total = exercicios.reduce((acc, e) => acc + (e.duracaoMin ?? 0), 0);
+  // §8.24.2 / RN-GR-3: os exercícios de `categoriaPrincipal=GUARDA_REDES` são
+  // apresentados exclusivamente no "Bloco de Guarda-redes" (detalhe da sessão),
+  // não nesta lista principal numerada — para evitar duplicação. A separação é
+  // derivada da categoria; as linhas GR continuam a existir na sessão (participam
+  // do modo de condução §8.8.2 e da ordenação `ordem`), apenas não se mostram aqui.
+  const exerciciosVisiveis = exercicios.filter(
+    (e) => e.exercicio.categoriaPrincipal !== "GUARDA_REDES",
+  );
+  const exerciciosGR = exercicios.filter(
+    (e) => e.exercicio.categoriaPrincipal === "GUARDA_REDES",
+  );
+
+  const total = exerciciosVisiveis.reduce((acc, e) => acc + (e.duracaoMin ?? 0), 0);
+  // "+1"/"Adicionar" no seletor considera todos os exercícios já na sessão (incl. GR).
   const jaAdicionados = new Set(exercicios.map((e) => e.exercicio.id));
 
   const nomeSubcategoria = new Map(subcategorias.map((s) => [s.id, s.nome]));
@@ -236,7 +249,7 @@ export function GestorExercicios({
     RETORNO_CALMA: [],
     [SEM_FASE]: [],
   };
-  for (const e of exercicios) grupos[e.parteTreino ?? SEM_FASE].push(e);
+  for (const e of exerciciosVisiveis) grupos[e.parteTreino ?? SEM_FASE].push(e);
 
   // Numeração global na ordem de visualização (fase a fase).
   const numeroDe: Record<string, number> = {};
@@ -276,7 +289,12 @@ export function GestorExercicios({
 
     const flat: ExercicioSessao[] = [];
     for (const f of ORDEM_FASES) flat.push(...(f === fase ? novoGrupo : grupos[f]));
-    const ordens = flat.map((e, i) => ({ id: e.id, ordem: i }));
+    // Anexar os exercícios de GR (fora desta lista, no "Bloco de Guarda-redes")
+    // preservando a sua ordem relativa: a reatribuição de `ordem` tem de cobrir
+    // TODOS os SessaoExercicio da sessão, senão as linhas GR omitidas mantêm o
+    // seu `ordem` e colidem no unique [sessaoId, ordem] ao assentar (§ reordenar).
+    const grOrdenados = [...exerciciosGR].sort((a, b) => a.ordem - b.ordem);
+    const ordens = [...flat, ...grOrdenados].map((e, i) => ({ id: e.id, ordem: i }));
 
     startTransition(async () => {
       const res = await reordenarExercicios(sessaoId, ordens);
@@ -289,7 +307,7 @@ export function GestorExercicios({
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-subtitulo text-cinza-900">Exercícios</h2>
         <div className="flex items-center gap-2">
-          {exercicios.length > 0 && (
+          {exerciciosVisiveis.length > 0 && (
             <Button
               type="button"
               variant={modoEdicao ? "default" : "outline"}
@@ -306,7 +324,7 @@ export function GestorExercicios({
                   <ListOrdered className="h-4 w-4" />
                   {/* Um único exercício não se reordena, mas tem de poder remover-se
                       (§8.8.2 — sessões, incl. concluídas, são editáveis). */}
-                  {exercicios.length > 1 ? "Editar ordem" : "Editar"}
+                  {exerciciosVisiveis.length > 1 ? "Editar ordem" : "Editar"}
                 </>
               )}
             </Button>
@@ -544,7 +562,7 @@ export function GestorExercicios({
         </div>
       </div>
 
-      {exercicios.length === 0 ? (
+      {exerciciosVisiveis.length === 0 ? (
         // §8.8.2: sessões (incl. concluídas) são sempre editáveis. O empty state
         // é acionável — nunca um dead-end — para permitir adicionar exercícios
         // retroativamente a treinos já realizados.
