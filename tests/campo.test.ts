@@ -8,10 +8,16 @@ import {
   posicoesBase,
   raioHitEfetivo,
   rotuloElemento,
+  moverPasso,
+  ajustarKeyframeAposMover,
   type Pos,
 } from "@/components/campo/animacao";
 import { diagramaSchema } from "@/lib/schemas/exercicio";
-import type { DiagramaCampo, ElementoCampo } from "@/lib/schemas/exercicio";
+import type {
+  DiagramaCampo,
+  ElementoCampo,
+  PassoAnimacao,
+} from "@/lib/schemas/exercicio";
 
 const jogador = (id: string, x: number, y: number): ElementoCampo => ({
   id,
@@ -337,5 +343,123 @@ describe("adversário (quadro tático do jogo)", () => {
   it("string não-JSON falha de forma limpa (não lança)", () => {
     const r = diagramaSchema.safeParse("isto não é json");
     expect(r.success).toBe(false);
+  });
+});
+
+// Reordenação de passos (drag-and-drop / botões de seta) — §11.2.
+describe("moverPasso", () => {
+  const passo = (
+    id: string,
+    ordem: number,
+    posicoes: PassoAnimacao["posicoes"] = [],
+    duracaoMs?: number,
+  ): PassoAnimacao => ({ id, ordem, posicoes, duracaoMs });
+
+  it("move o último passo para o início (arrastar novo passo para o meio/topo)", () => {
+    const passos = [passo("a", 0), passo("b", 1), passo("c", 2)];
+    const r = moverPasso(passos, 2, 0);
+    expect(r.map((p) => p.id)).toEqual(["c", "a", "b"]);
+    expect(r.map((p) => p.ordem)).toEqual([0, 1, 2]); // reindexado 0..N-1
+  });
+
+  it("move o primeiro passo para o fim", () => {
+    const passos = [passo("a", 0), passo("b", 1), passo("c", 2)];
+    const r = moverPasso(passos, 0, 2);
+    expect(r.map((p) => p.id)).toEqual(["b", "c", "a"]);
+    expect(r.map((p) => p.ordem)).toEqual([0, 1, 2]);
+  });
+
+  it("move para uma posição arbitrária no meio", () => {
+    const passos = [
+      passo("a", 0),
+      passo("b", 1),
+      passo("c", 2),
+      passo("d", 3),
+    ];
+    const r = moverPasso(passos, 3, 1); // d (fim) → posição 1
+    expect(r.map((p) => p.id)).toEqual(["a", "d", "b", "c"]);
+    expect(r.map((p) => p.ordem)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("preserva o movimento (posicoes e duracaoMs) do passo movido", () => {
+    const passos = [
+      passo("a", 0, [{ elementoId: "bola", x: 30, y: 30 }]),
+      passo("novo", 1, [{ elementoId: "bola", x: 80, y: 80 }], 1200),
+    ];
+    const r = moverPasso(passos, 1, 0);
+    const movido = r.find((p) => p.id === "novo")!;
+    expect(movido.posicoes).toEqual([{ elementoId: "bola", x: 80, y: 80 }]);
+    expect(movido.duracaoMs).toBe(1200);
+    // Reconstruído por ordem: base → novo(80,80) → a(30,30).
+    const kfs = construirKeyframes({
+      versao: 2,
+      elementos: [{ id: "bola", tipo: "bola", x: 10, y: 10 }],
+      passos: r,
+    });
+    expect(kfs.map((m) => m.get("bola"))).toEqual([
+      { x: 10, y: 10 },
+      { x: 80, y: 80 },
+      { x: 30, y: 30 },
+    ]);
+  });
+
+  it("normaliza a partir de um array desordenado por ordem", () => {
+    const passos = [passo("b", 1), passo("a", 0), passo("c", 2)];
+    const r = moverPasso(passos, 0, 2); // sobre a lista ORDENADA [a,b,c]: a → fim
+    expect(r.map((p) => p.id)).toEqual(["b", "c", "a"]);
+    expect(r.map((p) => p.ordem)).toEqual([0, 1, 2]);
+  });
+
+  it("de === para é no-op (apenas reindexa)", () => {
+    const passos = [passo("a", 0), passo("b", 1)];
+    const r = moverPasso(passos, 1, 1);
+    expect(r.map((p) => p.id)).toEqual(["a", "b"]);
+    expect(r.map((p) => p.ordem)).toEqual([0, 1]);
+  });
+
+  it("índice de origem inválido é no-op (apenas reindexa/ordena)", () => {
+    const passos = [passo("b", 1), passo("a", 0)];
+    const r = moverPasso(passos, 5, 0);
+    expect(r.map((p) => p.id)).toEqual(["a", "b"]);
+    expect(r.map((p) => p.ordem)).toEqual([0, 1]);
+  });
+
+  it("não muta o array de entrada", () => {
+    const passos = [passo("a", 0), passo("b", 1)];
+    const copia = JSON.parse(JSON.stringify(passos));
+    moverPasso(passos, 0, 1);
+    expect(passos).toEqual(copia);
+  });
+});
+
+describe("ajustarKeyframeAposMover (keyframe activo acompanha o passo movido)", () => {
+  it("a base (-1) nunca é afectada", () => {
+    expect(ajustarKeyframeAposMover(-1, 2, 0)).toBe(-1);
+  });
+
+  it("o passo movido é seguido até ao destino", () => {
+    expect(ajustarKeyframeAposMover(2, 2, 0)).toBe(0);
+    expect(ajustarKeyframeAposMover(0, 0, 3)).toBe(3);
+  });
+
+  it("passos entre a origem e o destino deslocam-se ao fechar espaço", () => {
+    // Mover 0 → 2: os índices 1 e 2 recuam uma posição.
+    expect(ajustarKeyframeAposMover(1, 0, 2)).toBe(0);
+    expect(ajustarKeyframeAposMover(2, 0, 2)).toBe(1);
+  });
+
+  it("passos entre o destino e a origem deslocam-se ao abrir espaço", () => {
+    // Mover 3 → 1: os índices 1 e 2 avançam uma posição.
+    expect(ajustarKeyframeAposMover(1, 3, 1)).toBe(2);
+    expect(ajustarKeyframeAposMover(2, 3, 1)).toBe(3);
+  });
+
+  it("passos fora do intervalo afectado mantêm-se", () => {
+    expect(ajustarKeyframeAposMover(5, 3, 1)).toBe(5);
+    expect(ajustarKeyframeAposMover(0, 3, 1)).toBe(0);
+  });
+
+  it("de === para mantém o keyframe", () => {
+    expect(ajustarKeyframeAposMover(2, 2, 2)).toBe(2);
   });
 });

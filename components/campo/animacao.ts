@@ -4,10 +4,57 @@
 //   `passos[]`  = keyframes seguintes, guardados como DELTA (só os elementos que
 //                 mudaram). Cada keyframe HERDA as posições do keyframe anterior.
 
-import type { DiagramaCampo, ElementoCampo } from "@/lib/schemas/exercicio";
+import type {
+  DiagramaCampo,
+  ElementoCampo,
+  PassoAnimacao,
+} from "@/lib/schemas/exercicio";
 
 export type Pos = { x: number; y: number };
 export type PosicaoPasso = { elementoId: string; x: number; y: number };
+
+// Reordenação de passos (secção 11.2). Os passos são apresentados/reconstruídos
+// SEMPRE pela sua `ordem` (ver `construirKeyframes`), pelo que reordenar é mover
+// um passo de uma posição para outra na lista ordenada e reindexar a `ordem`
+// sequencialmente (0..N-1). Cada `PassoAnimacao` guarda posições ABSOLUTAS, logo
+// mover o passo preserva o seu movimento — o keyframe reconstruído continua
+// coerente. Função pura (sem React) para ser testável e reutilizável tanto pelo
+// arrasto (drag-and-drop) como pelos botões de seta da timeline.
+export function moverPasso(
+  passos: PassoAnimacao[],
+  de: number,
+  para: number,
+): PassoAnimacao[] {
+  const ordenados = [...passos].sort((a, b) => a.ordem - b.ordem);
+  const n = ordenados.length;
+  // `para` é fixado ao intervalo válido para aceitar "soltar no fim" (drop após o
+  // último) sem lançar. `de` fora do intervalo é no-op (apenas reindexa).
+  const destino = Math.max(0, Math.min(n - 1, para));
+  if (de < 0 || de >= n || de === destino) {
+    return ordenados.map((p, i) => ({ ...p, ordem: i }));
+  }
+  const novos = [...ordenados];
+  const [movido] = novos.splice(de, 1);
+  novos.splice(destino, 0, movido);
+  return novos.map((p, i) => ({ ...p, ordem: i }));
+}
+
+// Índice do keyframe activo depois de mover um passo de `de` para `para`. O
+// keyframe activo "acompanha" o passo movido; os restantes deslocam-se conforme
+// a lista fecha/abre espaço. `-1` (base/"Início") nunca é afectado por reordenar
+// passos. Índices em 0..N-1 (posição do passo na lista ordenada).
+export function ajustarKeyframeAposMover(
+  activo: number,
+  de: number,
+  para: number,
+): number {
+  if (activo < 0) return activo; // base ("Início")
+  if (de === para) return activo;
+  if (activo === de) return para; // o próprio passo movido
+  if (de < activo && activo <= para) return activo - 1; // fechou espaço antes
+  if (para <= activo && activo < de) return activo + 1; // abriu espaço depois
+  return activo;
+}
 
 // Duração padrão de cada segmento de animação (ms).
 export const DURACAO_PADRAO = 900;

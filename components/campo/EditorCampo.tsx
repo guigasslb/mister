@@ -1442,6 +1442,9 @@ export function EditorCampo({
                 Seleciona <strong>Início</strong> (posição base) ou um passo e
                 arrasta os elementos. Cada passo guarda apenas o que muda; as
                 setas-fantasma mostram o movimento a partir do passo anterior.
+                Para <strong>reordenar</strong>, arrasta um passo pela pega{" "}
+                <span aria-hidden="true">⠿</span> (ou usa as setas ‹ ›) para
+                qualquer posição da sequência.
               </p>
             </>
           )}

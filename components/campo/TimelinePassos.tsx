@@ -1,8 +1,13 @@
 "use client";
 
-import { ChevronUp, ChevronDown, X } from "lucide-react";
+import { useState } from "react";
+import { ChevronUp, ChevronDown, X, GripVertical } from "lucide-react";
 import type { PassoAnimacao } from "@/lib/schemas/exercicio";
-import { DURACAO_PADRAO } from "./animacao";
+import {
+  DURACAO_PADRAO,
+  moverPasso,
+  ajustarKeyframeAposMover,
+} from "./animacao";
 
 export interface TimelinePassosProps {
   passos: PassoAnimacao[];
@@ -11,7 +16,7 @@ export interface TimelinePassosProps {
   onKeyframeChange: (idx: number) => void;
 }
 
-// Reindexa `ordem` sequencialmente (0..N-1) após eliminar/reordenar.
+// Reindexa `ordem` sequencialmente (0..N-1) após eliminar.
 function reindexar(passos: PassoAnimacao[]): PassoAnimacao[] {
   return passos.map((p, idx) => ({ ...p, ordem: idx }));
 }
@@ -24,6 +29,12 @@ export function TimelinePassos({
 }: TimelinePassosProps) {
   const ordenados = [...passos].sort((a, b) => a.ordem - b.ordem);
 
+  // Índice do passo a ser arrastado e do passo sobre o qual paira (para indicador
+  // visual de destino). Só usado no arrasto por ponteiro (desktop); os botões de
+  // seta cobrem o toque/teclado.
+  const [arrastandoIdx, setArrastandoIdx] = useState<number | null>(null);
+  const [sobreIdx, setSobreIdx] = useState<number | null>(null);
+
   function eliminar(idx: number) {
     const novos = reindexar(ordenados.filter((_, i) => i !== idx));
     onChange(novos);
@@ -32,14 +43,20 @@ export function TimelinePassos({
     else if (keyframeActivo > idx) onKeyframeChange(keyframeActivo - 1);
   }
 
-  function trocar(i: number, j: number) {
-    if (j < 0 || j >= ordenados.length) return;
-    const novos = [...ordenados];
-    [novos[i], novos[j]] = [novos[j], novos[i]];
-    onChange(reindexar(novos));
-    // O keyframe activo acompanha o passo que foi movido.
-    if (keyframeActivo === i) onKeyframeChange(j);
-    else if (keyframeActivo === j) onKeyframeChange(i);
+  // Move um passo de `de` para `para` (qualquer posição na sequência) e faz o
+  // keyframe activo acompanhar. Usado tanto pelo arrasto como pelos botões ‹/›.
+  function mover(de: number, para: number) {
+    if (de === para || de < 0 || para < 0 || para >= ordenados.length) return;
+    onChange(moverPasso(ordenados, de, para));
+    onKeyframeChange(ajustarKeyframeAposMover(keyframeActivo, de, para));
+  }
+
+  function largarSobre(idx: number) {
+    if (arrastandoIdx !== null && arrastandoIdx !== idx) {
+      mover(arrastandoIdx, idx);
+    }
+    setArrastandoIdx(null);
+    setSobreIdx(null);
   }
 
   function definirDuracao(idx: number, valor: string) {
@@ -74,16 +91,54 @@ export function TimelinePassos({
 
         {ordenados.map((passo, idx) => {
           const activo = keyframeActivo === idx;
+          const aArrastar = arrastandoIdx === idx;
+          const alvoDrop = sobreIdx === idx && arrastandoIdx !== idx;
           return (
             <div
               key={passo.id}
-              className={`flex min-h-11 flex-shrink-0 flex-col gap-1 rounded-md border p-2 ${
+              onDragOver={(e) => {
+                // Permite o drop e assinala este passo como destino.
+                if (arrastandoIdx === null) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (sobreIdx !== idx) setSobreIdx(idx);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                largarSobre(idx);
+              }}
+              className={`flex min-h-11 flex-shrink-0 flex-col gap-1 rounded-md border p-2 transition-colors ${
                 activo
                   ? "border-primary bg-primary/5 ring-2 ring-primary/40"
                   : "border-cinza-200"
+              } ${aArrastar ? "opacity-50" : ""} ${
+                alvoDrop ? "border-primary ring-2 ring-primary/40" : ""
               }`}
             >
               <div className="flex items-center gap-1">
+                {/* Pega de arrasto (drag-and-drop por ponteiro). Só a pega é
+                    `draggable` para não interferir com o input numérico nem com
+                    os restantes botões do passo. */}
+                <span
+                  draggable
+                  onDragStart={(e) => {
+                    setArrastandoIdx(idx);
+                    e.dataTransfer.effectAllowed = "move";
+                    // Alguns browsers exigem dados para iniciar o arrasto.
+                    e.dataTransfer.setData("text/plain", String(idx));
+                  }}
+                  onDragEnd={() => {
+                    setArrastandoIdx(null);
+                    setSobreIdx(null);
+                  }}
+                  role="button"
+                  tabIndex={-1}
+                  aria-label={`Arrastar passo ${idx + 1} para reordenar`}
+                  title="Arrastar para reordenar"
+                  className="flex h-6 w-5 cursor-grab items-center justify-center text-cinza-400 hover:text-cinza-600 active:cursor-grabbing"
+                >
+                  <GripVertical className="h-4 w-4" />
+                </span>
                 <button
                   type="button"
                   role="option"
@@ -97,7 +152,7 @@ export function TimelinePassos({
                 </button>
                 <button
                   type="button"
-                  onClick={() => trocar(idx, idx - 1)}
+                  onClick={() => mover(idx, idx - 1)}
                   disabled={idx === 0}
                   aria-label={`Mover passo ${idx + 1} para trás`}
                   className="flex h-6 w-6 items-center justify-center rounded text-cinza-500 hover:bg-cinza-100 disabled:opacity-30"
@@ -106,7 +161,7 @@ export function TimelinePassos({
                 </button>
                 <button
                   type="button"
-                  onClick={() => trocar(idx, idx + 1)}
+                  onClick={() => mover(idx, idx + 1)}
                   disabled={idx === ordenados.length - 1}
                   aria-label={`Mover passo ${idx + 1} para a frente`}
                   className="flex h-6 w-6 items-center justify-center rounded text-cinza-500 hover:bg-cinza-100 disabled:opacity-30"
