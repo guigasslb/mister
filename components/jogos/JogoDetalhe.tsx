@@ -111,6 +111,7 @@ export function JogoDetalhe({
   relatorioInicial,
   golosMarcados,
   planoInicial,
+  capitaoInicial,
   eventos,
   observacoes,
   casaFora,
@@ -133,6 +134,8 @@ export function JogoDetalhe({
   relatorioInicial: string;
   golosMarcados: number | null;
   planoInicial: Record<string, LinhaPlano>;
+  // Capitão de equipa gravado (atletaId) ou null. Só pode haver 1 por jogo.
+  capitaoInicial: string | null;
   eventos: EventoTimeline[];
   observacoes: ObservacaoAdversario[];
   casaFora: CasaFora;
@@ -464,6 +467,7 @@ export function JogoDetalhe({
                 posicoes: a.posicoes,
               }))}
               planoInicial={planoInicial}
+              capitaoInicial={capitaoInicial}
               modalidade={modalidade}
               formato={formato}
               quadroInicial={quadroInicial}

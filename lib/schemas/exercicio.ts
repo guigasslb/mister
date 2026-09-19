@@ -39,6 +39,11 @@ const jogadorSchema = z.object({
   // transbordar. Ausente → sem nome (retrocompatível: exercícios e diagramas antigos
   // não o têm; não substitui o número, que continua no tronco, nem a pílula de posição).
   nomeAtleta: z.string().max(20).optional(),
+  // Capitão de equipa (plano de jogo, §11.5): marca o titular que é capitão para
+  // desenhar a braçadeira "C" junto à figura no campo. Ausente/false → sem "C"
+  // (retrocompatível: exercícios e diagramas antigos não o têm). É identidade
+  // (que token é capitão), não posição — sobreposto tal como `nomeAtleta`.
+  capitao: z.boolean().optional(),
   // Equipa a que o jogador pertence (opcional; convenção da secção 11.3).
   equipa: z.enum(["propria", "adversario", "neutro"]).optional(),
 });

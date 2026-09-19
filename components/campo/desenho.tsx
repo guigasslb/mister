@@ -754,6 +754,10 @@ export function ElementoSVG({
         elemento.nomeAtleta !== ""
           ? elemento.nomeAtleta
           : null;
+      // Braçadeira de capitão (§11.5): pequeno "C" num disco no ombro esquerdo do
+      // titular capitão. Só quando o elemento o traz (plano de jogo) — ausente em
+      // exercícios/diagramas antigos e nos não-capitães.
+      const eCapitao = "capitao" in elemento && elemento.capitao === true;
       // Baseline ~10u acima do topo da figura (topo da cabeça = headCy − headR).
       const nomeY = headCy - headR - 3;
       // Camisola vista de trás: ombros arredondados largos com entalhe de gola ao
@@ -922,6 +926,31 @@ export function ElementoSVG({
             >
               {nomeAtleta}
             </text>
+          )}
+          {/* Braçadeira de capitão (§11.5): disco dourado com "C" no ombro esquerdo
+              do titular. Contorno escuro para contraste sobre a camisola. */}
+          {eCapitao && (
+            <g>
+              <circle
+                cx={cx - shoulderHalf - 0.4}
+                cy={shoulderY + 0.6}
+                r={2.6}
+                fill="#F5C542"
+                stroke="rgba(15,17,23,0.85)"
+                strokeWidth={0.7}
+              />
+              <text
+                x={cx - shoulderHalf - 0.4}
+                y={shoulderY + 0.6}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={3.4}
+                fontWeight={700}
+                fill="#1A1D29"
+              >
+                C
+              </text>
+            </g>
           )}
         </g>
       );

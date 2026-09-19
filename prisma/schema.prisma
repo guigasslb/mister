@@ -1486,6 +1486,10 @@ model Convocatoria {
   // F5 (M15): plano de dia de jogo — posição/titularidade prevista.
   posicaoPrevista Posicao?
   titularPrevisto Boolean  @default(false)
+  // Capitão de equipa (plano de jogo): no máximo 1 por jogo. A unicidade (0 ou 1)
+  // é garantida pela lógica da action `definirCapitao` (limpa todos → marca um), não
+  // por constraint de BD.
+  capitao         Boolean  @default(false)
 
   @@unique([jogoId, atletaId])
   @@index([atletaId])

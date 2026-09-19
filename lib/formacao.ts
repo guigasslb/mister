@@ -20,6 +20,9 @@ export type TitularFormacao = {
   // Nome do atleta (§11.5): alimenta a etiqueta por cima da figura. Opcional/
   // retrocompatível — ausente → sem nome no campo.
   nome?: string | null;
+  // Capitão de equipa (§11.5): quando true, o token recebe a braçadeira "C" no
+  // campo. Opcional/retrocompatível — ausente → não é capitão.
+  capitao?: boolean;
 };
 
 /** Linha de formação: sector + coordenada x no espaço 400×200 do campo (§11.5). */
@@ -184,6 +187,9 @@ export function construirDiagramaFormacao(
         ...(t.nome
           ? { nomeAtleta: t.nome.split(" ")[0].slice(0, 12) }
           : {}),
+        // Braçadeira de capitão (§11.5): só sinaliza quando é capitão (o "C" no
+        // campo). Ausente quando não é, para manter o diagrama enxuto.
+        ...(t.capitao ? { capitao: true } : {}),
         ...(t.numero != null ? { numero: t.numero } : {}),
       });
     });
@@ -193,37 +199,54 @@ export function construirDiagramaFormacao(
 }
 
 /**
- * Sobrepõe os nomes vivos dos titulares aos tokens de jogador de um diagrama,
- * emparelhando por `id` de token (§11.5). O nome é uma sobreposição de IDENTIDADE
- * (que atleta é aquele token), independente da posição no campo — por isso tem de
- * ser aplicada mesmo a um quadro tático JÁ GRAVADO.
+ * Sobrepõe a IDENTIDADE viva dos titulares aos tokens de jogador de um diagrama,
+ * emparelhando por `id` de token (§11.5). A identidade — nome e braçadeira de
+ * capitão — é independente da posição no campo, por isso tem de ser aplicada mesmo
+ * a um quadro tático JÁ GRAVADO.
  *
  * Correção do bug "o nome não aparece": no plano de jogo o quadro visível é o
  * gravado (`QuadroTatico.diagrama`) assim que existe, sombreando a formação viva.
  * Sem esta sobreposição, o nome do atleta só apareceria enquanto o quadro nunca
- * tivesse sido guardado; depois da primeira gravação desaparecia. Os nomes são
- * lidos de `fonte` (a formação derivada dos titulares atuais) e aplicados a `alvo`.
+ * tivesse sido guardado; depois da primeira gravação desaparecia. O mesmo se aplica
+ * à braçadeira de capitão: é lida da `fonte` (formação derivada dos titulares
+ * atuais) e aplicada a `alvo` — incluindo a LIMPEZA de um "C" gravado que já não
+ * corresponde ao capitão atual.
  *
  * Tokens de `alvo` sem correspondência em `fonte` (adversários, jogadores extra
- * adicionados à mão) ficam intactos. Lógica pura e testável.
+ * adicionados à mão) ficam intactos. Só devolve um novo diagrama quando algo muda
+ * de facto (mantém referências estáveis / no-op). Lógica pura e testável.
  */
 export function sobreporNomesTitulares(
   alvo: DiagramaCampo,
   fonte: DiagramaCampo,
 ): DiagramaCampo {
-  const nomesPorId = new Map<string, string>();
+  // Identidade viva por id de token: nome curto e se é capitão. Só tokens de
+  // jogador da formação viva entram (adversários/extra não têm correspondência).
+  const identidadePorId = new Map<string, { nome?: string; capitao: boolean }>();
   for (const el of fonte.elementos) {
-    if (el.tipo === "jogador" && el.nomeAtleta) {
-      nomesPorId.set(el.id, el.nomeAtleta);
+    if (el.tipo === "jogador") {
+      identidadePorId.set(el.id, { nome: el.nomeAtleta, capitao: el.capitao === true });
     }
   }
-  if (nomesPorId.size === 0) return alvo;
-  return {
-    ...alvo,
-    elementos: alvo.elementos.map((el) =>
-      el.tipo === "jogador" && nomesPorId.has(el.id)
-        ? { ...el, nomeAtleta: nomesPorId.get(el.id) }
-        : el,
-    ),
-  };
+  if (identidadePorId.size === 0) return alvo;
+
+  let mudou = false;
+  const elementos = alvo.elementos.map((el) => {
+    if (el.tipo !== "jogador") return el;
+    const id = identidadePorId.get(el.id);
+    if (!id) return el;
+    const nomeAtleta = id.nome ?? el.nomeAtleta;
+    const nomeMuda = nomeAtleta !== el.nomeAtleta;
+    const capMuda = (el.capitao === true) !== id.capitao;
+    // Só cria um novo objeto quando a identidade muda de facto (no-op preservado).
+    if (!nomeMuda && !capMuda) return el;
+    mudou = true;
+    const base = { ...el };
+    if (nomeAtleta != null) base.nomeAtleta = nomeAtleta;
+    // Normaliza `capitao`: mantém-no só quando true (enxuto e retrocompatível).
+    if (id.capitao) base.capitao = true;
+    else delete base.capitao;
+    return base;
+  });
+  return mudou ? { ...alvo, elementos } : alvo;
 }

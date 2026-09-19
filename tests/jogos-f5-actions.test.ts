@@ -35,7 +35,12 @@ vi.mock("@/lib/db", () => ({
       count: vi.fn(),
     },
     atletaEscalao: { count: vi.fn() },
-    convocatoria: { upsert: vi.fn(), findFirst: vi.fn() },
+    convocatoria: {
+      upsert: vi.fn(),
+      findFirst: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     observacaoAdversario: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
@@ -50,6 +55,7 @@ vi.mock("@/lib/db", () => ({
 import { revalidatePath } from "next/cache";
 import {
   definirPlanoTatico,
+  definirCapitao,
   registarEventoJogo,
   removerEventoJogo,
   listarEventosJogo,
@@ -179,6 +185,84 @@ describe("definirPlanoTatico (F5 — plano de dia de jogo)", () => {
       update: Record<string, unknown>;
     };
     expect(call.update).toEqual({ posicaoPrevista: null, titularPrevisto: false });
+    expect(chamadas(revalidatePath)[0][0]).toBe(`/jogos/${JOGO}`);
+  });
+});
+
+// ─── definirCapitao ──────────────────────────────────────────────────────────
+
+describe("definirCapitao (capitão de equipa — plano de jogo)", () => {
+  it("falha sem clube ativo", async () => {
+    mocked(obterClubeIdAtual).mockResolvedValue(null);
+    const r = await definirCapitao(JOGO, A1);
+    expect(r.sucesso).toBe(false);
+  });
+
+  it("isola por clube via jogo (where) e erra quando não pertence", async () => {
+    mocked(prisma.jogo.findFirst).mockResolvedValue(null);
+    const r = await definirCapitao(JOGO, A1);
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/jogo/i);
+    const where = (chamadas(prisma.jogo.findFirst)[0][0] as {
+      where: Record<string, unknown>;
+    }).where;
+    expect(where).toMatchObject({ id: JOGO, escalao: { clubeId: CLUBE } });
+  });
+
+  it("falha sem capacidade CONVOCATORIA_GERIR", async () => {
+    mocked(prisma.jogo.findFirst).mockResolvedValue(JOGO_BASE);
+    mocked(exigirCapacidade).mockResolvedValue({ ok: false, erro: "Sem permissão" });
+    const r = await definirCapitao(JOGO, A1);
+    expect(r.sucesso).toBe(false);
+    expect(chamadas(exigirCapacidade)[0]).toEqual(["CONVOCATORIA_GERIR", ESCALAO]);
+    expect(chamadas(prisma.$transaction)).toHaveLength(0);
+  });
+
+  it("rejeita atleta que não está convocado para este jogo", async () => {
+    mocked(prisma.jogo.findFirst).mockResolvedValue(JOGO_BASE);
+    mocked(prisma.convocatoria.findFirst).mockResolvedValue(null);
+    const r = await definirCapitao(JOGO, A1);
+    expect(r.sucesso).toBe(false);
+    if (!r.sucesso) expect(r.erro).toMatch(/convocad/i);
+    expect(chamadas(prisma.$transaction)).toHaveLength(0);
+    const where = (chamadas(prisma.convocatoria.findFirst)[0][0] as {
+      where: Record<string, unknown>;
+    }).where;
+    expect(where).toMatchObject({ jogoId: JOGO, atletaId: A1, convocado: true });
+  });
+
+  it("designa: limpa o anterior (updateMany) e marca o novo (update), revalida", async () => {
+    mocked(prisma.jogo.findFirst).mockResolvedValue(JOGO_BASE);
+    mocked(prisma.convocatoria.findFirst).mockResolvedValue({ id: "c1" });
+    mocked(prisma.convocatoria.updateMany).mockResolvedValue({ count: 1 });
+    mocked(prisma.convocatoria.update).mockResolvedValue({});
+    const r = await definirCapitao(JOGO, A1);
+    expect(r.sucesso).toBe(true);
+
+    const clear = chamadas(prisma.convocatoria.updateMany)[0][0] as {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    };
+    expect(clear.where).toEqual({ jogoId: JOGO, capitao: true });
+    expect(clear.data).toEqual({ capitao: false });
+
+    const marca = chamadas(prisma.convocatoria.update)[0][0] as {
+      where: { jogoId_atletaId: { jogoId: string; atletaId: string } };
+      data: Record<string, unknown>;
+    };
+    expect(marca.where.jogoId_atletaId).toEqual({ jogoId: JOGO, atletaId: A1 });
+    expect(marca.data).toEqual({ capitao: true });
+    expect(chamadas(revalidatePath)[0][0]).toBe(`/jogos/${JOGO}`);
+  });
+
+  it("toggle off (atletaId null): só limpa, sem update nem consulta de convocatória", async () => {
+    mocked(prisma.jogo.findFirst).mockResolvedValue(JOGO_BASE);
+    mocked(prisma.convocatoria.updateMany).mockResolvedValue({ count: 1 });
+    const r = await definirCapitao(JOGO, null);
+    expect(r.sucesso).toBe(true);
+    expect(chamadas(prisma.convocatoria.findFirst)).toHaveLength(0);
+    expect(chamadas(prisma.convocatoria.updateMany)).toHaveLength(1);
+    expect(chamadas(prisma.convocatoria.update)).toHaveLength(0);
     expect(chamadas(revalidatePath)[0][0]).toBe(`/jogos/${JOGO}`);
   });
 });

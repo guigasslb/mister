@@ -127,6 +127,17 @@ export const planoTaticoSchema = z.array(convocatoriaPrevistaSchema);
 export type ConvocatoriaPrevistaInput = z.infer<typeof convocatoriaPrevistaSchema>;
 export type PlanoTaticoInput = z.infer<typeof planoTaticoSchema>;
 
+/**
+ * Designação de capitão de equipa no plano de jogo. `atletaId` a `null` limpa a
+ * designação (toggle off); caso contrário identifica o convocado a marcar como
+ * capitão. Só pode haver 1 capitão por jogo — garantido pela action.
+ */
+export const definirCapitaoSchema = z.object({
+  atletaId: z.string().cuid().nullable(),
+});
+
+export type DefinirCapitaoInput = z.infer<typeof definirCapitaoSchema>;
+
 export const LABEL_TIPO_JOGO: Record<"OFICIAL" | "AMIGAVEL", string> = {
   OFICIAL: "Oficial",
   AMIGAVEL: "Amigável",

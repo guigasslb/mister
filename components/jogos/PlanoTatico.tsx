@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { definirPlanoTatico } from "@/lib/actions/jogos";
+import { definirPlanoTatico, definirCapitao } from "@/lib/actions/jogos";
 import { maxTitulares } from "@/lib/modalidade-escalao";
 import { construirDiagramaFormacao } from "@/lib/formacao";
 import { LABEL_POSICAO, posicoesPorModalidade } from "@/lib/schemas/atleta";
@@ -33,6 +33,7 @@ export function PlanoTatico({
   jogoId,
   convocados,
   planoInicial,
+  capitaoInicial,
   modalidade,
   formato,
   quadroInicial,
@@ -41,6 +42,8 @@ export function PlanoTatico({
   jogoId: string;
   convocados: Convocado[];
   planoInicial: Record<string, LinhaPlano>;
+  // Capitão de equipa gravado (atletaId) ou null. Só pode haver 1 por jogo.
+  capitaoInicial: string | null;
   // 🔁 v7 (§11.5): modalidade → posições/linhas; formato → fundo de campo.
   modalidade: Modalidade;
   formato: FormatoJogo | null;
@@ -54,6 +57,10 @@ export function PlanoTatico({
   const MAX_TITULARES = maxTitulares(formato, modalidade);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  // Capitão: persiste de imediato (independente do "Guardar plano"), com update
+  // otimista. Só pode haver 1 por jogo — a action limpa o anterior.
+  const [pendingCap, startCap] = useTransition();
+  const [capitaoId, setCapitaoId] = useState<string | null>(capitaoInicial);
   const [plano, setPlano] = useState<Record<string, LinhaPlano>>(() => {
     const inicial: Record<string, LinhaPlano> = {};
     for (const c of convocados) {
@@ -76,6 +83,27 @@ export function PlanoTatico({
     setPlano((prev) => ({ ...prev, [id]: { ...linhaDe(id), posicaoPrevista: posicao } }));
   }
 
+  // Persiste o capitão (ou limpa, com `novo = null`) com update otimista + reversão.
+  function persistirCapitao(novo: string | null) {
+    const anterior = capitaoId;
+    if (novo === anterior) return;
+    setCapitaoId(novo);
+    startCap(async () => {
+      const res = await definirCapitao(jogoId, novo);
+      if (!res.sucesso) {
+        setCapitaoId(anterior);
+        toast.error(res.erro);
+      } else {
+        toast.success(novo ? "Capitão definido" : "Capitão removido");
+      }
+    });
+  }
+
+  // Alterna o capitão: clicar no atual remove-o; clicar noutro passa a braçadeira.
+  function alternarCapitao(id: string) {
+    persistirCapitao(capitaoId === id ? null : id);
+  }
+
   function definirTitular(id: string, titular: boolean) {
     // Futsal: no máximo 5 titulares em campo (deriva do formato do jogo). Impede
     // marcar mais titulares do que os lugares disponíveis.
@@ -85,6 +113,9 @@ export function PlanoTatico({
         return;
       }
     }
+    // Um suplente não pode ser capitão: ao despromover o capitão atual, limpa a
+    // braçadeira (persistida de imediato).
+    if (!titular && capitaoId === id) persistirCapitao(null);
     setPlano((prev) => ({
       ...prev,
       [id]: { ...(prev[id] ?? { posicaoPrevista: null, titularPrevisto: false }), titularPrevisto: titular },
@@ -128,6 +159,7 @@ export function PlanoTatico({
       numero: c.numero,
       posicao: linhaDe(c.id).posicaoPrevista,
       nome: c.nome,
+      capitao: c.id === capitaoId,
     })),
     modalidade,
     formato,
@@ -167,6 +199,34 @@ export function PlanoTatico({
                 {c.nome}
               </span>
               <div className="flex items-center gap-2">
+                {/* Braçadeira de capitão: só para titulares (um suplente não pode
+                    ser capitão). Ativo = disco âmbar preenchido; inativo = outline
+                    cinza. Clicar no capitão atual remove a designação. */}
+                {l.titularPrevisto && (
+                  <button
+                    type="button"
+                    onClick={() => alternarCapitao(c.id)}
+                    disabled={pendingCap}
+                    aria-pressed={capitaoId === c.id}
+                    aria-label={
+                      capitaoId === c.id
+                        ? `${c.nome} é capitão — remover braçadeira`
+                        : `Definir ${c.nome} como capitão`
+                    }
+                    title={
+                      capitaoId === c.id
+                        ? "Capitão (clica para remover)"
+                        : "Definir como capitão"
+                    }
+                    className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border text-corpo font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                      capitaoId === c.id
+                        ? "border-ambar-500 bg-ambar-500 text-cinza-900"
+                        : "border-cinza-200 bg-white text-cinza-400 hover:bg-cinza-50"
+                    }`}
+                  >
+                    C
+                  </button>
+                )}
                 <Select
                   value={l.posicaoPrevista ?? "none"}
                   onValueChange={(v) =>

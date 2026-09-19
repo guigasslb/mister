@@ -143,6 +143,10 @@ export default async function DetalheJogoPage({
       ]),
   );
 
+  // Capitão de equipa (plano de jogo): no máximo 1 por jogo. null = sem capitão.
+  const capitaoInicial =
+    j.convocatorias.find((c) => c.convocado && c.capitao)?.atletaId ?? null;
+
   const eventos = j.eventos.map((e) => ({
     id: e.id,
     parte: e.parte,
@@ -316,6 +320,7 @@ export default async function DetalheJogoPage({
         relatorioInicial={j.relatorio ?? ""}
         golosMarcados={j.golosMarcados}
         planoInicial={planoInicial}
+        capitaoInicial={capitaoInicial}
         eventos={eventos}
         observacoes={j.observacoes}
         casaFora={j.casaFora}

@@ -175,6 +175,78 @@ describe("sobreporNomesTitulares — nome aparece mesmo em quadro gravado (§11.
   });
 });
 
+describe("construirDiagramaFormacao — braçadeira de capitão (§11.5)", () => {
+  it("marca capitao:true só no titular capitão (os outros ficam sem a flag)", () => {
+    const d = construirDiagramaFormacao(
+      [
+        { id: "gr", numero: 1, posicao: "GUARDA_REDES", capitao: true },
+        { id: "fx", numero: 4, posicao: "FIXO" },
+      ],
+      "FUTSAL",
+      "FUTSAL_5",
+    );
+    const m = porId(d);
+    expect(m.get("gr")!.capitao).toBe(true);
+    // Não-capitão: sem a flag (diagrama enxuto), nunca capitao:true.
+    expect(m.get("fx")!.capitao).toBeUndefined();
+  });
+
+  it("sem capitão nenhum token traz a flag", () => {
+    const d = construirDiagramaFormacao(
+      [{ id: "gr", numero: 1, posicao: "GUARDA_REDES" }],
+      "FUTSAL",
+      "FUTSAL_5",
+    );
+    expect(porId(d).get("gr")!.capitao).toBeUndefined();
+  });
+});
+
+describe("sobreporNomesTitulares — capitão vivo prevalece em quadro gravado (§11.5)", () => {
+  it("injeta capitao:true no token gravado que passou a capitão", () => {
+    const fonte = construirDiagramaFormacao(
+      [
+        { id: "gr", numero: 1, posicao: "GUARDA_REDES", capitao: true },
+        { id: "fx", numero: 4, posicao: "FIXO" },
+      ],
+      "FUTSAL",
+      "FUTSAL_5",
+    );
+    const gravado: DiagramaCampo = {
+      versao: 2,
+      campo: "FUTSAL_5",
+      elementos: [
+        { id: "gr", tipo: "jogador", x: 40, y: 100, cor: "azul", numero: 1 },
+        { id: "fx", tipo: "jogador", x: 130, y: 90, cor: "azul", numero: 4 },
+      ],
+    };
+    const out = sobreporNomesTitulares(gravado, fonte);
+    const m = new Map(
+      out.elementos
+        .filter((e) => e.tipo === "jogador")
+        .map((e) => [e.id, e.capitao]),
+    );
+    expect(m.get("gr")).toBe(true);
+    expect(m.get("fx")).toBeUndefined();
+  });
+
+  it("limpa um 'C' gravado que já não corresponde ao capitão atual", () => {
+    const fonte = construirDiagramaFormacao(
+      [{ id: "gr", numero: 1, posicao: "GUARDA_REDES" }], // já não é capitão
+      "FUTSAL",
+      "FUTSAL_5",
+    );
+    const gravado: DiagramaCampo = {
+      versao: 2,
+      elementos: [
+        { id: "gr", tipo: "jogador", x: 40, y: 100, cor: "azul", numero: 1, capitao: true },
+      ],
+    };
+    const out = sobreporNomesTitulares(gravado, fonte);
+    const gr = out.elementos.find((e) => e.id === "gr")!;
+    expect(gr.tipo === "jogador" && gr.capitao).toBeFalsy();
+  });
+});
+
 describe("formacaoPadrao — dimensão = jogadores em campo", () => {
   it("futsal → 5 posições", () => {
     expect(formacaoPadrao("FUTSAL", "FUTSAL_5")).toHaveLength(5);

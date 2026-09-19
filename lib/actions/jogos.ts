@@ -11,6 +11,7 @@ import {
   guardarEstatisticasSchema,
   registarEventoJogoSchema,
   planoTaticoSchema,
+  definirCapitaoSchema,
   isVideoUrlValido,
   LIMITE_AMARELOS_SUSPENSAO,
   type SuspensaoPendente,
@@ -659,6 +660,60 @@ export async function definirPlanoTatico(
       });
     }),
   );
+  revalidatePath(`${PATH}/${jogoId}`);
+  return ok(undefined);
+}
+
+/**
+ * Designa (ou limpa) o capitão de equipa do plano de jogo. Só pode haver **um**
+ * capitão por jogo: a action limpa `capitao` em todos os convocados do jogo e,
+ * quando `atletaId` não é null, marca esse convocado. `atletaId` a null apenas
+ * limpa (toggle off). Guardada sob `CONVOCATORIA_GERIR` — a mesma capacidade que
+ * gere o plano de dia de jogo. Só aceita um atleta já convocado para este jogo.
+ */
+export async function definirCapitao(
+  jogoId: string,
+  atletaId: string | null,
+): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const jogo = await prisma.jogo.findFirst({ where: { id: jogoId, escalao: { clubeId } } });
+  if (!jogo) return erro("Jogo não encontrado");
+
+  const perm = await exigirCapacidade("CONVOCATORIA_GERIR", jogo.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const parsed = definirCapitaoSchema.safeParse({ atletaId });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+  const alvo = parsed.data.atletaId;
+
+  // Ao designar (não limpar), o atleta tem de estar convocado para este jogo.
+  // Impede forjar um id de fora da convocatória via chamada direta à action.
+  if (alvo != null) {
+    const convocado = await prisma.convocatoria.findFirst({
+      where: { jogoId, atletaId: alvo, convocado: true },
+      select: { id: true },
+    });
+    if (!convocado) return erro("O atleta não está convocado para este jogo.");
+  }
+
+  await prisma.$transaction([
+    // Limpa a designação anterior (garante 0 ou 1 capitão por jogo).
+    prisma.convocatoria.updateMany({
+      where: { jogoId, capitao: true },
+      data: { capitao: false },
+    }),
+    // Marca o novo capitão (quando não é um toggle-off).
+    ...(alvo != null
+      ? [
+          prisma.convocatoria.update({
+            where: { jogoId_atletaId: { jogoId, atletaId: alvo } },
+            data: { capitao: true },
+          }),
+        ]
+      : []),
+  ]);
   revalidatePath(`${PATH}/${jogoId}`);
   return ok(undefined);
 }
