@@ -697,7 +697,8 @@ export async function marcarPresencas(
 
   // Estado a null → limpar (Repor): o registo do atleta é removido. Estado
   // não-nulo → upsert. Construímos as operações do lote conforme cada caso.
-  // F1: a presença guarda o escalão da sessão (analytics por escalão) e o motivo da falta.
+  // F1: a presença guarda o escalão da sessão (analytics por escalão) e, nas
+  // ausências, o tipo/nota de ausência.
   const operacoes: Prisma.PrismaPromise<unknown>[] = [];
   const idsParaLimpar: string[] = [];
   for (const p of parsed.data) {
@@ -721,8 +722,6 @@ export async function marcarPresencas(
           atletaId: p.atletaId,
           escalaoId: sessao.escalaoId,
           estado: p.estado,
-          motivo: p.motivo ?? null,
-          justificacao: p.justificacao ?? null,
           tipoAusencia,
           notaAusencia,
           marcadoPorId,
@@ -730,8 +729,6 @@ export async function marcarPresencas(
         update: {
           escalaoId: sessao.escalaoId,
           estado: p.estado,
-          motivo: p.motivo ?? null,
-          justificacao: p.justificacao ?? null,
           tipoAusencia,
           notaAusencia,
           marcadoPorId,

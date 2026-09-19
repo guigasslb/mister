@@ -35,7 +35,7 @@ import {
   CategoriaExercicioPrincipal,
   ParteTreino,
   EstadoPresenca,
-  MotivoFalta,
+  TipoAusencia,
   TipoSessao,
   CasaFora,
   TipoJogo,
@@ -318,18 +318,18 @@ async function ensureSessoes(opts: {
     const presData = roster.map((a) => {
       const r = rng();
       let estado: EstadoPresenca = EstadoPresenca.PRESENTE;
-      let motivo: MotivoFalta | null = null;
+      let tipoAusencia: TipoAusencia | null = null;
       if (r >= taxaPresenca) {
         const resto = (r - taxaPresenca) / (1 - taxaPresenca); // 0..1
         if (resto < 0.55) {
           estado = EstadoPresenca.FALTA;
-          motivo = MotivoFalta.SEM_JUSTIFICACAO;
+          tipoAusencia = TipoAusencia.SEM_MOTIVO;
         } else if (resto < 0.8) {
           estado = EstadoPresenca.FALTA_JUSTIFICADA;
-          motivo = MotivoFalta.DOENCA;
+          tipoAusencia = TipoAusencia.DOENCA;
         } else if (resto < 0.95) {
           estado = EstadoPresenca.LESIONADO;
-          motivo = MotivoFalta.LESAO;
+          tipoAusencia = TipoAusencia.LESAO;
         } else {
           estado = EstadoPresenca.ATRASADO;
         }
@@ -339,7 +339,7 @@ async function ensureSessoes(opts: {
         atletaId: a.id,
         escalaoId,
         estado,
-        motivo,
+        tipoAusencia,
       };
     });
     await prisma.presenca.createMany({ data: presData, skipDuplicates: true });

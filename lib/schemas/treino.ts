@@ -137,16 +137,6 @@ export const ESTADOS_PRESENCA = [
   "ATRASADO",
 ] as const;
 
-export const MOTIVOS_FALTA = ["LESAO", "DOENCA", "OUTRO", "SEM_JUSTIFICACAO", "JOGO_FUTEBOL"] as const;
-
-export const LABEL_MOTIVO_FALTA: Record<(typeof MOTIVOS_FALTA)[number], string> = {
-  LESAO: "Lesão",
-  DOENCA: "Doença",
-  OUTRO: "Outro",
-  SEM_JUSTIFICACAO: "Sem justificação",
-  JOGO_FUTEBOL: "Jogo de futebol",
-};
-
 /**
  * Tipo de ausência (enum `TipoAusencia` no Prisma). Só é registado quando o atleta
  * não compareceu — ver `ESTADOS_AUSENCIA`. `SEM_MOTIVO` = falta injustificada;
@@ -190,9 +180,6 @@ export const presencaSchema = z
     // `estado` a null significa "limpar/remover a presença" deste atleta (Repor —
     // §8.5): o registo guardado é apagado no servidor. Um estado não-nulo faz upsert.
     estado: z.enum(ESTADOS_PRESENCA).nullable(),
-    // Motivo da falta (F1 — lesões como motivo, secção 8.5).
-    motivo: z.enum(MOTIVOS_FALTA).nullable().optional(),
-    justificacao: z.string().max(300).optional(),
     // Tipo/nota de ausência — só válidos quando `estado` é de ausência (ver acima).
     tipoAusencia: z.enum(TIPOS_AUSENCIA).nullable().optional(),
     notaAusencia: z.string().max(200, "Máximo de 200 caracteres").nullable().optional(),

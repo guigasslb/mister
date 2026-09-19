@@ -7,41 +7,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { marcarPresencas } from "@/lib/actions/treinos";
 import {
-  MOTIVOS_FALTA,
-  LABEL_MOTIVO_FALTA,
   TIPOS_AUSENCIA,
   LABEL_TIPO_AUSENCIA,
   estadoImplicaAusencia,
 } from "@/lib/schemas/treino";
 import { presencasAlteradas, type RegistoPresenca } from "@/lib/presencas";
-import type { EstadoPresenca, MotivoFalta, TipoAusencia } from "@prisma/client";
+import type { EstadoPresenca, TipoAusencia } from "@prisma/client";
 
 type Atleta = {
   id: string;
   nome: string;
   numero: number | null;
-  // §3.2: atletas de dupla modalidade podem faltar por jogo de futebol, pelo que
-  // o motivo JOGO_FUTEBOL só lhes é oferecido.
-  praticaDuplaModalidade: boolean;
 };
 
 /**
- * Estado de presença + motivo/justificação da falta (F1 — secção 8.5).
+ * Estado de presença + classificação da ausência (§8.8.2).
  * Usado para os registos que vêm da base de dados — têm sempre um estado real.
  */
 export type PresencaInicial = {
   estado: EstadoPresenca;
-  motivo: MotivoFalta | null;
-  justificacao: string | null;
   // §8.8.2 — classificação da ausência (só preenchida em estados de não-comparência).
   tipoAusencia: TipoAusencia | null;
   notaAusencia: string | null;
 };
 
 const PRESENTES = new Set<EstadoPresenca>(["PRESENTE", "ATRASADO"]);
-
-/** Estados em que faz sentido registar uma justificação livre. */
-const COM_JUSTIFICACAO = new Set<EstadoPresenca>(["FALTA", "FALTA_JUSTIFICADA"]);
 
 /**
  * Controlo segmentado de 1 toque (Melhoria 2). Cada segmento fixa o estado
@@ -79,16 +69,10 @@ export function MarcadorPresencas({
     for (const a of atletas) {
       const existente = presencasIniciais[a.id];
       if (existente) {
-        // Registos antigos guardavam só texto livre (motivo a null). Mostram-se
-        // como "Outro" para o texto continuar visível e editável (UX-P3-02).
-        const motivo =
-          existente.motivo ?? (existente.justificacao?.trim() ? "OUTRO" : null);
-        inicial[a.id] = { ...existente, motivo };
+        inicial[a.id] = { ...existente };
       } else {
         inicial[a.id] = {
           estado: null,
-          motivo: null,
-          justificacao: null,
           tipoAusencia: null,
           notaAusencia: null,
         };
@@ -128,41 +112,10 @@ export function MarcadorPresencas({
         ...prev,
         [atletaId]: {
           estado,
-          // Motivo/justificação só se aplicam a ausências — limpam quando presente.
-          motivo: COM_JUSTIFICACAO.has(estado) ? prev[atletaId].motivo : null,
-          justificacao: COM_JUSTIFICACAO.has(estado) ? prev[atletaId].justificacao : null,
           // §8.8.2 — tipo/nota de ausência mantêm-se nos estados de não-comparência
           // e limpam-se assim que o atleta passa a presente/atrasado.
           tipoAusencia: eAusencia ? (prev[atletaId].tipoAusencia ?? null) : null,
           notaAusencia: eAusencia ? (prev[atletaId].notaAusencia ?? null) : null,
-        },
-      };
-    });
-  }
-
-  function mudarJustificacao(atletaId: string, valor: string) {
-    if (soLeitura) return;
-    setRegistos((prev) => ({
-      ...prev,
-      [atletaId]: { ...prev[atletaId], justificacao: valor },
-    }));
-  }
-
-  /**
-   * Seleciona (ou alterna) o motivo da falta a partir dos botões rápidos.
-   * O texto livre só faz sentido em "Outro" — noutros motivos limpa-se (UX-P3-02).
-   */
-  function mudarMotivo(atletaId: string, motivo: MotivoFalta) {
-    if (soLeitura) return;
-    setRegistos((prev) => {
-      const atual = prev[atletaId];
-      const novoMotivo = atual.motivo === motivo ? null : motivo;
-      return {
-        ...prev,
-        [atletaId]: {
-          ...atual,
-          motivo: novoMotivo,
-          justificacao: novoMotivo === "OUTRO" ? atual.justificacao : null,
         },
       };
     });
@@ -189,7 +142,7 @@ export function MarcadorPresencas({
     }));
   }
 
-  /** Marca todos os atletas como PRESENTE (limpa motivos/justificações e ausência). */
+  /** Marca todos os atletas como PRESENTE (limpa a classificação de ausência). */
   function marcarTodosPresentes() {
     if (soLeitura) return;
     setRegistos((prev) => {
@@ -197,8 +150,6 @@ export function MarcadorPresencas({
       for (const id of Object.keys(prev))
         proximo[id] = {
           estado: "PRESENTE",
-          motivo: null,
-          justificacao: null,
           tipoAusencia: null,
           notaAusencia: null,
         };
@@ -220,8 +171,6 @@ export function MarcadorPresencas({
       for (const id of Object.keys(prev))
         proximo[id] = {
           estado: null,
-          motivo: null,
-          justificacao: null,
           tipoAusencia: null,
           notaAusencia: null,
         };
@@ -244,8 +193,6 @@ export function MarcadorPresencas({
         return {
           atletaId: a.id,
           estado: r.estado, // null → limpar (remover) no servidor
-          motivo: r.motivo,
-          justificacao: r.justificacao?.trim() ? r.justificacao : undefined,
           // §8.8.2 — tipo/nota de ausência (o servidor limpa-os se o estado não for ausência).
           tipoAusencia: r.tipoAusencia ?? null,
           notaAusencia: r.notaAusencia?.trim() ? r.notaAusencia : undefined,
@@ -305,7 +252,6 @@ export function MarcadorPresencas({
       <ul className="space-y-2">
         {atletas.map((a) => {
           const registo = registos[a.id];
-          const comJustificacao = registo.estado != null && COM_JUSTIFICACAO.has(registo.estado);
           const eAusencia = registo.estado != null && estadoImplicaAusencia(registo.estado);
           return (
             <li
@@ -346,63 +292,6 @@ export function MarcadorPresencas({
                   })}
                 </div>
               </div>
-
-              {comJustificacao && (
-                <div className="mt-2 space-y-2 border-t border-cinza-100 pt-2">
-                  <span className="block text-legenda text-cinza-500">
-                    Motivo (opcional)
-                  </span>
-                  {/* Botões rápidos — mais fáceis de usar no telemóvel que texto livre. */}
-                  <div
-                    role="group"
-                    aria-label={`Motivo da falta de ${a.nome}`}
-                    className="flex flex-wrap gap-1.5"
-                  >
-                    {MOTIVOS_FALTA.filter(
-                      (m) => m !== "JOGO_FUTEBOL" || a.praticaDuplaModalidade,
-                    ).map((m) => {
-                      const ativo = registo.motivo === m;
-                      return (
-                        <Button
-                          key={m}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          aria-pressed={ativo}
-                          disabled={soLeitura}
-                          onClick={() => mudarMotivo(a.id, m)}
-                          className={
-                            ativo ? "border-primary bg-primary/5 text-primary" : ""
-                          }
-                        >
-                          {LABEL_MOTIVO_FALTA[m]}
-                        </Button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Texto livre apenas em "Outro". */}
-                  {registo.motivo === "OUTRO" && (
-                    <div>
-                      <label
-                        htmlFor={`motivo-${a.id}`}
-                        className="mb-1 block text-legenda text-cinza-500"
-                      >
-                        Descreve o motivo
-                      </label>
-                      <Input
-                        id={`motivo-${a.id}`}
-                        value={registo.justificacao ?? ""}
-                        onChange={(ev) => mudarJustificacao(a.id, ev.target.value)}
-                        disabled={soLeitura}
-                        maxLength={300}
-                        placeholder="Ex.: consulta médica, viagem…"
-                        className="h-11"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* §8.8.2 — Tipo de ausência (aplica-se a todos os estados de
                   não-comparência, incl. Lesionado) + nota livre opcional. */}

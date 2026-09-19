@@ -1071,8 +1071,6 @@ model Presenca {
   escalaoId    String
   escalao      Escalao        @relation("PresencaEscalao", fields: [escalaoId], references: [id])
   estado       EstadoPresenca @default(PRESENTE)
-  motivo       MotivoFalta?
-  justificacao String?
 
   // Tipo de ausência (só preenchido quando o atleta está ausente).
   // Nullable para não quebrar presenças existentes.
@@ -1108,14 +1106,6 @@ enum TipoAusencia {
   TRABALHO // trabalho/escola (justificado)
   SEM_MOTIVO // falta injustificada
   OUTRO // outro motivo justificado (com nota opcional)
-}
-
-enum MotivoFalta {
-  LESAO
-  DOENCA
-  OUTRO
-  SEM_JUSTIFICACAO
-  JOGO_FUTEBOL
 }
 
 enum TipoSessao {

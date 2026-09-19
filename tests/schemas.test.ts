@@ -526,17 +526,32 @@ describe("presencaSchema", () => {
     expect(presencaSchema.safeParse({ atletaId: CUID, estado: null }).success).toBe(true);
   });
 
-  it("aceita motivo de falta (F1) e null", () => {
-    for (const motivo of ["LESAO", "DOENCA", "OUTRO", "SEM_JUSTIFICACAO", null]) {
+  it("aceita tipo de ausência (§8.8.2) e null em estado de ausência", () => {
+    for (const tipoAusencia of [
+      "LESAO",
+      "DOENCA",
+      "PESSOAL",
+      "TRABALHO",
+      "SEM_MOTIVO",
+      "OUTRO",
+      null,
+    ]) {
       expect(
-        presencaSchema.safeParse({ atletaId: CUID, estado: "FALTA", motivo }).success,
+        presencaSchema.safeParse({ atletaId: CUID, estado: "FALTA", tipoAusencia }).success,
       ).toBe(true);
     }
   });
 
-  it("rejeita motivo de falta inválido", () => {
+  it("rejeita tipo de ausência inválido", () => {
     expect(
-      presencaSchema.safeParse({ atletaId: CUID, estado: "FALTA", motivo: "FERIAS" }).success,
+      presencaSchema.safeParse({ atletaId: CUID, estado: "FALTA", tipoAusencia: "FERIAS" }).success,
+    ).toBe(false);
+  });
+
+  it("rejeita tipo de ausência num estado de comparência", () => {
+    expect(
+      presencaSchema.safeParse({ atletaId: CUID, estado: "PRESENTE", tipoAusencia: "LESAO" })
+        .success,
     ).toBe(false);
   });
 });

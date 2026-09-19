@@ -80,8 +80,6 @@ export default async function DetalheSessaoPage({
   for (const p of s.presencas)
     presencasIniciais[p.atletaId] = {
       estado: p.estado,
-      motivo: p.motivo,
-      justificacao: p.justificacao,
       // §8.8.2 — classificação da ausência (só preenchida em estados de ausência).
       tipoAusencia: p.tipoAusencia,
       notaAusencia: p.notaAusencia,
@@ -333,7 +331,6 @@ export default async function DetalheSessaoPage({
           nome: a.nome,
           // Número da participação neste escalão (F1).
           numero: a.participacaoContexto?.numero ?? s.numeroPorAtleta[a.id] ?? null,
-          praticaDuplaModalidade: a.praticaDuplaModalidade,
         }))}
         presencasIniciais={presencasIniciais}
         // Sessão fechada → marcação de presenças em modo só-leitura (§8).

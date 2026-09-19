@@ -3,7 +3,7 @@
  *
  * Sem I/O nem React: partilhados entre o componente de marcação e os testes.
  */
-import type { EstadoPresenca, MotivoFalta, TipoAusencia } from "@prisma/client";
+import type { EstadoPresenca, TipoAusencia } from "@prisma/client";
 
 /**
  * Registo de presença em edição no cliente. Um atleta sem registo gravado fica
@@ -15,8 +15,6 @@ import type { EstadoPresenca, MotivoFalta, TipoAusencia } from "@prisma/client";
  */
 export type RegistoPresenca = {
   estado: EstadoPresenca | null;
-  motivo: MotivoFalta | null;
-  justificacao: string | null;
   tipoAusencia?: TipoAusencia | null;
   notaAusencia?: string | null;
 };
@@ -31,9 +29,9 @@ function textoNormalizado(t: string | null | undefined): string {
  * servidor. É a base para habilitar/desabilitar o botão "Guardar": quando o
  * mapa atual é idêntico ao inicial não há nada a guardar.
  *
- * Compara estado, motivo, justificação, tipo de ausência e nota de ausência (os
- * dois campos de texto normalizados — null/""/espaços são equivalentes) de cada
- * atleta presente em qualquer um dos mapas.
+ * Compara estado, tipo de ausência e nota de ausência (o campo de texto
+ * normalizado — null/""/espaços são equivalentes) de cada atleta presente em
+ * qualquer um dos mapas.
  */
 export function presencasAlteradas(
   inicial: Record<string, RegistoPresenca>,
@@ -45,8 +43,6 @@ export function presencasAlteradas(
     const b = atual[id];
     if (!a || !b) return true;
     if (a.estado !== b.estado) return true;
-    if ((a.motivo ?? null) !== (b.motivo ?? null)) return true;
-    if (textoNormalizado(a.justificacao) !== textoNormalizado(b.justificacao)) return true;
     if ((a.tipoAusencia ?? null) !== (b.tipoAusencia ?? null)) return true;
     if (textoNormalizado(a.notaAusencia) !== textoNormalizado(b.notaAusencia)) return true;
   }
