@@ -147,15 +147,78 @@ export const LABEL_MOTIVO_FALTA: Record<(typeof MOTIVOS_FALTA)[number], string> 
   JOGO_FUTEBOL: "Jogo de futebol",
 };
 
-export const presencaSchema = z.object({
-  atletaId: z.string().cuid(),
-  // `estado` a null significa "limpar/remover a presença" deste atleta (Repor —
-  // §8.5): o registo guardado é apagado no servidor. Um estado não-nulo faz upsert.
-  estado: z.enum(ESTADOS_PRESENCA).nullable(),
-  // Motivo da falta (F1 — lesões como motivo, secção 8.5).
-  motivo: z.enum(MOTIVOS_FALTA).nullable().optional(),
-  justificacao: z.string().max(300).optional(),
-});
+/**
+ * Tipo de ausência (enum `TipoAusencia` no Prisma). Só é registado quando o atleta
+ * não compareceu — ver `ESTADOS_AUSENCIA`. `SEM_MOTIVO` = falta injustificada;
+ * `OUTRO` admite uma nota livre (`notaAusencia`).
+ */
+export const TIPOS_AUSENCIA = [
+  "LESAO",
+  "DOENCA",
+  "PESSOAL",
+  "TRABALHO",
+  "SEM_MOTIVO",
+  "OUTRO",
+] as const;
+
+export const LABEL_TIPO_AUSENCIA: Record<(typeof TIPOS_AUSENCIA)[number], string> = {
+  LESAO: "Lesão",
+  DOENCA: "Doença",
+  PESSOAL: "Motivo pessoal",
+  TRABALHO: "Trabalho / escola",
+  SEM_MOTIVO: "Sem motivo",
+  OUTRO: "Outro",
+};
+
+/**
+ * Estados em que o atleta NÃO compareceu — só nestes faz sentido registar
+ * `tipoAusencia`/`notaAusencia`. Nos estados de comparência (`PRESENTE`,
+ * `ATRASADO`) esses campos são sempre limpos (`null`), tanto na validação
+ * (schema) como na gravação (action). Adaptação ao modelo deste projeto, que usa
+ * `EstadoPresenca` granular em vez de um único estado `AUSENTE`.
+ */
+export const ESTADOS_AUSENCIA = ["FALTA", "FALTA_JUSTIFICADA", "LESIONADO"] as const;
+
+/** True se o estado de presença representa uma ausência (atleta não compareceu). */
+export function estadoImplicaAusencia(estado: (typeof ESTADOS_PRESENCA)[number]): boolean {
+  return (ESTADOS_AUSENCIA as readonly string[]).includes(estado);
+}
+
+export const presencaSchema = z
+  .object({
+    atletaId: z.string().cuid(),
+    // `estado` a null significa "limpar/remover a presença" deste atleta (Repor —
+    // §8.5): o registo guardado é apagado no servidor. Um estado não-nulo faz upsert.
+    estado: z.enum(ESTADOS_PRESENCA).nullable(),
+    // Motivo da falta (F1 — lesões como motivo, secção 8.5).
+    motivo: z.enum(MOTIVOS_FALTA).nullable().optional(),
+    justificacao: z.string().max(300).optional(),
+    // Tipo/nota de ausência — só válidos quando `estado` é de ausência (ver acima).
+    tipoAusencia: z.enum(TIPOS_AUSENCIA).nullable().optional(),
+    notaAusencia: z.string().max(200, "Máximo de 200 caracteres").nullable().optional(),
+  })
+  .superRefine((dados, ctx) => {
+    // Ausência só se aplica a estados de não-comparência. Fora disso, os campos
+    // têm de vir vazios (a action também os limpa por defesa, mas rejeitamos aqui
+    // para não mascarar dados incoerentes vindos do cliente).
+    const eAusencia = dados.estado !== null && estadoImplicaAusencia(dados.estado);
+    if (!eAusencia) {
+      if (dados.tipoAusencia != null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["tipoAusencia"],
+          message: "Só se aplica quando o atleta está ausente.",
+        });
+      }
+      if (dados.notaAusencia != null && dados.notaAusencia.trim() !== "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["notaAusencia"],
+          message: "Só se aplica quando o atleta está ausente.",
+        });
+      }
+    }
+  });
 
 export const marcarPresencasSchema = z.array(presencaSchema);
 

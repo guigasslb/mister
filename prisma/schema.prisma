@@ -1074,6 +1074,12 @@ model Presenca {
   motivo       MotivoFalta?
   justificacao String?
 
+  // Tipo de ausência (só preenchido quando o atleta está ausente).
+  // Nullable para não quebrar presenças existentes.
+  tipoAusencia TipoAusencia?
+  // Nota livre opcional da ausência (max 200 chars validado na app, não no schema).
+  notaAusencia String?
+
   // Rastreio do autor da marcação (GAP-P2-15): quem registou/alterou a presença.
   // Nullable com SetNull — se o membro sair do clube, a presença preserva-se sem autor.
   marcadoPorId String?
@@ -1093,6 +1099,15 @@ enum EstadoPresenca {
   FALTA_JUSTIFICADA
   LESIONADO
   ATRASADO
+}
+
+enum TipoAusencia {
+  LESAO // atleta lesionado
+  DOENCA // doença/motivo de saúde
+  PESSOAL // motivo pessoal (justificado)
+  TRABALHO // trabalho/escola (justificado)
+  SEM_MOTIVO // falta injustificada
+  OUTRO // outro motivo justificado (com nota opcional)
 }
 
 enum MotivoFalta {
@@ -1172,6 +1187,8 @@ model Jogo {
   eventos       EventoJogo[]
   // F5 (M15): scouting contextualizado no jogo (dia de jogo).
   observacoes   ObservacaoAdversario[]
+  // 🔁 v7 (§8.25.8): estado de condução do Modo Jogo ao Vivo (1:1 com Jogo).
+  sessaoAoVivo  SessaoJogoAoVivo?
 
   fechado Boolean @default(false) // false = aberto (por fechar); true = fechado pelo treinador
 
@@ -1359,8 +1376,19 @@ model EventoJogo {
   atletaSecundarioId String?
   criadoEm           DateTime       @default(now())
 
+  // 🔁 v7 (§8.25.8): Modo Jogo ao Vivo — colunas aditivas, nullable, retrocompatíveis.
+  // segundoJogo = segundo absoluto do cronómetro contínuo (0 = apito inicial da Parte 1);
+  // base do cálculo de minutos. parte/minuto/bloco mantêm-se para o registo clássico.
+  segundoJogo    Int?
+  // posicao ocupada numa ENTRADA (opcional; para a vista de campo).
+  posicao        Posicao?
+  // clientEventoId = id gerado no cliente para sync idempotente da outbox offline.
+  clientEventoId String?
+
+  @@unique([jogoId, clientEventoId], map: "EventoJogo_clientEventoId_key")
   @@index([jogoId])
   @@index([atletaId])
+  @@index([jogoId, segundoJogo])
 }
 
 enum TipoEventoJogo {
@@ -1378,6 +1406,44 @@ enum TipoEventoJogo {
   CANTO
   FORA_DE_JOGO
   DESARME
+  // 🔁 v7 (§8.25.8): primitivas do Modo Jogo ao Vivo. Uma substituição materializa-se
+  // como SAIDA + ENTRADA no mesmo segundo (RN-JV-3). SUBSTITUICAO mantém-se para o
+  // registo ao vivo clássico.
+  INICIO_PARTE
+  FIM_PARTE
+  ENTRADA
+  SAIDA
+  PAUSA
+  RETOMA
+}
+
+// ─────────────────────────────────────────────
+// MODO JOGO AO VIVO (🔁 v7 — §8.25.8)
+// ─────────────────────────────────────────────
+
+// Estado de condução do Modo Jogo ao Vivo.
+enum EstadoJogoAoVivo {
+  POR_INICIAR
+  EM_CURSO
+  INTERVALO
+  PAUSADO
+  TERMINADO
+}
+
+// Estado de condução do Modo Jogo ao Vivo (1:1 com Jogo). Reutiliza EventoJogo e
+// EstatisticaAtleta — não cria entidades de estatística novas (§8.25.8).
+model SessaoJogoAoVivo {
+  id                 String           @id @default(cuid())
+  jogoId             String           @unique
+  jogo               Jogo             @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+  numeroPartes       Int              @default(2) // 2..4
+  duracaoParteMins   Int              @default(20) // duração de cada parte, em minutos
+  estado             EstadoJogoAoVivo @default(POR_INICIAR)
+  parteAtual         Int              @default(0) // 0 = ainda não iniciou; 1..numeroPartes
+  segundosDecorridos Int              @default(0) // tempo de jogo contínuo já consolidado (persistido)
+  aCorrerDesde       DateTime? // instante do arranque do cronómetro; null se em intervalo/pausado/terminado
+  criadoEm           DateTime         @default(now())
+  atualizadoEm       DateTime         @updatedAt
 }
 
 // Scouting do adversário (do clube).
