@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowLeft, CloudOff, Loader2, Trophy, Wifi, WifiOff } from "lucide-react";
@@ -84,8 +85,12 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
   const [ocupado, setOcupado] = useState(false);
   const [saiId, setSaiId] = useState<string | null>(null);
   const [confirmarTerminar, setConfirmarTerminar] = useState(false);
+  // Só há `document.body` no cliente: guarda para o portal (evita mismatch de hidratação).
+  const [montado, setMontado] = useState(false);
   // Tick para refrescar os minutos/tempo em campo a cada segundo (quando a correr).
   const [, setTick] = useState(0);
+
+  useEffect(() => setMontado(true), []);
 
   const convocadoPorId = new Map(convocados.map((c) => [c.id, c]));
 
@@ -466,7 +471,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
   const nomeEquipa = props.casaFora === "CASA" ? "Casa" : "Fora";
 
   // ── Render ───────────────────────────────────────────────────────────────────
-  return (
+  const conteudo = (
     <div className="fixed inset-0 z-[70] flex flex-col bg-ink text-white">
       {/* Cabeçalho fixo */}
       <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
@@ -602,6 +607,16 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
       </AlertDialog>
     </div>
   );
+
+  // Takeover fullscreen via portal para o <body>. Sem isto, o overlay `fixed
+  // inset-0` fica ancorado ao ancestral `.app-content`, que retém um `transform`
+  // (animar-entrada com fill-mode `both` termina em translateY(0)) e passa a ser
+  // o bloco de contenção do `position: fixed`. O resultado era o `bg-ink` opaco
+  // não cobrir a viewport, deixando a marca de água do clube (layout do grupo
+  // `(app)`, `object-fit: contain`) aparecer gigante por trás. Ancorado ao body,
+  // o overlay cobre o ecrã e esconde a marca de água.
+  if (!montado) return null;
+  return createPortal(conteudo, document.body);
 }
 
 /** Resumo pós-jogo com os minutos calculados por atleta (§8.25.5). */
