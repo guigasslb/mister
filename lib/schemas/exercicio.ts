@@ -29,6 +29,11 @@ const jogadorSchema = z.object({
   rotulo: z.string().max(6).optional(),
   cor: corJogadorSchema,
   posicao: z.enum(["GR", "fixo", "ala", "pivo"]).optional(),
+  // Legenda de posição tática (plano de jogo, §11.5): abreviatura da posição
+  // atribuída ao titular (ex.: "GR", "Ala", "Pivô"), apresentada por baixo da
+  // figura no campo. Ausente → sem legenda (retrocompatível: exercícios e
+  // diagramas antigos não a têm; não substitui o número, que continua no tronco).
+  etiquetaPosicao: z.string().max(6).optional(),
   // Equipa a que o jogador pertence (opcional; convenção da secção 11.3).
   equipa: z.enum(["propria", "adversario", "neutro"]).optional(),
 });

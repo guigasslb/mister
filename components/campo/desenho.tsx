@@ -285,6 +285,12 @@ function FundoFutsal5() {
     <g>
       <Relvado />
       <g filter="url(#campo-linha-relevo)">
+      {/* Balizas nas duas extremidades (baliza de futsal = 3m ≈ 30 unidades).
+          Antes só os fundos de futebol as desenhavam; no futsal (e no plano de
+          jogo) têm de aparecer sempre. Só usam <line>, logo não alteram as
+          contagens de <circle>/<rect>/<path> validadas nos testes de fundo. */}
+      <Baliza lado="esq" altura={30} />
+      <Baliza lado="dir" altura={30} />
       {/* Círculo central (raio 3m = 30 unidades) */}
       <circle
         cx={CAMPO_W / 2}
@@ -704,128 +710,122 @@ export function ElementoSVG({
         etiqueta != null && etiqueta.length > 3 ? 5 : etiqueta != null && etiqueta.length > 2 ? 6 : 8;
       const cx = elemento.x;
       const cy = elemento.y;
-      // §11.3 (visual 3/4): figura humana estilizada vista em ângulo 3/4 (de
-      // trás/costas, como um jogador de camisola numerada), mas ANCORADA no ponto
-      // lógico (cx,cy) — o TRONCO fica centrado no ponto (o número assenta nas
-      // "costas"), coerente com o hit-test em círculo r≈8 à volta de (cx,cy).
-      // Cabeça acima, pernas abaixo; nada disto altera o centro lógico nem o raio.
-      // Tom de pele: neutro (adversário → cinza-ardósia; próprio → pele quente).
-      const peleFill = eAdversario ? "#94A3B8" : "#EAC7A2";
-      const peleStroke = eAdversario ? "#1E293B" : "#8A5A38";
-      // Geometria da figura, toda relativa a (cx,cy). O tronco é a "caixa" do
-      // número: ombros em cima (largos), cintura em baixo (estreita) → silhueta.
-      const headR = 3.2;
-      const headCy = cy - 8;
-      const torsoTop = cy - 4.8;
-      const torsoBot = cy + 5.2;
-      const ombroHalf = 7; // meia-largura aos ombros
-      const cinturaHalf = 4.8; // meia-largura à cintura
-      const golaHalf = 2.1; // meia-abertura da gola (pescoço)
-      // Camisola vista de trás: dois ombros arredondados com entalhe de gola ao
-      // centro, laterais a estreitar até à bainha curva na cintura.
+      // §11.3 (visual 3/4 realista): figura humana vista de trás em leve ângulo
+      // 3/4 — cabeça proporcional + pescoço + ombros + tronco em perspetiva
+      // (largo em cima, estreito na cintura) + calções + pernas + botas + braços
+      // ao longo do corpo. ANCORADA no ponto lógico (cx,cy): o TRONCO fica centrado
+      // no ponto (o número assenta nas "costas"), coerente com o hit-test em círculo
+      // r≈8 à volta de (cx,cy). A figura ocupa ~24u de altura (cabeça acima, pés
+      // abaixo) SEM alterar o centro lógico nem o raio de hit-test.
+      // Tons: adversário → cinza (camisola neutra + pele cinza-ardósia); próprio →
+      // pele quente + camisola na cor da equipa.
+      const peleFill = eAdversario ? "#9AA6B5" : "#EAC7A2";
+      const peleStroke = eAdversario ? "#334155" : "#8A5A38";
+      const botaFill = eAdversario ? "#1E293B" : "#242833";
+      // Geometria da figura, toda relativa a (cx,cy). O tronco (ombros→cintura) é a
+      // "caixa" do número, com o seu centro sobre (cx,cy).
+      const headR = 2.7; // proporcional ao corpo (não bobblehead)
+      const headCy = cy - 8.9;
+      const shoulderY = cy - 5.6;
+      const waistY = cy + 2.2;
+      const shoulderHalf = 5.6; // meia-largura aos ombros
+      const waistHalf = 3.7; // meia-largura à cintura (perspetiva: estreita)
+      const golaHalf = 1.6; // meia-abertura da gola (pescoço)
+      const shortTop = waistY - 0.3;
+      const shortBot = waistY + 3.6;
+      const legTopY = shortBot - 0.4;
+      const legBotY = cy + 10.4;
+      // Legenda de posição tática (§11.5): apresentada numa pílula por baixo dos
+      // pés, sem tapar o número (que fica no tronco). Só quando o elemento a traz
+      // (plano de jogo) — exercícios/diagramas antigos não a definem.
+      const etiquetaPos =
+        elemento.etiquetaPosicao != null && elemento.etiquetaPosicao !== ""
+          ? elemento.etiquetaPosicao
+          : null;
+      const posLargura = etiquetaPos ? Math.max(9, etiquetaPos.length * 2.7 + 4) : 0;
+      const posTopo = legBotY + 3;
+      // Camisola vista de trás: ombros arredondados largos com entalhe de gola ao
+      // centro, laterais a estreitar até à bainha curva na cintura (perspetiva 3D).
       const camisola =
-        `M ${cx - ombroHalf} ${torsoTop + 1.3}` +
-        ` Q ${cx - ombroHalf} ${torsoTop - 0.3} ${cx - ombroHalf + 1.7} ${torsoTop - 0.5}` +
-        ` L ${cx - golaHalf} ${torsoTop - 0.7}` +
-        ` Q ${cx} ${torsoTop + 1.5} ${cx + golaHalf} ${torsoTop - 0.7}` +
-        ` L ${cx + ombroHalf - 1.7} ${torsoTop - 0.5}` +
-        ` Q ${cx + ombroHalf} ${torsoTop - 0.3} ${cx + ombroHalf} ${torsoTop + 1.3}` +
-        ` L ${cx + cinturaHalf} ${torsoBot}` +
-        ` Q ${cx} ${torsoBot + 1.7} ${cx - cinturaHalf} ${torsoBot}` +
+        `M ${cx - shoulderHalf} ${shoulderY + 0.9}` +
+        ` Q ${cx - shoulderHalf} ${shoulderY - 0.9} ${cx - shoulderHalf + 1.6} ${shoulderY - 1.1}` +
+        ` L ${cx - golaHalf} ${shoulderY - 1.3}` +
+        ` Q ${cx} ${shoulderY + 0.7} ${cx + golaHalf} ${shoulderY - 1.3}` +
+        ` L ${cx + shoulderHalf - 1.6} ${shoulderY - 1.1}` +
+        ` Q ${cx + shoulderHalf} ${shoulderY - 0.9} ${cx + shoulderHalf} ${shoulderY + 0.9}` +
+        ` L ${cx + waistHalf} ${waistY}` +
+        ` Q ${cx} ${waistY + 1.7} ${cx - waistHalf} ${waistY}` +
         ` Z`;
-      // Calções: pequeno trapézio abaixo da bainha (tom escurecido da camisola).
-      const calcaoTop = torsoBot - 0.4;
-      const calcaoBot = torsoBot + 2.6;
+      // Calções: trapézio abaixo da bainha (tom escurecido da camisola).
       const calcao =
-        `M ${cx - cinturaHalf} ${calcaoTop}` +
-        ` L ${cx + cinturaHalf} ${calcaoTop}` +
-        ` L ${cx + cinturaHalf - 0.7} ${calcaoBot}` +
-        ` L ${cx - cinturaHalf + 0.7} ${calcaoBot}` +
+        `M ${cx - waistHalf} ${shortTop}` +
+        ` L ${cx + waistHalf} ${shortTop}` +
+        ` L ${cx + waistHalf - 0.5} ${shortBot}` +
+        ` L ${cx - waistHalf + 0.5} ${shortBot}` +
         ` Z`;
       return (
         <g>
           {decoracoes}
           <PecaDefs />
-          {/* Sombra projetada no chão (aos pés) → a figura "levanta" do campo. */}
-          <ellipse
-            cx={cx}
-            cy={cy + 9.6}
-            rx={6.6}
-            ry={2.2}
-            fill="url(#peca-sombra-chao)"
-          />
-          {/* Pernas (tom de pele) — sugerem figura de pé, vista de trás. */}
-          <line
-            x1={cx - 2.3}
-            y1={calcaoBot - 0.4}
-            x2={cx - 2.3}
-            y2={cy + 9}
-            stroke={peleFill}
-            strokeWidth={2.2}
-            strokeLinecap="round"
-          />
-          <line
-            x1={cx + 2.3}
-            y1={calcaoBot - 0.4}
-            x2={cx + 2.3}
-            y2={cy + 9}
-            stroke={peleFill}
-            strokeWidth={2.2}
-            strokeLinecap="round"
-          />
-          {/* Calções (por trás da bainha do tronco). */}
+          <defs>
+            {/* Luz lateral da camisola: esquerda iluminada → direita em sombra
+                (dá volume 3D ao tronco). Cor-independente → id seguro entre
+                instâncias (tal como PecaDefs). */}
+            <linearGradient id="jog-camisola-luz" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.42" />
+              <stop offset="34%" stopColor="#ffffff" stopOpacity="0.06" />
+              <stop offset="60%" stopColor="#000000" stopOpacity="0" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0.4" />
+            </linearGradient>
+            {/* Volume esférico da cabeça: topo claro (luz de cima) → base escura. */}
+            <radialGradient id="jog-cabeca" cx="40%" cy="26%" r="80%">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.6" />
+              <stop offset="45%" stopColor="#ffffff" stopOpacity="0.05" />
+              <stop offset="72%" stopColor="#000000" stopOpacity="0.02" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0.5" />
+            </radialGradient>
+          </defs>
+          {/* Sombra elíptica projetada no chão (aos pés) → a figura "levanta". */}
+          <ellipse cx={cx} cy={legBotY + 1.4} rx={6.4} ry={2} fill="url(#peca-sombra-chao)" />
+          {/* Botas (elipses escuras) ligeiramente abertas (ângulo 3/4). */}
+          <ellipse cx={cx - 2.2} cy={legBotY + 0.6} rx={2.3} ry={1.35} fill={botaFill} transform={`rotate(-8 ${cx - 2.2} ${legBotY + 0.6})`} />
+          <ellipse cx={cx + 2.2} cy={legBotY + 0.6} rx={2.3} ry={1.35} fill={botaFill} transform={`rotate(8 ${cx + 2.2} ${legBotY + 0.6})`} />
+          <ellipse cx={cx - 2.2} cy={legBotY + 0.6} rx={2.3} ry={1.35} fill="url(#peca-rim)" transform={`rotate(-8 ${cx - 2.2} ${legBotY + 0.6})`} />
+          <ellipse cx={cx + 2.2} cy={legBotY + 0.6} rx={2.3} ry={1.35} fill="url(#peca-rim)" transform={`rotate(8 ${cx + 2.2} ${legBotY + 0.6})`} />
+          {/* Pernas/canelas (tom de pele) — dois membros vistos de trás. */}
+          <line x1={cx - 2.0} y1={legTopY} x2={cx - 2.2} y2={legBotY} stroke={peleFill} strokeWidth={2.5} strokeLinecap="round" />
+          <line x1={cx + 2.0} y1={legTopY} x2={cx + 2.2} y2={legBotY} stroke={peleFill} strokeWidth={2.5} strokeLinecap="round" />
+          {/* Sombreado das pernas (lado direito mais escuro → volume). */}
+          <line x1={cx - 2.0} y1={legTopY} x2={cx - 2.2} y2={legBotY} stroke="#000000" strokeOpacity={0.16} strokeWidth={1} strokeLinecap="round" />
+          <line x1={cx + 2.0} y1={legTopY} x2={cx + 2.2} y2={legBotY} stroke="#000000" strokeOpacity={0.3} strokeWidth={1.1} strokeLinecap="round" />
+          {/* Calções (por trás da bainha) + sombra + luz lateral + costura central. */}
           <path d={calcao} fill={preenchimento} />
-          <path d={calcao} fill="#000000" fillOpacity={0.28} />
-          <line
-            x1={cx}
-            y1={calcaoTop + 0.4}
-            x2={cx}
-            y2={calcaoBot - 0.2}
-            stroke="#000000"
-            strokeOpacity={0.3}
-            strokeWidth={0.5}
-          />
-          {/* Mangas/braços: elipses verticais nos ombros (assomam nos lados). */}
-          <ellipse cx={cx - ombroHalf + 0.3} cy={cy - 2.4} rx={2.4} ry={3.2} fill={preenchimento} />
-          <ellipse cx={cx + ombroHalf - 0.3} cy={cy - 2.4} rx={2.4} ry={3.2} fill={preenchimento} />
-          <ellipse cx={cx - ombroHalf + 0.3} cy={cy - 2.4} rx={2.4} ry={3.2} fill="url(#peca-rim)" />
-          <ellipse cx={cx + ombroHalf - 0.3} cy={cy - 2.4} rx={2.4} ry={3.2} fill="url(#peca-rim)" />
-          {/* Antebraços/mãos (pele) a sair das mangas. */}
-          <circle cx={cx - ombroHalf + 0.1} cy={cy + 0.6} r={1.4} fill={peleFill} />
-          <circle cx={cx + ombroHalf - 0.1} cy={cy + 0.6} r={1.4} fill={peleFill} />
-          {/* Cabeça (tom de pele) acima dos ombros + sombreado esférico. */}
-          <circle cx={cx} cy={headCy} r={headR} fill={peleFill} />
-          <circle cx={cx} cy={headCy} r={headR} fill="url(#peca-rim)" />
-          <circle cx={cx} cy={headCy} r={headR} fill="url(#peca-luz)" />
-          <circle
-            cx={cx}
-            cy={headCy}
-            r={headR}
-            fill="none"
-            stroke={peleStroke}
-            strokeWidth={0.6}
-            strokeOpacity={0.9}
-          />
+          <path d={calcao} fill="#000000" fillOpacity={0.34} />
+          <path d={calcao} fill="url(#jog-camisola-luz)" />
+          <line x1={cx} y1={shortTop + 0.5} x2={cx} y2={shortBot - 0.3} stroke="#000000" strokeOpacity={0.35} strokeWidth={0.5} />
           {/* Pescoço (liga a cabeça ao tronco, por trás da gola). */}
-          <rect
-            x={cx - 1.4}
-            y={headCy + headR - 0.6}
-            width={2.8}
-            height={2.4}
-            fill={peleFill}
-          />
-          {/* Tronco/camisola na cor da equipa (carrega o número nas costas) +
-              sombreado esférico (rim, lado sombra) + brilho especular (luz). */}
+          <rect x={cx - 1.3} y={headCy + headR - 0.9} width={2.6} height={2.7} fill={peleFill} />
+          <rect x={cx - 1.3} y={headCy + headR - 0.9} width={2.6} height={2.7} fill="#000000" fillOpacity={0.18} />
+          {/* Cabeça proporcional (pele) + volume esférico (topo claro→base escura)
+              + realce especular (luz vinda de cima-esquerda). */}
+          <circle cx={cx} cy={headCy} r={headR} fill={peleFill} />
+          <circle cx={cx} cy={headCy} r={headR} fill="url(#jog-cabeca)" />
+          <circle cx={cx} cy={headCy} r={headR} fill="none" stroke={peleStroke} strokeWidth={0.5} strokeOpacity={0.9} />
+          <ellipse cx={cx - 0.9} cy={headCy - 1.1} rx={0.8} ry={0.6} fill="#ffffff" fillOpacity={0.5} />
+          {/* Tronco/camisola na cor da equipa (número nas costas) + luz lateral +
+              escurecimento de bordo (volume). */}
           <path d={camisola} fill={preenchimento} />
+          <path d={camisola} fill="url(#jog-camisola-luz)" />
           <path d={camisola} fill="url(#peca-rim)" />
-          <path d={camisola} fill="url(#peca-luz)" />
+          {/* Realce especular no ombro esquerdo (lado iluminado). */}
+          <ellipse cx={cx - shoulderHalf + 2.4} cy={shoulderY + 0.5} rx={1.6} ry={0.9} fill="#ffffff" fillOpacity={0.3} />
           {/* Gola em C (costas) sob a cabeça → reforça a leitura de "camisola". */}
           <path
-            d={`M ${cx - golaHalf - 0.3} ${torsoTop - 0.2} Q ${cx} ${torsoTop + 2.2} ${cx + golaHalf + 0.3} ${torsoTop - 0.2}`}
+            d={`M ${cx - golaHalf - 0.3} ${shoulderY - 0.6} Q ${cx} ${shoulderY + 1.8} ${cx + golaHalf + 0.3} ${shoulderY - 0.6}`}
             fill="none"
             stroke="#ffffff"
             strokeOpacity={0.6}
-            strokeWidth={0.9}
+            strokeWidth={0.8}
             strokeLinecap="round"
           />
           {/* Contorno da camisola (branco; tracejado distingue o adversário). */}
@@ -833,14 +833,28 @@ export function ElementoSVG({
             d={camisola}
             fill="none"
             stroke="#FFFFFF"
-            strokeWidth={1.3}
+            strokeWidth={1.1}
             strokeDasharray={eAdversario ? "3 2" : undefined}
             strokeLinejoin="round"
           />
+          {/* Braços ao longo do corpo: manga (camisola) + antebraço (pele) + mão.
+              Desenhados por cima do tronco → leem-se como membros à frente. */}
+          {/* Braço esquerdo (lado iluminado). */}
+          <ellipse cx={cx - shoulderHalf + 0.7} cy={shoulderY + 2.2} rx={1.7} ry={2.5} fill={preenchimento} />
+          <ellipse cx={cx - shoulderHalf + 0.7} cy={shoulderY + 2.2} rx={1.7} ry={2.5} fill="url(#jog-camisola-luz)" />
+          <line x1={cx - shoulderHalf + 0.7} y1={shoulderY + 3.8} x2={cx - waistHalf - 0.9} y2={waistY + 2.6} stroke={peleFill} strokeWidth={1.8} strokeLinecap="round" />
+          <circle cx={cx - waistHalf - 0.9} cy={waistY + 2.8} r={1.1} fill={peleFill} />
+          {/* Braço direito (lado sombra). */}
+          <ellipse cx={cx + shoulderHalf - 0.7} cy={shoulderY + 2.2} rx={1.7} ry={2.5} fill={preenchimento} />
+          <ellipse cx={cx + shoulderHalf - 0.7} cy={shoulderY + 2.2} rx={1.7} ry={2.5} fill="url(#peca-rim)" />
+          <line x1={cx + shoulderHalf - 0.7} y1={shoulderY + 3.8} x2={cx + waistHalf + 0.9} y2={waistY + 2.6} stroke={peleFill} strokeWidth={1.8} strokeLinecap="round" />
+          <line x1={cx + shoulderHalf - 0.7} y1={shoulderY + 3.8} x2={cx + waistHalf + 0.9} y2={waistY + 2.6} stroke="#000000" strokeOpacity={0.22} strokeWidth={0.8} strokeLinecap="round" />
+          <circle cx={cx + waistHalf + 0.9} cy={waistY + 2.8} r={1.1} fill={peleFill} />
+          {/* Número/rótulo — centrado no tronco (costas). */}
           {etiqueta != null && (
             <text
               x={cx}
-              y={cy + 0.6}
+              y={cy - 1.4}
               textAnchor="middle"
               dominantBaseline="central"
               fontSize={tamanhoEtiqueta}
@@ -852,6 +866,31 @@ export function ElementoSVG({
             >
               {etiqueta}
             </text>
+          )}
+          {/* Legenda da posição tática (pílula escura + abreviatura) por baixo da
+              figura — não substitui o número. */}
+          {etiquetaPos != null && (
+            <g>
+              <rect
+                x={cx - posLargura / 2}
+                y={posTopo}
+                width={posLargura}
+                height={6}
+                rx={2}
+                fill="rgba(15,17,23,0.75)"
+              />
+              <text
+                x={cx}
+                y={posTopo + 3.1}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={4.4}
+                fontWeight={700}
+                fill="#FFFFFF"
+              >
+                {etiquetaPos}
+              </text>
+            </g>
           )}
         </g>
       );

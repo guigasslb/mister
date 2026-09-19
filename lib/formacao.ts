@@ -1,5 +1,6 @@
 import type { FormatoJogo, Modalidade, Posicao } from "@prisma/client";
 import type { DiagramaCampo, Jogador } from "@/lib/schemas/exercicio";
+import { ABREV_POSICAO } from "@/lib/schemas/atleta";
 
 /**
  * Formação do plano de dia de jogo (§11.5): distribui os titulares no campo
@@ -148,14 +149,16 @@ export function construirDiagramaFormacao(
   // Recurso final se o pool esgotar (mais titulares que lugares): posição do meio.
   const posicaoRecurso: Posicao = modalidade === "FUTEBOL" ? "MEDIO_CENTRO" : "ALA";
 
-  // Agrupa os titulares por índice de linha, calculando a posição efetiva.
-  const porLinha = new Map<number, TitularFormacao[]>();
+  // Agrupa os titulares por índice de linha, calculando a posição efetiva. A
+  // posição efetiva (prevista ou padrão atribuída) é guardada para alimentar a
+  // legenda da posição no campo (§11.5).
+  const porLinha = new Map<number, { t: TitularFormacao; posicao: Posicao }[]>();
   for (const t of titulares) {
     const posicao = t.posicao ?? pool.shift() ?? posicaoRecurso;
     let idx = linhas.findIndex((l) => l.posicoes.includes(posicao));
     if (idx < 0) idx = idxMeio; // posição fora das linhas (dados legados) → meio
     const lista = porLinha.get(idx) ?? [];
-    lista.push(t);
+    lista.push({ t, posicao });
     porLinha.set(idx, lista);
   }
 
@@ -163,7 +166,7 @@ export function construirDiagramaFormacao(
   const elementos: Jogador[] = [];
   linhas.forEach((linha, idx) => {
     const lista = porLinha.get(idx) ?? [];
-    lista.forEach((t, i) => {
+    lista.forEach(({ t, posicao }, i) => {
       elementos.push({
         id: t.id,
         tipo: "jogador",
@@ -171,6 +174,8 @@ export function construirDiagramaFormacao(
         y: distribuirY(i, lista.length),
         cor: "azul",
         equipa: "propria",
+        // Legenda visível da posição tática (abreviatura), por baixo da figura.
+        etiquetaPosicao: ABREV_POSICAO[posicao],
         ...(t.numero != null ? { numero: t.numero } : {}),
       });
     });
