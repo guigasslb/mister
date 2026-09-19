@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CronometroJogo } from "@/components/jogos/ao-vivo/CronometroJogo";
 import { CampoAoVivo, type AtletaAoVivo } from "@/components/jogos/ao-vivo/CampoAoVivo";
+import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { ModalSubstituicao } from "@/components/jogos/ao-vivo/ModalSubstituicao";
 import { BarraControloJogo } from "@/components/jogos/ao-vivo/BarraControloJogo";
 import {
@@ -55,6 +56,8 @@ export interface ConvocadoAoVivo {
 interface JogoAoVivoProps {
   jogoId: string;
   adversario: string;
+  // §9: nome do clube do utilizador (nossa equipa) para o título do confronto.
+  clubeNome: string | null | undefined;
   casaFora: CasaFora;
   escalaoNome: string;
   modalidade: Modalidade;
@@ -487,7 +490,14 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
           </Link>
         </Button>
         <div className="min-w-0 flex-1 text-center">
-          <p className="truncate text-corpo font-semibold">vs {props.adversario}</p>
+          <p className="truncate text-corpo font-semibold">
+            <TituloConfronto
+              clubeNome={props.clubeNome}
+              adversario={props.adversario}
+              casaFora={props.casaFora}
+              aplicarCor={false}
+            />
+          </p>
           <p className="truncate text-legenda text-white/60">
             {props.escalaoNome} · {LABEL_CASA_FORA[props.casaFora]} ({nomeEquipa})
           </p>

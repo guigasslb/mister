@@ -14,6 +14,7 @@ import {
   CircleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { listarJogos } from "@/lib/actions/jogos";
 import { LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
 import { listarEscaloes } from "@/lib/actions/escaloes";
@@ -318,7 +319,11 @@ export default async function JogosPage({
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-corpo font-semibold text-cinza-900">
-                        vs {j.adversario}
+                        <TituloConfronto
+                          clubeNome={membro?.clube.nome}
+                          adversario={j.adversario}
+                          casaFora={j.casaFora}
+                        />
                       </p>
                       {/* Badge de modalidade só quando o clube é multi-secção */}
                       {multiSeccao && <BadgeModalidade modalidade={j.modalidade} compacto />}

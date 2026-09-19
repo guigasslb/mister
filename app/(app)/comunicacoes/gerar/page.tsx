@@ -11,6 +11,7 @@ import { listarModelosComunicacao } from "@/lib/actions/comunicacao";
 import { listarJogos } from "@/lib/actions/jogos";
 import { obterMembroAtual, obterUtilizadorAtual } from "@/lib/permissoes";
 import { formatarDataCurta } from "@/lib/comunicacao-utils";
+import { tituloConfronto } from "@/lib/jogo-confronto";
 import {
   TIPOS_COMUNICACAO,
   type TipoComunicacaoValor,
@@ -52,7 +53,7 @@ export default async function GerarComunicacaoPage({
 
   const jogos: JogoOpcao[] = (resJogos.sucesso ? resJogos.dados : []).map((j) => ({
     id: j.id,
-    rotulo: `${formatarDataCurta(j.data)} · vs ${j.adversario} (${j.escalao.nome})`,
+    rotulo: `${formatarDataCurta(j.data)} · ${tituloConfronto(membro?.clube.nome, j.adversario, j.casaFora)} (${j.escalao.nome})`,
   }));
 
   return (

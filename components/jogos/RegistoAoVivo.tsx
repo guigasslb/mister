@@ -14,6 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { registarEventoJogo, removerEventoJogo } from "@/lib/actions/jogos";
+import { cn } from "@/lib/utils";
+import { nomeClubeSeguro } from "@/lib/jogo-confronto";
 import { LABEL_BLOCO_TEMPO, LABEL_TIPO_EVENTO } from "@/lib/schemas/jogo";
 import { EMOJI_EVENTO } from "@/components/jogos/TimelineEventos";
 import type { BlocoTempo, CasaFora, Modalidade, TipoEventoJogo } from "@prisma/client";
@@ -84,6 +86,7 @@ export function RegistoAoVivo({
   atletas,
   casaFora,
   adversario,
+  clubeNome,
   modalidade,
 }: {
   jogoId: string;
@@ -91,6 +94,8 @@ export function RegistoAoVivo({
   atletas: Atleta[];
   casaFora: CasaFora;
   adversario: string;
+  // §9: nome do clube (nossa equipa) no marcador — nunca "Nós".
+  clubeNome: string | null | undefined;
   // §10.8: modalidade efetiva do jogo → decide os tipos de evento disponíveis.
   modalidade: Modalidade;
 }) {
@@ -113,13 +118,16 @@ export function RegistoAoVivo({
   const golosNos = eventos.filter((e) => e.tipo === "GOLO").length;
   const golosAdv = eventos.filter((e) => e.tipo === "GOLO_SOFRIDO").length;
   const casaEhNossa = casaFora === "CASA";
+  const nomeNos = nomeClubeSeguro(clubeNome);
   const esquerda = {
-    nome: casaEhNossa ? "Nós" : adversario,
+    nome: casaEhNossa ? nomeNos : adversario,
     golos: casaEhNossa ? golosNos : golosAdv,
+    nossa: casaEhNossa,
   };
   const direita = {
-    nome: casaEhNossa ? adversario : "Nós",
+    nome: casaEhNossa ? adversario : nomeNos,
     golos: casaEhNossa ? golosAdv : golosNos,
+    nossa: !casaEhNossa,
   };
 
   const nomeAtleta = (id: string | null): string | null => {
@@ -165,13 +173,25 @@ export function RegistoAoVivo({
 
       {/* Marcador ao vivo */}
       <div className="flex items-center justify-center gap-4 rounded-lg bg-cinza-50 px-4 py-3">
-        <span className="flex-1 truncate text-right text-corpo font-medium text-cinza-700">
+        <span
+          className={cn(
+            "flex-1 truncate text-right text-corpo",
+            esquerda.nossa ? "font-bold" : "font-medium text-cinza-700",
+          )}
+          style={esquerda.nossa ? { color: "var(--cor-primaria, #F0531E)" } : undefined}
+        >
           {esquerda.nome}
         </span>
         <span className="text-titulo-pagina font-bold tabular-nums text-cinza-900">
           {esquerda.golos} – {direita.golos}
         </span>
-        <span className="flex-1 truncate text-corpo font-medium text-cinza-700">
+        <span
+          className={cn(
+            "flex-1 truncate text-corpo",
+            direita.nossa ? "font-bold" : "font-medium text-cinza-700",
+          )}
+          style={direita.nossa ? { color: "var(--cor-primaria, #F0531E)" } : undefined}
+        >
           {direita.nome}
         </span>
       </div>

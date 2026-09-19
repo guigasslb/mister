@@ -306,12 +306,17 @@ export async function iniciarJogoAoVivo(
   if (idsTitulares.some((id) => !idsConvocados.has(id)))
     return erro("Todos os titulares têm de estar na convocatória.");
 
+  // §8.25.8: o nº de partes é definido no jogo (Jogo.numeroPartes) e a sessão
+  // herda-o ao iniciar — o arranque já não o escolhe. Se o input trouxer um valor
+  // (retrocompatibilidade), o do jogo prevalece como fonte de verdade.
+  const numeroPartes = jogo.numeroPartes;
+
   const sessao = await prisma.$transaction(async (tx) => {
     const s = await tx.sessaoJogoAoVivo.upsert({
       where: { jogoId },
       create: {
         jogoId,
-        numeroPartes: parsed.data.numeroPartes,
+        numeroPartes,
         duracaoParteMins: parsed.data.duracaoParteMins ?? 20,
         estado: "POR_INICIAR",
         parteAtual: 0,
@@ -319,7 +324,7 @@ export async function iniciarJogoAoVivo(
         aCorrerDesde: null,
       },
       update: {
-        numeroPartes: parsed.data.numeroPartes,
+        numeroPartes,
         duracaoParteMins: parsed.data.duracaoParteMins ?? 20,
         estado: "POR_INICIAR",
         parteAtual: 0,

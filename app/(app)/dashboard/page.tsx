@@ -41,6 +41,7 @@ import { Kpi } from "@/components/analiticos/Kpi";
 import { pct } from "@/components/analiticos/Cartao";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { BadgeModalidade } from "@/components/plantel/BadgeModalidade";
+import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { AniversariosWidget } from "@/components/plantel/AniversariosWidget";
 import {
   construirLembretesHoje,
@@ -48,7 +49,7 @@ import {
   type Lembrete,
 } from "@/lib/dashboard-lembretes";
 import { ListaLembretes } from "@/components/lembretes/ListaLembretes";
-import type { Reuniao } from "@prisma/client";
+import type { CasaFora, Reuniao } from "@prisma/client";
 import { formatarDataHoraLisboa } from "@/lib/utils-datas";
 import { inicioDoDia, fimDoDia } from "@/lib/plano-semanal";
 
@@ -387,7 +388,12 @@ export default async function DashboardPage() {
                   <Trophy className="h-4 w-4" /> Próximo jogo · {diasAte(proximoJogo.data)}
                 </div>
                 <p className="mt-3 text-[26px] font-bold leading-tight">
-                  vs {proximoJogo.adversario}
+                  <TituloConfronto
+                    clubeNome={clube?.nome}
+                    adversario={proximoJogo.adversario}
+                    casaFora={proximoJogo.casaFora}
+                    aplicarCor={false}
+                  />
                 </p>
                 <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-corpo text-white/85">
                   <span className="capitalize">{dataLonga(proximoJogo.data)}</span>
@@ -417,7 +423,12 @@ export default async function DashboardPage() {
                         >
                           <Trophy className="h-3.5 w-3.5 flex-shrink-0 text-white/60" />
                           <span className="truncate">
-                            vs {j.adversario}
+                            <TituloConfronto
+                              clubeNome={clube?.nome}
+                              adversario={j.adversario}
+                              casaFora={j.casaFora}
+                              aplicarCor={false}
+                            />
                             <span className="text-white/60">
                               {" · "}
                               <span className="capitalize">{dataCurta(j.data)}</span>
@@ -499,7 +510,7 @@ export default async function DashboardPage() {
               vazio="Sem treinos agendados"
             />
           ) : proximosJogos.length > 0 ? (
-            <ProximosJogosSecundario jogos={proximosJogos} />
+            <ProximosJogosSecundario jogos={proximosJogos} clubeNome={clube?.nome} />
           ) : (
             <EventoSecundario
               tipo="jogo"
@@ -748,13 +759,16 @@ function CartaoReuniao({
 /** Lista dos próximos jogos na coluna secundária — 1.º em destaque, seguintes menores. */
 function ProximosJogosSecundario({
   jogos,
+  clubeNome,
 }: {
   jogos: {
     id: string;
     data: Date;
     adversario: string;
+    casaFora: CasaFora;
     escalao: { nome: string };
   }[];
+  clubeNome: string | null | undefined;
 }) {
   const [primeiro, ...restantes] = jogos;
   return (
@@ -773,7 +787,13 @@ function ProximosJogosSecundario({
         className="group -mx-1 block rounded-lg px-1 py-1 transition-colors hover:bg-cinza-50"
       >
         <p className="flex items-center gap-1 text-corpo font-semibold text-cinza-900">
-          <span className="truncate">vs {primeiro.adversario}</span>
+          <span className="truncate">
+            <TituloConfronto
+              clubeNome={clubeNome}
+              adversario={primeiro.adversario}
+              casaFora={primeiro.casaFora}
+            />
+          </span>
           <ChevronRight className="ml-auto h-4 w-4 flex-shrink-0 text-cinza-300 transition-transform group-hover:translate-x-0.5" />
         </p>
         <p className="text-legenda text-cinza-500">
@@ -791,7 +811,11 @@ function ProximosJogosSecundario({
                 className="group -mx-1 flex items-center gap-1.5 rounded-lg px-1 py-1 text-sm text-cinza-700 transition-colors hover:bg-cinza-50"
               >
                 <span className="truncate">
-                  vs {j.adversario}
+                  <TituloConfronto
+                    clubeNome={clubeNome}
+                    adversario={j.adversario}
+                    casaFora={j.casaFora}
+                  />
                   <span className="text-cinza-400">
                     {" · "}
                     <span className="capitalize">{dataCurta(j.data)}</span>

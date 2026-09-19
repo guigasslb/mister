@@ -32,13 +32,16 @@ export const titularSchema = z.object({
 });
 
 /**
- * Configuração de arranque: nº de partes (2..4, RN-JV-5), duração de cada parte em
- * minutos (opcional, default no schema Prisma = 20) e titulares em campo. O nº exato
- * de titulares (= tamanho do formato, RN-JV-1) é validado na action, que conhece o
- * `formato` do jogo.
+ * Configuração de arranque: duração de cada parte em minutos (opcional, default no
+ * schema Prisma = 20) e titulares em campo. O nº de partes deixou de ser escolhido
+ * no arranque (§8.25.8): a `SessaoJogoAoVivo` herda `numeroPartes` de `Jogo`
+ * (definido na criação/edição). `numeroPartes` permanece OPCIONAL aqui apenas para
+ * retrocompatibilidade do input (1..4, RN-JV-5 alargada); a action ignora-o e usa
+ * o valor do jogo como fonte de verdade. O nº exato de titulares (= tamanho do
+ * formato, RN-JV-1) é validado na action, que conhece o `formato` do jogo.
  */
 export const iniciarJogoAoVivoSchema = z.object({
-  numeroPartes: z.number().int().min(2).max(4),
+  numeroPartes: z.number().int().min(1).max(4).optional(),
   duracaoParteMins: z.number().int().min(1).max(60).optional(),
   titulares: z.array(titularSchema).min(1, "Indica os titulares."),
 });

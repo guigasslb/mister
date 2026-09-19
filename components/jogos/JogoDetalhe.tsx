@@ -116,6 +116,7 @@ export function JogoDetalhe({
   observacoes,
   casaFora,
   adversario,
+  clubeNome,
   modalidade,
   formato,
   suspensoes = [],
@@ -140,6 +141,8 @@ export function JogoDetalhe({
   observacoes: ObservacaoAdversario[];
   casaFora: CasaFora;
   adversario: string;
+  // §9: nome do clube do utilizador (nossa equipa) para compor o título do jogo.
+  clubeNome: string | null | undefined;
   // 🔁 v7 (§10.8): modalidade efetiva do jogo → decide o núcleo estatístico
   // exibido; `formato` alimenta a conversão bloco→minutos (tempo de jogo).
   modalidade: Modalidade;
@@ -513,6 +516,7 @@ export function JogoDetalhe({
             }))}
             casaFora={casaFora}
             adversario={adversario}
+            clubeNome={clubeNome}
             modalidade={modalidade}
           />
         )}

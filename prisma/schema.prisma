@@ -1140,6 +1140,9 @@ model Jogo {
   adversario            String
   casaFora              CasaFora             @default(CASA)
   tipo                  TipoJogo             @default(OFICIAL)
+  // 🔁 v7 (§8.25.8): nº de partes do jogo (1..4), configurável na criação/edição.
+  // O Modo Jogo ao Vivo herda este valor ao iniciar (SessaoJogoAoVivo.numeroPartes).
+  numeroPartes          Int                  @default(2)
   competicao            String? // texto livre (legado); preferir competicaoId
   competicaoId          String?
   competicaoRef         Competicao?          @relation(fields: [competicaoId], references: [id])
@@ -1426,7 +1429,7 @@ model SessaoJogoAoVivo {
   id                 String           @id @default(cuid())
   jogoId             String           @unique
   jogo               Jogo             @relation(fields: [jogoId], references: [id], onDelete: Cascade)
-  numeroPartes       Int              @default(2) // 2..4
+  numeroPartes       Int              @default(2) // 1..4 (herdado de Jogo.numeroPartes ao iniciar)
   duracaoParteMins   Int              @default(20) // duração de cada parte, em minutos
   estado             EstadoJogoAoVivo @default(POR_INICIAR)
   parteAtual         Int              @default(0) // 0 = ainda não iniciou; 1..numeroPartes

@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { Pencil, Home, Plane, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { TituloConfronto } from "@/components/jogos/TituloConfronto";
+import { tituloConfronto } from "@/lib/jogo-confronto";
 import { obterJogo, obterSuspensoesPendentes } from "@/lib/actions/jogos";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { listarMetricas } from "@/lib/actions/metricas";
@@ -74,6 +76,7 @@ export default async function DetalheJogoPage({
   const atletas = resAtletas.sucesso ? resAtletas.dados : [];
   const metricasAtivas = resMetricas.sucesso ? resMetricas.dados : [];
   const podeComunicar = membro?.capacidades.includes("COMUNICACOES_GERIR") ?? false;
+  const clubeNome = membro?.clube.nome;
   // §8.10: o quadro tático do plano de jogo é gerido sob MODELO_JOGO_GERIR.
   const podeGerirQuadro = membro?.capacidades.includes("MODELO_JOGO_GERIR") ?? false;
 
@@ -235,7 +238,7 @@ export default async function DetalheJogoPage({
         <Breadcrumbs
           items={[
             { label: "Jogos", href: "/jogos" },
-            { label: `vs ${j.adversario}` },
+            { label: tituloConfronto(clubeNome, j.adversario, j.casaFora) },
           ]}
         />
         <div className="flex flex-wrap gap-2">
@@ -255,7 +258,13 @@ export default async function DetalheJogoPage({
       {/* Cabeçalho */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-3">
-          <h1>vs {j.adversario}</h1>
+          <h1>
+            <TituloConfronto
+              clubeNome={clubeNome}
+              adversario={j.adversario}
+              casaFora={j.casaFora}
+            />
+          </h1>
           <span className="flex items-center gap-1 rounded-full bg-cinza-50 px-2.5 py-0.5 text-legenda text-cinza-600">
             {j.casaFora === "CASA" ? (
               <Home className="h-3.5 w-3.5" />
@@ -324,6 +333,7 @@ export default async function DetalheJogoPage({
         eventos={eventos}
         observacoes={j.observacoes}
         casaFora={j.casaFora}
+        clubeNome={clubeNome}
         adversario={j.adversario}
         modalidade={j.modalidade}
         formato={j.formato}

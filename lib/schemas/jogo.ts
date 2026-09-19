@@ -28,6 +28,9 @@ export const jogoSchema = z.object({
   adversario: z.string().min(1, "Indica o adversário").max(100),
   casaFora: z.enum(["CASA", "FORA"]),
   tipo: z.enum(["OFICIAL", "AMIGAVEL"]).default("OFICIAL"),
+  // 🔁 v7 (§8.25.8): nº de partes do jogo, definido na criação/edição. O Modo Jogo
+  // ao Vivo herda este valor ao iniciar. 1..4 (RN-JV-5 alargada). Default 2.
+  numeroPartes: z.number().int().min(1).max(4).default(2),
   escalaoId: z.string().cuid("Escalão inválido"),
   // `competicao` (texto livre) foi deprecado no formulário (P4.3); a associação
   // faz-se por `competicaoId`. O campo legado mantém-se no modelo Prisma só para

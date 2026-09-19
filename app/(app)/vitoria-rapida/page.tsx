@@ -4,7 +4,9 @@ import { ChevronLeft } from "lucide-react";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { listarModelosSessao } from "@/lib/actions/templatesSessao";
 import { listarJogos } from "@/lib/actions/jogos";
+import { obterClubeAtivo } from "@/lib/permissoes";
 import { formatarDataCurta } from "@/lib/comunicacao-utils";
+import { tituloConfronto } from "@/lib/jogo-confronto";
 import {
   VitoriaRapida,
   type EscalaoOpcao,
@@ -19,10 +21,11 @@ export const metadata: Metadata = { title: "Começar" };
  * plantel em massa → primeiro treino de template → primeira convocatória.
  */
 export default async function VitoriaRapidaPage() {
-  const [resEscaloes, resModelos, resJogos] = await Promise.all([
+  const [resEscaloes, resModelos, resJogos, clube] = await Promise.all([
     listarEscaloes(),
     listarModelosSessao(),
     listarJogos(),
+    obterClubeAtivo(),
   ]);
 
   const escaloes: EscalaoOpcao[] = (resEscaloes.sucesso ? resEscaloes.dados : []).map((e) => ({
@@ -44,7 +47,7 @@ export default async function VitoriaRapidaPage() {
   const base = futuros.length > 0 ? futuros : todosJogos;
   const jogos: JogoOpcao[] = base.map((j) => ({
     id: j.id,
-    rotulo: `${formatarDataCurta(j.data)} · vs ${j.adversario} (${j.escalao.nome})`,
+    rotulo: `${formatarDataCurta(j.data)} · ${tituloConfronto(clube?.nome, j.adversario, j.casaFora)} (${j.escalao.nome})`,
   }));
 
   return (
