@@ -165,7 +165,7 @@ export function PlanoSemanalForm({
 
       {/* Nome do plano */}
       <div className="space-y-1.5">
-        <Label htmlFor="nome">Nome do plano</Label>
+        <Label htmlFor="nome">Nome do horário</Label>
         <Input
           id="nome"
           value={nome}
@@ -259,7 +259,7 @@ export function PlanoSemanalForm({
           ) : (
             <CalendarCheck className="h-4 w-4" />
           )}
-          Criar plano
+          Criar horário
         </Button>
         <Button
           type="button"
@@ -272,7 +272,7 @@ export function PlanoSemanalForm({
       </div>
       {!previsao && (
         <p className="text-legenda text-cinza-500">
-          Pré-visualiza o plano antes de o criar.
+          Pré-visualiza o horário antes de o criar.
         </p>
       )}
     </div>

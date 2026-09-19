@@ -113,7 +113,7 @@ export function EditarPlanoDialog({
         if (apagadas > 0) partes.push(`${apagadas} apagada(s)`);
         if (desvinculadas > 0) partes.push(`${desvinculadas} desvinculada(s)`);
         toast.success(
-          partes.length > 0 ? `Plano atualizado · ${partes.join(" · ")}` : "Plano atualizado",
+          partes.length > 0 ? `Horário atualizado · ${partes.join(" · ")}` : "Horário atualizado",
         );
         setAberto(false);
         router.refresh();
@@ -141,7 +141,7 @@ export function EditarPlanoDialog({
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar plano semanal</DialogTitle>
+          <DialogTitle>Editar horário de treinos</DialogTitle>
           <DialogDescription>
             Alterar dias/horários aplica-se às sessões futuras. As passadas ficam intactas.
           </DialogDescription>
@@ -155,7 +155,7 @@ export function EditarPlanoDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="nome-plano">Nome do plano</Label>
+            <Label htmlFor="nome-plano">Nome do horário</Label>
             <Input
               id="nome-plano"
               value={nome}
@@ -168,9 +168,9 @@ export function EditarPlanoDialog({
 
           <div className="flex items-center justify-between rounded-md border border-cinza-200 p-3">
             <div>
-              <Label htmlFor="ativo-plano">Plano ativo</Label>
+              <Label htmlFor="ativo-plano">Horário ativo</Label>
               <p className="text-legenda text-cinza-500">
-                Só pode haver um plano ativo por escalão nesta época.
+                Só pode haver um horário ativo por escalão nesta época.
               </p>
             </div>
             <Switch id="ativo-plano" checked={ativo} onCheckedChange={setAtivo} />

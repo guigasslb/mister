@@ -49,7 +49,7 @@ export function DialogoAlcance({
         <DialogHeader>
           <DialogTitle>Aplicar alterações a…</DialogTitle>
           <DialogDescription>
-            Esta sessão faz parte de um plano semanal. Escolhe o alcance da alteração de
+            Esta sessão faz parte de um horário de treinos. Escolhe o alcance da alteração de
             agendamento.
           </DialogDescription>
         </DialogHeader>

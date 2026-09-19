@@ -8,7 +8,7 @@ import {
   List,
   CalendarDays,
   CalendarRange,
-  CalendarClock,
+  Repeat,
   ChevronRight,
   CalendarPlus,
   CheckCircle2,
@@ -222,8 +222,8 @@ export default async function TreinosPage({
           </Button>
           <Button asChild variant="outline">
             <Link href="/treinos/planos">
-              <CalendarClock className="h-4 w-4" />
-              Planos semanais
+              <Repeat className="h-4 w-4" />
+              Horário de treinos
             </Link>
           </Button>
           <Button asChild variant="outline">

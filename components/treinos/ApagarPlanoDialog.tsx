@@ -28,7 +28,7 @@ export function ApagarPlanoDialog({ planoId }: { planoId: string }) {
     {
       valor: "DESVINCULAR",
       titulo: "Manter as sessões",
-      descricao: "Remove apenas o plano. Todas as sessões geradas são preservadas.",
+      descricao: "Remove apenas o horário. Todas as sessões geradas são preservadas.",
     },
     {
       valor: "APAGAR_FUTURAS_VAZIAS",
@@ -47,7 +47,7 @@ export function ApagarPlanoDialog({ planoId }: { planoId: string }) {
         if (apagadas > 0) partes.push(`${apagadas} apagada(s)`);
         if (desvinculadas > 0) partes.push(`${desvinculadas} preservada(s)`);
         toast.success(
-          partes.length > 0 ? `Plano apagado · ${partes.join(" · ")}` : "Plano apagado",
+          partes.length > 0 ? `Horário apagado · ${partes.join(" · ")}` : "Horário apagado",
         );
         setAberto(false);
         router.refresh();
@@ -78,7 +78,7 @@ export function ApagarPlanoDialog({ planoId }: { planoId: string }) {
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Apagar plano semanal?</AlertDialogTitle>
+          <AlertDialogTitle>Apagar horário de treinos?</AlertDialogTitle>
           <AlertDialogDescription>
             Escolhe o que fazer às sessões geradas por este plano.
           </AlertDialogDescription>
@@ -119,7 +119,7 @@ export function ApagarPlanoDialog({ planoId }: { planoId: string }) {
             onClick={handleApagar}
           >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Apagar plano
+            Apagar horário
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

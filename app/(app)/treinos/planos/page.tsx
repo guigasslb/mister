@@ -9,7 +9,7 @@ import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { EditarPlanoDialog } from "@/components/treinos/EditarPlanoDialog";
 import { ApagarPlanoDialog } from "@/components/treinos/ApagarPlanoDialog";
 
-export const metadata: Metadata = { title: "Planos semanais" };
+export const metadata: Metadata = { title: "Horários de treinos" };
 
 /** Nomes curtos dos dias na ordem ISO (1=segunda … 7=domingo). */
 const DIAS_CURTOS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"] as const;
@@ -52,7 +52,7 @@ export default async function PlanosSemanaisPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1>Planos semanais</h1>
+          <h1>Horários de treinos</h1>
           <p className="mt-1 text-corpo-sec text-cinza-600">
             Distribui os treinos da semana por dias e objetivos.
           </p>
@@ -60,20 +60,20 @@ export default async function PlanosSemanaisPage() {
         <Button asChild>
           <Link href="/treinos/novo?modo=plano">
             <Plus className="h-4 w-4" />
-            Novo plano
+            Novo horário
           </Link>
         </Button>
       </div>
 
       {planos.length === 0 ? (
         <EstadoVazio
-          titulo="Nenhum plano semanal criado"
-          descricao="Cria o primeiro em Treinos > Novo treino, no separador «Plano semanal»."
+          titulo="Nenhum horário de treinos criado"
+          descricao="Ainda não tens um horário de treinos. Cria o primeiro com o botão «Novo horário» acima."
           acao={
             <Button asChild>
               <Link href="/treinos/novo?modo=plano">
                 <CalendarRange className="h-4 w-4" />
-                Criar plano semanal
+                Criar horário
               </Link>
             </Button>
           }

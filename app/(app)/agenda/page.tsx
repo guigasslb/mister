@@ -6,14 +6,24 @@ import {
   Users,
   MapPin,
   CalendarDays,
+  Repeat,
+  CalendarRange,
   List,
   Plus,
+  MoreHorizontal,
 } from "lucide-react";
 import { obterAgendaClube, type EventoAgenda } from "@/lib/actions/agenda";
 import { treinoConcluido } from "@/lib/semana";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { obterEscalaoDoUtilizador, filtrarEscaloesLegiveis } from "@/lib/permissoes";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { FiltroEscalaoAgenda } from "@/components/agenda/FiltroEscalaoAgenda";
 import { FiltroTipoAgenda } from "@/components/agenda/FiltroTipoAgenda";
@@ -206,6 +216,31 @@ export default async function AgendaPage({
               Nova reunião
             </Link>
           </Button>
+          {/* §8.13.1 — portas de gestão herdadas do antigo item "Treinos" (que saiu
+              do menu). Agrupadas num overflow "⋯" para não sobrecarregar o cabeçalho
+              no mobile (iPhone SE). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" aria-label="Mais opções de gestão">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Gestão de treinos</DropdownMenuLabel>
+              <DropdownMenuItem asChild>
+                <Link href="/treinos/planos">
+                  <Repeat className="h-4 w-4" />
+                  Horário de treinos
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/treinos/periodizacao">
+                  <CalendarRange className="h-4 w-4" />
+                  Periodização
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

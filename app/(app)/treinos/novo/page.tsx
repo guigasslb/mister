@@ -42,7 +42,7 @@ export default async function NovaSessaoPage({
         </Link>
       </div>
 
-      <h1>{ehPlano ? "Novo plano semanal" : "Nova sessão"}</h1>
+      <h1>{ehPlano ? "Novo horário de treinos" : "Nova sessão"}</h1>
 
       {/* Toggle de modo (§8.8.1) */}
       <div className="flex gap-1 rounded-md border border-cinza-200 p-1 w-fit">
@@ -62,7 +62,7 @@ export default async function NovaSessaoPage({
           }`}
         >
           <CalendarRange className="h-4 w-4" />
-          Plano semanal
+          Horário de treinos
         </Link>
       </div>
 

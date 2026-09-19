@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MapPin, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { MapPin, Clock, AlertTriangle, CheckCircle2, Repeat } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { EditarTreinoBotao } from "@/components/treinos/EditarTreinoBotao";
 import { ExportarTreinoPdfBotao } from "@/components/treinos/ExportarTreinoPdfBotao";
@@ -252,6 +253,17 @@ export default async function DetalheSessaoPage({
             </span>
           )}
         </div>
+        {/* §8.13.1 — quando a sessão foi gerada por um horário semanal recorrente,
+            expõe a porta de gestão do plano (o item "Treinos" saiu do menu). */}
+        {s.planoSemanalId && (
+          <Link
+            href="/treinos/planos"
+            className="inline-flex min-h-[44px] w-fit items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-2 text-corpo-sec font-medium text-primary transition-colors hover:bg-primary/15"
+          >
+            <Repeat className="h-4 w-4" />
+            Faz parte do horário semanal · Gerir horário
+          </Link>
+        )}
         <div className="flex flex-wrap gap-4 text-corpo-sec text-cinza-600">
           {s.duracaoMin && (
             <span className="flex items-center gap-1">
