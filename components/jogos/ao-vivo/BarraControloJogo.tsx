@@ -10,6 +10,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { EstadoJogoAoVivo } from "@/lib/jogo-ao-vivo-local";
 
@@ -158,7 +159,11 @@ export function BarraControloJogo({
               Fica disponível na análise do jogo. Guarda quando quiseres.
             </DialogDescription>
           </DialogHeader>
+          <Label htmlFor="notas-jogo" className="sr-only">
+            Notas do jogo
+          </Label>
           <Textarea
+            id="notas-jogo"
             value={rascunho}
             onChange={(e) => setRascunho(e.target.value)}
             rows={5}

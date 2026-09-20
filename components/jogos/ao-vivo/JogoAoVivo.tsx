@@ -568,7 +568,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
           asChild
           variant="ghost"
           size="sm"
-          className="text-white hover:bg-white/10"
+          className="min-h-[44px] text-white hover:bg-white/10"
         >
           <Link href={`/jogos/${jogoId}`}>
             <ArrowLeft className="h-4 w-4" />

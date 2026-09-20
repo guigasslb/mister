@@ -158,7 +158,7 @@ export function ArranqueAoVivo({
                     definirPosicao(a.id, v === "none" ? null : (v as Posicao))
                   }
                 >
-                  <SelectTrigger className="h-10 w-44 border-white/20 bg-white/10 text-white">
+                  <SelectTrigger className="h-11 w-44 border-white/20 bg-white/10 text-white">
                     <SelectValue placeholder="Posição" />
                   </SelectTrigger>
                   <SelectContent>

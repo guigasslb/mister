@@ -64,7 +64,7 @@ export function ModalAcoesJogador({
                     type="button"
                     onClick={() => setModo("menu")}
                     aria-label="Voltar às ações"
-                    className="-ml-1 flex h-8 w-8 items-center justify-center rounded-md text-cinza-500 hover:bg-cinza-100"
+                    className="-ml-1 flex h-11 w-11 items-center justify-center rounded-md text-cinza-500 hover:bg-cinza-100"
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Ban, Check, Radio, TriangleAlert } from "lucide-react";
@@ -532,7 +532,7 @@ export function JogoDetalhe({
                         value={e.utilizacao}
                         onValueChange={(v) => atualizarEstat(a.id, { utilizacao: v as Utilizacao })}
                       >
-                        <SelectTrigger className="w-40">
+                        <SelectTrigger className="w-40" aria-label={`Utilização de ${a.nome}`}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -648,13 +648,21 @@ export function JogoDetalhe({
                       {!escalaoJovem && (
                         <>
                           <CampoNum
-                            label="🟨 Cartão amarelo"
+                            label={
+                              <>
+                                <span aria-hidden>🟨</span> Cartão amarelo
+                              </>
+                            }
                             valor={e.cartaoAmarelo}
                             max={5}
                             onChange={(n) => atualizarEstat(a.id, { cartaoAmarelo: n ?? 0 })}
                           />
                           <CampoNum
-                            label="🟥 Cartão vermelho"
+                            label={
+                              <>
+                                <span aria-hidden>🟥</span> Cartão vermelho
+                              </>
+                            }
                             valor={e.cartaoVermelho}
                             max={2}
                             onChange={(n) => atualizarEstat(a.id, { cartaoVermelho: n ?? 0 })}
@@ -702,24 +710,32 @@ export function JogoDetalhe({
           <TabsContent value="relatorio" className="space-y-6">
             <div className="space-y-4">
               <div className="space-y-1">
-                <label className="text-corpo-sec font-medium text-cinza-900">
-                  Análise táctica
+                <label
+                  htmlFor="rel-analise-tatica"
+                  className="text-corpo-sec font-medium text-cinza-900"
+                >
+                  Análise tática
                 </label>
                 <Textarea
+                  id="rel-analise-tatica"
                   value={relatorio.analiseTatica}
                   onChange={(e) =>
                     setRelatorio((r) => ({ ...r, analiseTatica: e.target.value }))
                   }
                   rows={5}
                   maxLength={3000}
-                  placeholder="Como correu tacticamente…"
+                  placeholder="Como correu taticamente…"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-corpo-sec font-medium text-cinza-900">
+                <label
+                  htmlFor="rel-destaques"
+                  className="text-corpo-sec font-medium text-cinza-900"
+                >
                   Destaques
                 </label>
                 <Textarea
+                  id="rel-destaques"
                   value={relatorio.destaques}
                   onChange={(e) =>
                     setRelatorio((r) => ({ ...r, destaques: e.target.value }))
@@ -730,10 +746,14 @@ export function JogoDetalhe({
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-corpo-sec font-medium text-cinza-900">
+                <label
+                  htmlFor="rel-proximo-jogo"
+                  className="text-corpo-sec font-medium text-cinza-900"
+                >
                   Próximo jogo
                 </label>
                 <Textarea
+                  id="rel-proximo-jogo"
                   value={relatorio.proximoJogo}
                   onChange={(e) =>
                     setRelatorio((r) => ({ ...r, proximoJogo: e.target.value }))
@@ -812,15 +832,19 @@ function CampoNum({
   onChange,
   max,
 }: {
-  label: string;
+  label: React.ReactNode;
   valor: number | null;
   onChange: (n: number | null) => void;
   max?: number;
 }) {
+  const id = useId();
   return (
     <div className="space-y-1">
-      <label className="text-legenda text-cinza-500">{label}</label>
+      <label htmlFor={id} className="text-legenda text-cinza-500">
+        {label}
+      </label>
       <Input
+        id={id}
         type="number"
         min={0}
         max={max}
@@ -851,8 +875,9 @@ function CampoMetrica({
   valor: number | null;
   onChange: (n: number | null) => void;
 }) {
-  const label = (
-    <label className="text-legenda text-cinza-500">
+  const id = useId();
+  const renderLabel = (htmlFor?: string) => (
+    <label htmlFor={htmlFor} className="text-legenda text-cinza-500">
       {metrica.nome}
       {!metrica.ativa && <span className="ml-1 text-cinza-400">(inativa)</span>}
     </label>
@@ -862,12 +887,12 @@ function CampoMetrica({
   if (metrica.tipo === "BOOLEANO") {
     return (
       <div className="space-y-1">
-        {label}
+        {renderLabel(id)}
         <Select
           value={valor == null ? "" : String(valor)}
           onValueChange={(v) => onChange(v === "" ? null : Number(v))}
         >
-          <SelectTrigger className="h-9">
+          <SelectTrigger id={id} className="h-9">
             <SelectValue placeholder="—" />
           </SelectTrigger>
           <SelectContent>
@@ -883,12 +908,12 @@ function CampoMetrica({
   if (metrica.tipo === "ESCALA") {
     return (
       <div className="space-y-1">
-        {label}
+        {renderLabel(id)}
         <Select
           value={valor == null ? "" : String(valor)}
           onValueChange={(v) => onChange(v === "" ? null : Number(v))}
         >
-          <SelectTrigger className="h-9">
+          <SelectTrigger id={id} className="h-9">
             <SelectValue placeholder="—" />
           </SelectTrigger>
           <SelectContent>
@@ -907,7 +932,7 @@ function CampoMetrica({
   if (metrica.tipo === "ESCALA_1_3") {
     return (
       <div className="space-y-1">
-        {label}
+        {renderLabel()}
         <div
           className="flex gap-1.5"
           role="group"
@@ -939,8 +964,9 @@ function CampoMetrica({
   // NUMERO
   return (
     <div className="space-y-1">
-      {label}
+      {renderLabel(id)}
       <Input
+        id={id}
         type="number"
         min={0}
         value={valor ?? ""}

@@ -13,10 +13,7 @@ import {
   type MinutosAtleta,
   type TipoEventoJogoAoVivo,
 } from "@/lib/minutos-jogo";
-import {
-  derivarEstatisticas,
-  type EventoParaDerivacao,
-} from "@/lib/derivar-estatisticas";
+import { derivarEstatisticas } from "@/lib/derivar-estatisticas";
 import { recalcularResultadoJogo } from "@/lib/placar-jogo";
 import {
   parseRelatorio,
@@ -190,42 +187,46 @@ function paraEventoAoVivo(e: {
   };
 }
 
-/** Converte um evento ao vivo persistido no formato do motor único de derivação. */
-function paraEventoDerivacao(e: {
-  tipo: TipoEventoJogo;
-  atletaId: string | null;
-  segundoJogo: number | null;
-  parte: number | null;
-}): EventoParaDerivacao {
-  return {
-    tipo: e.tipo,
-    atletaId: e.atletaId,
-    atletaSecundarioId: null,
-    bloco: null,
-    minuto: null,
-    segundoJogo: e.segundoJogo,
-    parte: e.parte,
-  };
-}
-
 /**
  * Escreve os minutos/utilização em `EstatisticaAtleta` a partir do motor único de
- * derivação (§10.4 — precedência intervalos > blocos > null). Faz **upsert de
- * todos os convocados** (RN-JV-13 alargada, decisão 2026-09-19): não perde os
- * minutos ao vivo quando a grelha de estatísticas nunca chegou a ser aberta.
+ * derivação (§10.4 — precedência intervalos > blocos > null), em **paridade total
+ * com o loader** (§8.11): deriva do registo **COMPLETO** do jogo (clássico + Modo
+ * Jogo ao Vivo), lido dentro da transação — não apenas dos eventos de cronómetro.
+ * Assim, um jogo **legado** cuja utilização foi registada por **blocos**
+ * (`SUBSTITUICAO`/`blocoTempo`) mantém os minutos derivados dos blocos em vez de os
+ * perder para `null` — o que sucedia quando só se liam os `TIPOS_AO_VIVO` e se
+ * forçava `bloco:null` (perda silenciosa de minutos legados, achado de QA).
  *
- * Só escreve `minutos`/`utilizacao` — os contadores da grelha (golos, cartões,
- * métricas…) são **preservados** (last-write-wins da edição manual, §13.4). Corre
- * dentro da transação recebida.
+ * Faz **upsert de todos os convocados** (RN-JV-13 alargada, decisão 2026-09-19):
+ * não perde os minutos ao vivo quando a grelha de estatísticas nunca chegou a ser
+ * aberta. Só escreve `minutos`/`utilizacao` — os contadores da grelha (golos,
+ * cartões, métricas…) são **preservados** (last-write-wins da edição manual, §13.4).
+ * Corre dentro da transação recebida.
  */
 async function persistirMinutos(
   tx: Prisma.TransactionClient,
   jogo: JogoAoVivo,
-  eventos: EventoParaDerivacao[],
 ): Promise<void> {
   const convocados = await tx.convocatoria.findMany({
     where: { jogoId: jogo.id, convocado: true },
     select: { atletaId: true, titularPrevisto: true },
+  });
+
+  // Registo COMPLETO (clássico + ao vivo), tal como o loader (§8.11): o motor único
+  // entende `segundoJogo` (intervalos ao segundo) E `bloco`/`minuto` (legado). Ler
+  // aqui — em vez de só os `TIPOS_AO_VIVO` — é o que garante a paridade e impede a
+  // perda dos minutos derivados de blocos num jogo legado.
+  const eventos = await tx.eventoJogo.findMany({
+    where: { jogoId: jogo.id },
+    select: {
+      tipo: true,
+      atletaId: true,
+      atletaSecundarioId: true,
+      bloco: true,
+      minuto: true,
+      segundoJogo: true,
+      parte: true,
+    },
   });
 
   const eFutebol =
@@ -233,7 +234,15 @@ async function persistirMinutos(
     "FUTEBOL";
 
   const { estatisticas } = derivarEstatisticas(
-    eventos,
+    eventos.map((e) => ({
+      tipo: e.tipo,
+      atletaId: e.atletaId,
+      atletaSecundarioId: e.atletaSecundarioId,
+      bloco: e.bloco,
+      minuto: e.minuto,
+      segundoJogo: e.segundoJogo,
+      parte: e.parte,
+    })),
     convocados,
     eFutebol,
     jogo.formato,
@@ -681,7 +690,8 @@ export async function retomarJogoAoVivo(
 /**
  * Termina o jogo (`→TERMINADO`): regista `SAIDA` no segundo final para quem ainda
  * está em campo e um `FIM_PARTE` final; calcula os minutos (§8.25.5) e persiste
- * minutos/utilização em `EstatisticaAtleta` (só nos registos existentes, RN-JV-13).
+ * minutos/utilização em `EstatisticaAtleta` fazendo **upsert de todos os convocados**
+ * (RN-JV-13 alargada, decisão 2026-09-19), em paridade com o loader (§10.4).
  */
 export async function terminarJogoAoVivo(
   jogoId: string,
@@ -727,12 +737,9 @@ export async function terminarJogoAoVivo(
       },
     });
 
-    // Recalcula minutos com o registo completo e persiste (RN-JV-6/13, §10.4).
-    const eventosFinais = await tx.eventoJogo.findMany({
-      where: { jogoId, tipo: { in: TIPOS_AO_VIVO } },
-      select: { tipo: true, atletaId: true, segundoJogo: true, parte: true },
-    });
-    await persistirMinutos(tx, acesso.jogo, eventosFinais.map(paraEventoDerivacao));
+    // Recalcula minutos/utilização (upsert de todos os convocados) a partir do
+    // registo COMPLETO — paridade com o loader (RN-JV-6/13, §10.4).
+    await persistirMinutos(tx, acesso.jogo);
 
     return tx.sessaoJogoAoVivo.update({
       where: { jogoId },
@@ -1001,13 +1008,11 @@ export async function editarEventosJogoAoVivo(
       });
     }
 
-    // O motor único (§10.4) deriva o segundo final internamente (maior FIM_PARTE,
-    // senão maior segundo) — mesma regra de antes, sem duplicar o cálculo aqui.
-    const eventosFinais = await tx.eventoJogo.findMany({
-      where: { jogoId, tipo: { in: TIPOS_AO_VIVO } },
-      select: { tipo: true, atletaId: true, segundoJogo: true, parte: true },
-    });
-    await persistirMinutos(tx, acesso.jogo, eventosFinais.map(paraEventoDerivacao));
+    // Recalcula minutos/utilização (upsert de todos os convocados) a partir do
+    // registo COMPLETO: o motor único deriva o segundo final internamente (maior
+    // FIM_PARTE, senão maior segundo) e, em paridade com o loader, preserva os
+    // minutos de blocos legados que sobrevivem ao `deleteMany` (§8.25.6/§10.4).
+    await persistirMinutos(tx, acesso.jogo);
   });
 
   pathsJogo(jogoId);

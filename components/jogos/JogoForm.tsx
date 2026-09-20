@@ -265,9 +265,9 @@ export function JogoForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label>Local do jogo *</Label>
+          <Label htmlFor="casaFora">Local do jogo *</Label>
           <Select value={casaFora} onValueChange={(v) => setCasaFora(v as CasaFora)}>
-            <SelectTrigger>
+            <SelectTrigger id="casaFora">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -278,9 +278,9 @@ export function JogoForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Tipo</Label>
+          <Label htmlFor="tipo">Tipo</Label>
           <Select value={tipo} onValueChange={(v) => setTipo(v as TipoJogo)}>
-            <SelectTrigger>
+            <SelectTrigger id="tipo">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -292,12 +292,12 @@ export function JogoForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label>Número de partes</Label>
+        <Label htmlFor="numeroPartes">Número de partes</Label>
         <Select
           value={String(numeroPartes)}
           onValueChange={(v) => setNumeroPartes(Number(v))}
         >
-          <SelectTrigger>
+          <SelectTrigger id="numeroPartes">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -315,9 +315,9 @@ export function JogoForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label>Escalão *</Label>
+          <Label htmlFor="escalaoId">Escalão *</Label>
           <Select value={escalaoId} onValueChange={mudarEscalao}>
-            <SelectTrigger>
+            <SelectTrigger id="escalaoId">
               <SelectValue placeholder="Seleciona" />
             </SelectTrigger>
             <SelectContent>
@@ -334,13 +334,13 @@ export function JogoForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Competição</Label>
+          <Label htmlFor="competicaoId">Competição</Label>
           <Select
             value={competicaoId}
             onValueChange={setCompeticaoId}
             disabled={!escalaoId}
           >
-            <SelectTrigger>
+            <SelectTrigger id="competicaoId">
               <SelectValue placeholder={escalaoId ? "Sem competição" : "Escolhe o escalão"} />
             </SelectTrigger>
             <SelectContent>
@@ -361,7 +361,7 @@ export function JogoForm({
       {/* Formato de jogo — só futebol (futsal usa FUTSAL_5 derivado). §3.7/§10.8 */}
       {eFutebol && (
         <div className="space-y-1.5">
-          <Label>Formato de jogo *</Label>
+          <Label htmlFor="formato">Formato de jogo *</Label>
           <Select
             value={formato}
             onValueChange={(v) => {
@@ -372,7 +372,7 @@ export function JogoForm({
               });
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger id="formato">
               <SelectValue placeholder="Escolhe o formato" />
             </SelectTrigger>
             <SelectContent>
@@ -489,6 +489,7 @@ export function JogoForm({
             type="button"
             variant="outline"
             size="sm"
+            className="min-h-[44px]"
             onClick={() => setResultadoManual(true)}
           >
             Registar resultado

@@ -236,6 +236,41 @@ describe("editarEventosJogoAoVivo — convergência com o caminho ao vivo", () =
   });
 });
 
+describe("editarEventosJogoAoVivo — jogo legado por blocos (achado QA: perda silenciosa)", () => {
+  const LEG = "ckv9v0z1w0000abcd1234efdd"; // atleta legado, utilização por blocos
+
+  it("preserva os minutos derivados de blocos ao gravar o editor retroativo (não escreve null)", async () => {
+    // Jogo legado sem cronómetro: a utilização foi registada por BLOCOS
+    // (SUBSTITUICAO/blocoTempo). Estes eventos NÃO estão em TIPOS_AO_VIVO, pelo que
+    // sobrevivem ao `deleteMany` do editor.
+    mock(prisma.jogo.findFirst).mockResolvedValue(JOGO_SEM_SESSAO);
+    mock(prisma.convocatoria.findMany).mockResolvedValue([
+      { atletaId: LEG, titularPrevisto: false },
+    ]);
+    // O motor único lê o registo COMPLETO: a SUBSTITUICAO com bloco continua lá.
+    mock(prisma.eventoJogo.findMany).mockResolvedValue([
+      {
+        tipo: "SUBSTITUICAO",
+        atletaId: LEG,
+        atletaSecundarioId: null,
+        bloco: "JOGO_COMPLETO",
+        minuto: null,
+        segundoJogo: null,
+        parte: null,
+      },
+    ]);
+
+    // O treinador abre o editor e grava sem tocar no cronómetro (lista vazia).
+    const res = await editarEventosJogoAoVivo(JOGO_ID, []);
+    expect(res.sucesso).toBe(true);
+
+    const m = minutosPersistidos();
+    // FUTSAL_5: JOGO_COMPLETO = 40 min. Antes do fix isto era apagado para null.
+    expect(m.get(LEG)).toEqual({ minutos: 40, utilizacao: "UTILIZADO" });
+    expect(m.get(LEG)?.minutos).not.toBeNull();
+  });
+});
+
 describe("editarEventosJogoAoVivo — não-regressão com sessão existente", () => {
   it("jogo com sessão ao vivo terminada continua editável e a sessão é preservada", async () => {
     mock(prisma.jogo.findFirst).mockResolvedValue(JOGO_COM_SESSAO_TERMINADA);

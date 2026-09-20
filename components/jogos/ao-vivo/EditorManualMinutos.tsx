@@ -57,7 +57,21 @@ export function EditorManualMinutos({
     return Math.max(0, l.saidaMin - l.entradaMin);
   }
 
+  // Linha inválida: entrada e saída preenchidas, mas a saída não é posterior à
+  // entrada. Estas linhas eram antes descartadas em silêncio (o atleta ficava com
+  // 0 min sem aviso) — agora são sinalizadas e bloqueiam o guardar.
+  function linhaInvalida(l: LinhaMinutos): boolean {
+    return l.entradaMin != null && l.saidaMin != null && l.saidaMin <= l.entradaMin;
+  }
+
   function guardar() {
+    if (linhas.some(linhaInvalida)) {
+      toast.error(
+        "Há linhas com saída anterior ou igual à entrada. Corrige-as antes de guardar.",
+      );
+      return;
+    }
+
     const intervalos: IntervaloManual[] = linhas
       .filter((l) => l.entradaMin != null && l.saidaMin != null && l.saidaMin > l.entradaMin)
       .map((l) => ({
@@ -94,47 +108,60 @@ export function EditorManualMinutos({
             </tr>
           </thead>
           <tbody>
-            {linhas.map((l) => (
-              <tr key={l.atletaId} className="border-b border-cinza-50 last:border-0">
-                <td className="py-2 pr-2 text-cinza-900">
-                  {l.numero != null && <span className="mr-1 text-cinza-400">#{l.numero}</span>}
-                  {l.nome}
-                </td>
-                <td className="px-1 py-1.5">
-                  <Input
-                    type="number"
-                    min={0}
-                    inputMode="numeric"
-                    value={l.entradaMin ?? ""}
-                    onChange={(e) =>
-                      atualizar(l.atletaId, {
-                        entradaMin: e.target.value === "" ? null : Math.max(0, Number(e.target.value)),
-                      })
-                    }
-                    className="h-10"
-                    aria-label={`Minuto de entrada de ${l.nome}`}
-                  />
-                </td>
-                <td className="px-1 py-1.5">
-                  <Input
-                    type="number"
-                    min={0}
-                    inputMode="numeric"
-                    value={l.saidaMin ?? ""}
-                    onChange={(e) =>
-                      atualizar(l.atletaId, {
-                        saidaMin: e.target.value === "" ? null : Math.max(0, Number(e.target.value)),
-                      })
-                    }
-                    className="h-10"
-                    aria-label={`Minuto de saída de ${l.nome}`}
-                  />
-                </td>
-                <td className="py-1.5 pl-1 text-right font-semibold tabular-nums text-cinza-900">
-                  {minutosDe(l)}′
-                </td>
-              </tr>
-            ))}
+            {linhas.map((l) => {
+              const invalida = linhaInvalida(l);
+              const erroId = `erro-minutos-${l.atletaId}`;
+              return (
+                <tr key={l.atletaId} className="border-b border-cinza-50 last:border-0">
+                  <td className="py-2 pr-2 text-cinza-900">
+                    {l.numero != null && <span className="mr-1 text-cinza-400">#{l.numero}</span>}
+                    {l.nome}
+                  </td>
+                  <td className="px-1 py-1.5 align-top">
+                    <Input
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      value={l.entradaMin ?? ""}
+                      onChange={(e) =>
+                        atualizar(l.atletaId, {
+                          entradaMin: e.target.value === "" ? null : Math.max(0, Number(e.target.value)),
+                        })
+                      }
+                      className={`h-11 ${invalida ? "border-vermelho-600 focus-visible:ring-vermelho-600" : ""}`}
+                      aria-label={`Minuto de entrada de ${l.nome}`}
+                      aria-invalid={invalida}
+                      aria-describedby={invalida ? erroId : undefined}
+                    />
+                  </td>
+                  <td className="px-1 py-1.5 align-top">
+                    <Input
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      value={l.saidaMin ?? ""}
+                      onChange={(e) =>
+                        atualizar(l.atletaId, {
+                          saidaMin: e.target.value === "" ? null : Math.max(0, Number(e.target.value)),
+                        })
+                      }
+                      className={`h-11 ${invalida ? "border-vermelho-600 focus-visible:ring-vermelho-600" : ""}`}
+                      aria-label={`Minuto de saída de ${l.nome}`}
+                      aria-invalid={invalida}
+                      aria-describedby={invalida ? erroId : undefined}
+                    />
+                    {invalida && (
+                      <p id={erroId} className="mt-1 text-legenda text-vermelho-600">
+                        Saída ≤ entrada
+                      </p>
+                    )}
+                  </td>
+                  <td className="py-1.5 pl-1 text-right align-top font-semibold tabular-nums text-cinza-900">
+                    {minutosDe(l)}′
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
