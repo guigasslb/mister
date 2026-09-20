@@ -139,6 +139,7 @@ export default async function DetalheJogoPage({
     utilizacao: e.utilizacao,
     blocoTempo: e.blocoTempo,
     minutos: e.minutos,
+    minutosPorParte: e.minutosPorParte,
     golos: e.golos,
     assistencias: e.assistencias,
     defesas: e.defesas,
@@ -172,6 +173,9 @@ export default async function DetalheJogoPage({
         utilizacao: e.utilizacao,
         blocoTempo: e.blocoTempo ?? null,
         minutos: e.minutos ?? null,
+        // Editor de tempo por parte (§8.11/§10.4): valores iniciais da grelha —
+        // persistido (BD) prevalece; senão derivado dos eventos; senão [].
+        minutosPorParte: e.minutosPorParte ?? [],
         golos: e.golos,
         assistencias: e.assistencias,
         defesas: e.defesas ?? null,
@@ -396,6 +400,7 @@ export default async function DetalheJogoPage({
         observacoes={j.observacoes}
         modalidade={j.modalidade}
         formato={j.formato}
+        numeroPartes={j.numeroPartes}
         suspensoes={suspensoes}
         escalaoJovem={escalaoJovemDisciplina}
         quadroInicial={quadroInicial}

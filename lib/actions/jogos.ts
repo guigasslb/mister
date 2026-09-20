@@ -514,10 +514,18 @@ export async function guardarEstatisticas(
 
   await prisma.$transaction(async (tx) => {
     for (const e of validos) {
+      // Editor de tempo por parte (§8.11/§10.4): quando vêm minutos por parte, o
+      // total (`minutos`) é a soma do array (verdade final, last-write-wins). Sem
+      // partes preenchidas, mantém-se o comportamento legado de `minutos`.
+      const minutosPorParte = e.minutosPorParte ?? [];
+      const temPartes = minutosPorParte.length > 0;
       const dados = {
         utilizacao: e.utilizacao,
         blocoTempo: e.blocoTempo ?? null,
-        minutos: e.minutos ?? null,
+        minutos: temPartes
+          ? minutosPorParte.reduce((soma, m) => soma + m, 0)
+          : (e.minutos ?? null),
+        minutosPorParte,
         golos: e.golos,
         assistencias: e.assistencias,
         defesas: e.defesas ?? null,

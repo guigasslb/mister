@@ -1512,7 +1512,11 @@ model EstatisticaAtleta {
   utilizacao Utilizacao  @default(NAO_UTILIZADO)
   // F5 (M15): tempo de jogo por bloco pré-definido (alternativa/complemento a `minutos`).
   blocoTempo BlocoTempo?
-  minutos    Int? // aproximado, opcional (derivável do bloco; null = não registado)
+  minutos    Int? // aproximado, opcional (derivável do bloco; null = não registado). Total = soma de `minutosPorParte` quando preenchido.
+  // Editor de tempo de jogo: minutos absolutos jogados em cada parte (índice 0 = Parte 1,
+  // ..., comprimento = Jogo.numeroPartes, 1..4). `minutos` mantém-se como total (= soma
+  // deste array quando preenchido) para retrocompatibilidade. `[]` = não registado.
+  minutosPorParte Int[] @default([])
 
   // Métricas de jogador de campo
   golos        Int @default(0)

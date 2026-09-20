@@ -283,6 +283,124 @@ describe("derivarEstatisticas — intervalos ao vivo (§10.4)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MINUTOS POR PARTE (editor de tempo por parte, §8.11/§10.4).
+// Cada posição = minutos jogados nessa parte (0 = Parte 1, ...). A soma bate
+// sempre com o total (`minutos`). Jogos legados (sem eventos ao vivo) → [].
+// ─────────────────────────────────────────────────────────────────────────────
+describe("derivarEstatisticas — minutos por parte (§8.11/§10.4)", () => {
+  it("2 partes, atleta joga tudo → [p1, p2] e soma == minutos", () => {
+    const eventos = [
+      inicio(0, 1),
+      entra(A, 0),
+      fim(20 * M, 1),
+      inicio(20 * M, 2),
+      fim(40 * M, 2),
+    ];
+    const r = derivarEstatisticas(eventos, [convocado(A)], false, "FUTSAL_5");
+    const s = r.estatisticas.get(A);
+    expect(s?.minutosPorParte).toEqual([20, 20]);
+    expect(s?.minutos).toBe(40);
+    expect(s?.minutosPorParte.reduce((a, b) => a + b, 0)).toBe(s?.minutos);
+  });
+
+  it("atleta que joga só numa parte → resto a 0 e soma == minutos", () => {
+    const eventos = [
+      inicio(0, 1),
+      entra(B, 0),
+      sai(B, 15 * M),
+      fim(20 * M, 1),
+      inicio(20 * M, 2),
+      fim(40 * M, 2),
+    ];
+    const r = derivarEstatisticas(eventos, [convocado(B)], false, "FUTSAL_5");
+    const s = r.estatisticas.get(B);
+    expect(s?.minutosPorParte).toEqual([15, 0]);
+    expect(s?.minutos).toBe(15);
+    expect(s?.minutosPorParte.reduce((a, b) => a + b, 0)).toBe(s?.minutos);
+  });
+
+  it("atleta com intervalos em várias partes → minutos por parte corretos", () => {
+    const eventos = [
+      inicio(0, 1),
+      entra(A, 0),
+      sai(A, 10 * M),
+      fim(20 * M, 1),
+      inicio(20 * M, 2),
+      entra(A, 25 * M),
+      fim(40 * M, 2),
+    ];
+    const r = derivarEstatisticas(eventos, [convocado(A)], false, "FUTSAL_5");
+    const s = r.estatisticas.get(A);
+    expect(s?.minutosPorParte).toEqual([10, 15]);
+    expect(s?.minutos).toBe(25);
+    expect(s?.minutosPorParte.reduce((a, b) => a + b, 0)).toBe(s?.minutos);
+  });
+
+  it("4 partes, cronómetro contínuo → uma posição por parte e soma == minutos", () => {
+    const eventos = [
+      inicio(0, 1),
+      entra(A, 0),
+      fim(15 * M, 1),
+      inicio(15 * M, 2),
+      fim(30 * M, 2),
+      inicio(30 * M, 3),
+      fim(45 * M, 3),
+      inicio(45 * M, 4),
+      fim(60 * M, 4),
+    ];
+    const r = derivarEstatisticas(eventos, [convocado(A)], false, "FUTSAL_5");
+    const s = r.estatisticas.get(A);
+    expect(s?.minutosPorParte).toEqual([15, 15, 15, 15]);
+    expect(s?.minutos).toBe(60);
+    expect(s?.minutosPorParte.reduce((a, b) => a + b, 0)).toBe(s?.minutos);
+  });
+
+  it("partes com meio-minuto → maior resto garante soma == total (nunca +1)", () => {
+    // A joga 450s (7,5 min) em cada uma de 2 partes → total 900s = 15 min.
+    // Arredondar cada parte isolada daria 8+8=16 (errado); o maior resto dá 15.
+    const eventos = [
+      inicio(0, 1),
+      entra(A, 0),
+      sai(A, 450),
+      fim(900, 1),
+      inicio(900, 2),
+      entra(A, 900),
+      sai(A, 1350),
+      fim(1800, 2),
+    ];
+    const r = derivarEstatisticas(eventos, [convocado(A)], false, "FUTSAL_5");
+    const s = r.estatisticas.get(A);
+    expect(s?.minutos).toBe(15);
+    expect(s?.minutosPorParte).toEqual([8, 7]);
+    expect(s?.minutosPorParte.reduce((a, b) => a + b, 0)).toBe(15);
+  });
+
+  it("zero-regressão: jogo legado (só blocos, sem eventos ao vivo) → minutosPorParte vazio", () => {
+    const r = derivarEstatisticas(
+      [evento({ tipo: "SUBSTITUICAO", atletaId: A, bloco: "JOGO_COMPLETO" })],
+      [convocado(A, true)],
+      true,
+      "FUTEBOL_11",
+    );
+    const s = r.estatisticas.get(A);
+    expect(s?.minutos).toBe(90); // total legado intacto
+    expect(s?.minutosPorParte).toEqual([]); // sem partes derivadas
+  });
+
+  it("convocado que nunca jogou → minutosPorParte vazio", () => {
+    const eventos = [inicio(0, 1), entra(A, 0), fim(40 * M, 1)];
+    const r = derivarEstatisticas(
+      eventos,
+      [convocado(A), convocado(B)],
+      false,
+      "FUTSAL_5",
+    );
+    expect(r.estatisticas.get(B)?.minutosPorParte).toEqual([]);
+    expect(r.estatisticas.get(B)?.minutos).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PRECEDÊNCIA: intervalos > blocos > null.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("derivarEstatisticas — precedência intervalos > blocos > null", () => {
@@ -447,6 +565,7 @@ describe("combinarEstatisticasIniciais — derivado + edição manual (§8.11)",
     utilizacao: "TITULAR",
     blocoTempo: null,
     minutos: null,
+    minutosPorParte: [],
     golos: 0,
     assistencias: 0,
     defesas: null,
@@ -584,5 +703,36 @@ describe("combinarEstatisticasIniciais — derivado + edição manual (§8.11)",
     expect(combinado.get(B)?.defesas).toBe(1);
     // Núcleo de futebol fica a null em futsal (§10.8).
     expect(combinado.get(A)?.remates).toBeNull();
+  });
+
+  it("minutosPorParte: persistido sobrepõe-se ao derivado; sem persistido usa o derivado", () => {
+    // Eventos ao vivo em 2 partes: A joga tudo → derivado [20, 20]; B só na 1ª.
+    const eventos: EventoParaDerivacao[] = [
+      inicio(0),
+      entra(A, 0),
+      entra(B, 0),
+      sai(B, 10 * M),
+      fim(20 * M, 1),
+      // 2ª parte (parte explícita nos limites).
+      evento({ tipo: "INICIO_PARTE", segundoJogo: 20 * M, parte: 2 }),
+      evento({ tipo: "FIM_PARTE", segundoJogo: 40 * M, parte: 2 }),
+    ];
+    const convs = [convocado(A), convocado(B)];
+    // O treinador corrigiu à mão o tempo por parte do A; o B fica com o derivado.
+    const combinado = combinarEstatisticasIniciais(
+      eventos,
+      convs,
+      [persistida(A, { minutosPorParte: [30, 10], minutos: 40 })],
+      false,
+      "FUTSAL_5",
+    );
+    // A: persistido prevalece integralmente.
+    expect(combinado.get(A)?.minutosPorParte).toEqual([30, 10]);
+    expect(combinado.get(A)?.minutos).toBe(40);
+    // B: sem persistido → minutos por parte derivados dos eventos ([10, 0]).
+    expect(combinado.get(B)?.minutosPorParte).toEqual([10, 0]);
+    expect(
+      combinado.get(B)?.minutosPorParte?.reduce((a, b) => a + b, 0),
+    ).toBe(combinado.get(B)?.minutos);
   });
 });

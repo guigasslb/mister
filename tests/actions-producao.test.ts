@@ -112,6 +112,56 @@ describe("guardarEstatisticas — só atletas convocados (secção 12.5)", () =>
     const r = await guardarEstatisticas("j1", [{ atletaId: "x", utilizacao: "INVALIDO" }]);
     expect(r.sucesso).toBe(false);
   });
+
+  it("persiste minutosPorParte e grava minutos = soma quando preenchido", async () => {
+    mocked(prisma.jogo.findFirst).mockResolvedValue({ id: "j1", escalaoId: "esc1" });
+    mocked(prisma.convocatoria.findMany).mockResolvedValue([{ atletaId: A1 }]);
+    mocked(prisma.metricaConfig.findMany).mockResolvedValue([]);
+    mocked(prisma.estatisticaAtleta.upsert).mockResolvedValue({ id: "estat1" });
+
+    const r = await guardarEstatisticas("j1", [
+      {
+        atletaId: A1,
+        utilizacao: "TITULAR",
+        golos: 0,
+        assistencias: 0,
+        minutos: 10, // deve ser ignorado — o total vem da soma das partes
+        minutosPorParte: [25, 15],
+      },
+    ]);
+    expect(r.sucesso).toBe(true);
+    const arg = (prisma.estatisticaAtleta.upsert as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0][0] as {
+      create: { minutos: number | null; minutosPorParte: number[] };
+    };
+    expect(arg.create.minutosPorParte).toEqual([25, 15]);
+    expect(arg.create.minutos).toBe(40); // soma das partes
+  });
+
+  it("minutosPorParte vazio mantém o comportamento legado de minutos", async () => {
+    mocked(prisma.jogo.findFirst).mockResolvedValue({ id: "j1", escalaoId: "esc1" });
+    mocked(prisma.convocatoria.findMany).mockResolvedValue([{ atletaId: A1 }]);
+    mocked(prisma.metricaConfig.findMany).mockResolvedValue([]);
+    mocked(prisma.estatisticaAtleta.upsert).mockResolvedValue({ id: "estat1" });
+
+    const r = await guardarEstatisticas("j1", [
+      {
+        atletaId: A1,
+        utilizacao: "UTILIZADO",
+        golos: 0,
+        assistencias: 0,
+        minutos: 12,
+        minutosPorParte: [],
+      },
+    ]);
+    expect(r.sucesso).toBe(true);
+    const arg = (prisma.estatisticaAtleta.upsert as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0][0] as {
+      create: { minutos: number | null; minutosPorParte: number[] };
+    };
+    expect(arg.create.minutos).toBe(12); // total legado preservado
+    expect(arg.create.minutosPorParte).toEqual([]);
+  });
 });
 
 describe("reordenarExercicios — ids têm de pertencer à sessão (auditoria M4)", () => {

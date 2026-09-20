@@ -152,6 +152,10 @@ export const estatisticaSchema = z.object({
   // F5 (M15): tempo de jogo por bloco (alternativa/complemento a `minutos`).
   blocoTempo: z.nativeEnum(BlocoTempo).nullable().optional(),
   minutos: z.number().int().min(0).max(60).nullable().optional(),
+  // Editor de tempo de jogo: minutos absolutos por parte (índice 0 = Parte 1, ...,
+  // comprimento = Jogo.numeroPartes, 1..4). O total (`minutos`) é a soma deste array
+  // quando preenchido. `[]` = não registado (retrocompatível).
+  minutosPorParte: z.array(z.number().int().min(0)).default([]),
   golos: z.number().int().min(0).default(0),
   assistencias: z.number().int().min(0).default(0),
   defesas: z.number().int().min(0).nullable().optional(),

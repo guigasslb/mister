@@ -31,18 +31,14 @@ import {
   guardarRelatorio,
 } from "@/lib/actions/jogos";
 import {
-  LABEL_BLOCO_TEMPO,
   LABEL_UTILIZACAO,
   LABEL_SUSPENSAO,
   type SuspensaoPendente,
 } from "@/lib/schemas/jogo";
 import { parseRelatorio, serializarRelatorio } from "@/lib/relatorio-jogo";
-import { blocoParaMinutos } from "@/lib/modalidade-escalao";
+import { MINUTOS_POR_PARTE } from "@/lib/estatisticas";
 import { PlanoTatico } from "@/components/jogos/PlanoTatico";
-import {
-  EditorManualMinutos,
-  type LinhaMinutos,
-} from "@/components/jogos/ao-vivo/EditorManualMinutos";
+import { EditorMinutosPorParte } from "@/components/jogos/EditorMinutosPorParte";
 import { ScoutingJogo } from "@/components/jogos/ScoutingJogo";
 import { TimelineEventos, type EventoTimeline } from "@/components/jogos/TimelineEventos";
 import type { DiagramaCampo } from "@/lib/schemas/exercicio";
@@ -69,19 +65,14 @@ type Metrica = { id: string; nome: string; tipo: TipoMetrica; ativa: boolean };
 
 type LinhaPlano = { posicaoPrevista: Posicao | null; titularPrevisto: boolean };
 
-const BLOCOS: BlocoTempo[] = [
-  "JOGO_COMPLETO",
-  "MEIA_PARTE",
-  "BLOCO_10MIN",
-  "BLOCO_5MIN",
-  "NAO_JOGOU",
-];
-
 type EstatLinha = {
   atletaId: string;
   utilizacao: Utilizacao;
   blocoTempo: BlocoTempo | null;
   minutos: number | null;
+  // Editor de tempo de jogo: minutos absolutos por parte (índice 0 = Parte 1, ...,
+  // comprimento = nº de partes do jogo). O total (`minutos`) é a soma deste array.
+  minutosPorParte: number[];
   golos: number;
   assistencias: number;
   defesas: number | null;
@@ -119,8 +110,7 @@ export function JogoDetalhe({
   quadroInicial = null,
   podeGerirQuadro = false,
   mostrarModoAoVivo = false,
-  sessaoAoVivoTerminada = false,
-  linhasMinutosAoVivo = [],
+  numeroPartes = 2,
 }: {
   jogoId: string;
   atletas: Atleta[];
@@ -157,8 +147,14 @@ export function JogoDetalhe({
   // separador "Ao Vivo" (só quando o jogo não está terminado). Quando a sessão ao
   // vivo já terminou, o editor manual de minutos (§8.25.6) aparece nas estatísticas.
   mostrarModoAoVivo?: boolean;
+  // Nº de partes do jogo (1..4). Define quantos inputs de minutos por parte
+  // aparecem no editor de tempo de jogo das Estatísticas.
+  numeroPartes?: number;
+  // Legado (§8.25.6): props do antigo editor entrada/saída, substituído pelo
+  // editor de minutos por parte. Ainda aceites para compatibilidade com o loader
+  // enquanto este é atualizado em paralelo; já não são consumidas aqui.
   sessaoAoVivoTerminada?: boolean;
-  linhasMinutosAoVivo?: LinhaMinutos[];
+  linhasMinutosAoVivo?: unknown[];
 }) {
   const eFutebol = modalidade === "FUTEBOL";
   const suspensaoPorAtleta = new Map(suspensoes.map((s) => [s.atletaId, s]));
@@ -181,21 +177,6 @@ export function JogoDetalhe({
   const convocadosLista = atletas.filter((a) => convocados.has(a.id));
   // Plano/Timeline/editor de minutos usam a convocatória gravada no servidor (verdade persistida).
   const convocadosSalvos = atletas.filter((a) => convocadosIniciais.includes(a.id));
-
-  // §8.25.6 / RN-JV-15: o editor de tempo de jogo está SEMPRE disponível nas
-  // Estatísticas. Se houve Modo Jogo ao Vivo (sessão terminada), usa as linhas
-  // derivadas ao segundo; senão, semeia a partir da convocatória gravada para
-  // preenchimento/inserção retroativa à mão (entrada/saída a começar vazias).
-  const linhasEditorMinutos: LinhaMinutos[] =
-    linhasMinutosAoVivo.length > 0
-      ? linhasMinutosAoVivo
-      : convocadosSalvos.map((a) => ({
-          atletaId: a.id,
-          nome: a.nome,
-          numero: a.numero,
-          entradaMin: null,
-          saidaMin: null,
-        }));
 
   // §22.4: atletas com estatísticas efetivamente PERSISTIDAS (edição manual
   // guardada) — NÃO os que só têm valores derivados dos eventos. A confirmação
@@ -252,6 +233,7 @@ export function JogoDetalhe({
         utilizacao: "NAO_UTILIZADO",
         blocoTempo: null,
         minutos: null,
+        minutosPorParte: [],
         golos: 0,
         assistencias: 0,
         defesas: null,
@@ -285,11 +267,40 @@ export function JogoDetalhe({
     }));
   }
 
+  // Editor de tempo de jogo por parte: atualiza o array de minutos por parte do
+  // atleta. O total (minutos) é derivado no servidor a partir desta soma.
+  function atualizarMinutosPorParte(id: string, minutosPorParte: number[]) {
+    atualizarEstat(id, { minutosPorParte });
+  }
+
+  // Normaliza o array de minutos por parte para o comprimento = nº de partes do
+  // jogo (índices em falta → 0). Usado para semear o editor e o payload.
+  function partesNormalizadas(arr: number[] | undefined): number[] {
+    return Array.from({ length: Math.max(1, numeroPartes) }, (_, i) => {
+      const v = arr?.[i];
+      return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+    });
+  }
+
+  // Aviso visual suave: um valor por parte acima da duração total padrão do jogo
+  // (2 × minutos-por-parte do formato) é quase de certeza um erro de digitação.
+  const duracaoMaxRazoavel = formato ? MINUTOS_POR_PARTE[formato] * 2 : null;
+
+  const linhasMinutosPorParte = convocadosLista.map((a) => ({
+    atletaId: a.id,
+    nome: a.nome,
+    numero: a.numero,
+    minutosPorParte: partesNormalizadas(estatDe(a.id).minutosPorParte),
+  }));
+
   function guardarEstat() {
     const payload = convocadosLista.map((a) => {
       const e = estatDe(a.id);
       return {
         ...e,
+        // Minutos por parte com o comprimento certo (= nº de partes); o servidor
+        // calcula `minutos = soma` a partir deste array.
+        minutosPorParte: partesNormalizadas(e.minutosPorParte),
         valoresMetricas: Object.entries(e.valoresMetricas).map(([metricaId, valor]) => ({
           metricaId,
           valor,
@@ -479,20 +490,16 @@ export function JogoDetalhe({
           </p>
         ) : (
           <>
-            {/* §8.25.6 / RN-JV-15: editor de tempo de jogo SEMPRE disponível.
-                Com Modo Jogo ao Vivo terminado mostra os minutos derivados ao
-                segundo; sem sessão, semeia da convocatória para registo manual
-                (inserção retroativa). Os golos/estatísticas continuam na grelha
-                abaixo (já editável e pré-preenchida com o derivado, §8.11). */}
-            {linhasEditorMinutos.length > 0 && (
-              <EditorManualMinutos
-                jogoId={jogoId}
-                linhasIniciais={linhasEditorMinutos}
-                titulo={
-                  sessaoAoVivoTerminada
-                    ? "Editar minutos (Modo Jogo ao Vivo)"
-                    : "Tempo de jogo"
-                }
+            {/* Editor de tempo de jogo por parte: minutos absolutos por cada parte
+                do jogo + total (soma automática). Substitui o antigo editor
+                entrada/saída e o seletor de bloco de tempo. Pré-preenchido com o
+                valor persistido/derivado (§8.11); o total viaja no guardar. */}
+            {linhasMinutosPorParte.length > 0 && (
+              <EditorMinutosPorParte
+                numeroPartes={numeroPartes}
+                linhas={linhasMinutosPorParte}
+                duracaoMaxRazoavel={duracaoMaxRazoavel}
+                onChange={atualizarMinutosPorParte}
               />
             )}
             {(() => {
@@ -544,41 +551,7 @@ export function JogoDetalhe({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="mb-2 space-y-1">
-                      <label className="text-legenda text-cinza-500">Tempo de jogo</label>
-                      <Select
-                        value={e.blocoTempo ?? "none"}
-                        onValueChange={(v) =>
-                          atualizarEstat(a.id, {
-                            blocoTempo: v === "none" ? null : (v as BlocoTempo),
-                          })
-                        }
-                      >
-                        <SelectTrigger className="h-9 sm:w-56">
-                          <SelectValue placeholder="Bloco de tempo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">— sem bloco —</SelectItem>
-                          {BLOCOS.map((b) => {
-                            // §10.8: minutos do bloco dependem do formato do jogo
-                            // (ex.: JOGO_COMPLETO = 90 min em futebol 11).
-                            const min = blocoParaMinutos(b, formato);
-                            return (
-                              <SelectItem key={b} value={b}>
-                                {LABEL_BLOCO_TEMPO[b]}
-                                {b !== "NAO_JOGOU" ? ` (${min} min)` : ""}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      <CampoNum
-                        label="Minutos"
-                        valor={e.minutos}
-                        onChange={(n) => atualizarEstat(a.id, { minutos: n })}
-                      />
                       {/* Núcleo específico do GR (defesas / golos sofridos), comum às
                           duas modalidades (§10.8). */}
                       {eGR && (

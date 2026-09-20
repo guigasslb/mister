@@ -3,6 +3,7 @@ import { blocoParaMinutos } from "@/lib/estatisticas";
 import {
   calcularMinutosDeEventos,
   type EventoAoVivo,
+  type MinutosAtleta,
   type TipoEventoJogoAoVivo,
 } from "@/lib/minutos-jogo";
 import type { EstatisticaInput } from "@/lib/schemas/jogo";
@@ -101,6 +102,102 @@ function titularesDoArranque(eventos: readonly EventoAoVivo[]): Set<string> {
 }
 
 /**
+ * Janelas [início, fim] (em segundos contínuos) de cada parte do jogo, indexadas
+ * por posição (0 = Parte 1, ...). Derivadas dos eventos `INICIO_PARTE`/`FIM_PARTE`
+ * do Modo Jogo ao Vivo. O número de partes é o maior `parte` observado. Para dados
+ * incompletos (falta um limite), assume-se continuidade: o início cai no fim da
+ * parte anterior (0 na primeira) e o fim no início da parte seguinte (`segundoFinal`
+ * na última). Função pura.
+ */
+function calcularJanelasDeParte(
+  eventos: readonly EventoAoVivo[],
+  segundoFinal: number,
+): Array<{ inicio: number; fim: number }> {
+  const inicioPorParte = new Map<number, number>();
+  const fimPorParte = new Map<number, number>();
+  let maxParte = 0;
+  for (const e of eventos) {
+    if (e.parte == null) continue;
+    if (e.tipo === "INICIO_PARTE") {
+      const atual = inicioPorParte.get(e.parte);
+      inicioPorParte.set(
+        e.parte,
+        atual === undefined ? e.segundoJogo : Math.min(atual, e.segundoJogo),
+      );
+      maxParte = Math.max(maxParte, e.parte);
+    } else if (e.tipo === "FIM_PARTE") {
+      const atual = fimPorParte.get(e.parte);
+      fimPorParte.set(
+        e.parte,
+        atual === undefined ? e.segundoJogo : Math.max(atual, e.segundoJogo),
+      );
+      maxParte = Math.max(maxParte, e.parte);
+    }
+  }
+  if (maxParte === 0) return [];
+  const janelas: Array<{ inicio: number; fim: number }> = [];
+  for (let p = 1; p <= maxParte; p++) {
+    const inicio = inicioPorParte.get(p) ?? (p === 1 ? 0 : janelas[p - 2]?.fim ?? 0);
+    const fim = fimPorParte.get(p) ?? inicioPorParte.get(p + 1) ?? segundoFinal;
+    janelas.push({ inicio, fim });
+  }
+  return janelas;
+}
+
+/**
+ * Distribui `totalMinutos` (o total já arredondado do atleta) pelas partes, a
+ * partir dos segundos jogados em cada parte, usando **maior resto** (largest
+ * remainder). Garante por construção que `soma(resultado) === totalMinutos` — o
+ * total mantém-se byte-idêntico ao motor de minutos e a soma das partes bate
+ * sempre certo (§10.4/§8.11). Função pura.
+ */
+function distribuirMinutos(segundosPorParte: number[], totalMinutos: number): number[] {
+  if (segundosPorParte.length === 0) return [];
+  const base = segundosPorParte.map((s) => Math.floor(s / 60));
+  const resultado = [...base];
+  let restante = totalMinutos - base.reduce((a, b) => a + b, 0);
+  // Ordena os índices por maior resto fracionário (desempate: índice mais baixo).
+  const porResto = segundosPorParte
+    .map((s, i) => ({ i, resto: s / 60 - base[i] }))
+    .sort((a, b) => b.resto - a.resto || a.i - b.i);
+  let k = 0;
+  while (restante > 0 && porResto.length > 0) {
+    resultado[porResto[k % porResto.length].i] += 1;
+    restante -= 1;
+    k += 1;
+  }
+  return resultado;
+}
+
+/**
+ * Minutos por parte de cada atleta (chave = atletaId), a partir dos intervalos
+ * `[ENTRADA, SAIDA]` ao segundo cruzados com as janelas de cada parte. Só produz
+ * resultado quando há informação de partes (eventos `INICIO_PARTE`/`FIM_PARTE`);
+ * caso contrário devolve mapa vazio (jogos legados → `minutosPorParte = []`).
+ * Função pura.
+ */
+function calcularMinutosPorParte(
+  eventos: readonly EventoAoVivo[],
+  minutosCalculados: readonly MinutosAtleta[],
+  segundoFinal: number,
+): Map<string, number[]> {
+  const mapa = new Map<string, number[]>();
+  const janelas = calcularJanelasDeParte(eventos, segundoFinal);
+  if (janelas.length === 0) return mapa;
+  for (const m of minutosCalculados) {
+    const segundosPorParte = janelas.map((j) =>
+      m.intervalos.reduce(
+        (soma, it) =>
+          soma + Math.max(0, Math.min(it.saida, j.fim) - Math.max(it.entrada, j.inicio)),
+        0,
+      ),
+    );
+    mapa.set(m.atletaId, distribuirMinutos(segundosPorParte, m.minutos));
+  }
+  return mapa;
+}
+
+/**
  * Deriva as estatísticas por atleta e o resultado do jogo a partir dos eventos,
  * entendendo intervalos (cronómetro) E blocos (legado) num só motor.
  *
@@ -138,6 +235,8 @@ export function derivarEstatisticas(
       utilizacao: c.titularPrevisto ? "TITULAR" : "NAO_UTILIZADO",
       blocoTempo: null,
       minutos: null,
+      // Editor de tempo por parte (vem a seguir): sem registo inicial.
+      minutosPorParte: [],
       golos: 0,
       assistencias: 0,
       defesas: 0,
@@ -222,11 +321,16 @@ export function derivarEstatisticas(
     }));
 
   const segundoFinal = calcularSegundoFinal(eventosAoVivo);
+  const minutosCalculados = calcularMinutosDeEventos(eventosAoVivo, segundoFinal);
   const minutosPorIntervalo = new Map(
-    calcularMinutosDeEventos(eventosAoVivo, segundoFinal).map((m) => [
-      m.atletaId,
-      m.minutos,
-    ]),
+    minutosCalculados.map((m) => [m.atletaId, m.minutos]),
+  );
+  // Minutos por parte (índice 0 = Parte 1, ...). Só há valores quando o jogo foi
+  // conduzido ao vivo com limites de parte; a soma bate sempre com `minutos`.
+  const minutosPorParteMap = calcularMinutosPorParte(
+    eventosAoVivo,
+    minutosCalculados,
+    segundoFinal,
   );
   const titularesAoVivo = titularesDoArranque(eventosAoVivo);
 
@@ -235,6 +339,8 @@ export function derivarEstatisticas(
     if (minutosPorIntervalo.has(s.atletaId)) {
       // Cronómetro ao segundo prevalece — nunca sobrescrito por blocos/null.
       s.minutos = minutosPorIntervalo.get(s.atletaId) ?? 0;
+      // Minutos por parte derivados (soma === total); [] se não houver partes.
+      s.minutosPorParte = minutosPorParteMap.get(s.atletaId) ?? [];
       s.utilizacao = titularesAoVivo.has(s.atletaId) ? "TITULAR" : "UTILIZADO";
     } else if (s.blocoTempo != null) {
       // Fallback legado: minutos derivados do bloco de tempo.
