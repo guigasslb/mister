@@ -155,6 +155,49 @@ function minutosPersistidos(desdeIndice = 0): Map<
   return m;
 }
 
+/**
+ * Mapa atletaId → `minutosPorParte` persistido (do `update` do upsert). Cobre a
+ * regressão em que o array por parte não era gravado e o loader (§8.11), ao fazer o
+ * persistido sobrepor-se ao derivado, mostrava o editor de minutos por parte a zero.
+ */
+function minutosPorPartePersistidos(desdeIndice = 0): Map<string, number[]> {
+  const m = new Map<string, number[]>();
+  for (const c of calls(prisma.estatisticaAtleta.upsert).slice(desdeIndice)) {
+    const arg = c[0] as {
+      where: { jogoId_atletaId: { atletaId: string } };
+      create: { minutosPorParte: number[] };
+      update: { minutosPorParte: number[] };
+    };
+    // O `minutosPorParte` do refresco (`update`) é o mesmo do snapshot (`create`).
+    expect(arg.create.minutosPorParte).toEqual(arg.update.minutosPorParte);
+    m.set(arg.where.jogoId_atletaId.atletaId, arg.update.minutosPorParte);
+  }
+  return m;
+}
+
+/** Mapa atletaId → { create, update } das chamadas ao upsert (payloads crus). */
+function upsertPorAtleta(desdeIndice = 0): Map<
+  string,
+  { create: Record<string, unknown>; update: Record<string, unknown> }
+> {
+  const m = new Map<
+    string,
+    { create: Record<string, unknown>; update: Record<string, unknown> }
+  >();
+  for (const c of calls(prisma.estatisticaAtleta.upsert).slice(desdeIndice)) {
+    const arg = c[0] as {
+      where: { jogoId_atletaId: { atletaId: string } };
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    };
+    m.set(arg.where.jogoId_atletaId.atletaId, {
+      create: arg.create,
+      update: arg.update,
+    });
+  }
+  return m;
+}
+
 describe("editarEventosJogoAoVivo — inserção retroativa SEM sessão prévia (RN-JV-15)", () => {
   it("persiste minutos/utilização (upsert de todos os convocados) sem exigir sessão", async () => {
     const res = await editarEventosJogoAoVivo(JOGO_ID, EVENTOS_INPUT);
@@ -166,6 +209,13 @@ describe("editarEventosJogoAoVivo — inserção retroativa SEM sessão prévia 
     expect(m.get(A)).toEqual({ minutos: 40, utilizacao: "TITULAR" });
     expect(m.get(B)).toEqual({ minutos: 18, utilizacao: "UTILIZADO" });
     expect(m.get(BANCO)).toEqual({ minutos: null, utilizacao: "NAO_UTILIZADO" });
+
+    // O array por parte é persistido (não `[]`) para quem jogou — sem isto, o
+    // editor de minutos por parte aparecia a zero após terminar (bug reportado).
+    const pp = minutosPorPartePersistidos();
+    expect(pp.get(A)).toEqual([40]); // 1 parte registada → tudo na Parte 1
+    expect(pp.get(B)).toEqual([18]);
+    expect(pp.get(BANCO)).toEqual([]); // não jogou
   });
 
   it("materializa uma SessaoJogoAoVivo mínima (TERMINADO) quando nunca existiu", async () => {
@@ -286,5 +336,101 @@ describe("editarEventosJogoAoVivo — não-regressão com sessão existente", ()
     const m = minutosPersistidos();
     expect(m.get(A)).toEqual({ minutos: 40, utilizacao: "TITULAR" });
     expect(m.get(B)).toEqual({ minutos: 18, utilizacao: "UTILIZADO" });
+  });
+});
+
+// ─── Bug reportado: golos E minutos por parte somem das Estatísticas ──────────
+//
+// Fluxo do bug: jogo conduzido ao vivo (golos capturados como eventos GOLO) cuja
+// grelha de Estatísticas nunca foi aberta → não há `EstatisticaAtleta`. Ao terminar,
+// o `persistirMinutos` fazia CREATE de um registo PARCIAL (só minutos/utilização):
+// golos ficavam a 0 e `minutosPorParte` a []. Como o loader (§8.11) faz o persistido
+// **sobrepor-se por inteiro** ao derivado, esse registo parcial apagava os golos e os
+// minutos por parte derivados dos eventos. Fix: o CREATE grava o snapshot COMPLETO.
+
+// Dois períodos (partes) + um golo de A na Parte 1. A joga tudo; BANCO fica de fora.
+const P = 20 * M; // 20 min por parte
+const EVENTOS_2P_COM_GOLO = [
+  { tipo: "INICIO_PARTE", atletaId: null, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: 0, parte: 1, criadoEm: new Date(0) },
+  { tipo: "ENTRADA", atletaId: A, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: 0, parte: 1, criadoEm: new Date(1) },
+  { tipo: "GOLO", atletaId: A, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: 10 * M, parte: 1, criadoEm: new Date(2) },
+  { tipo: "FIM_PARTE", atletaId: null, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: P, parte: 1, criadoEm: new Date(3) },
+  { tipo: "INICIO_PARTE", atletaId: null, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: P, parte: 2, criadoEm: new Date(4) },
+  { tipo: "SAIDA", atletaId: A, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: 2 * P, parte: 2, criadoEm: new Date(5) },
+  { tipo: "FIM_PARTE", atletaId: null, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: 2 * P, parte: 2, criadoEm: new Date(6) },
+];
+
+const CONVOCADOS_2 = [
+  { atletaId: A, titularPrevisto: true },
+  { atletaId: BANCO, titularPrevisto: false },
+];
+
+describe("persistirMinutos — snapshot completo no CREATE (bug: golos+minutos somem)", () => {
+  beforeEach(() => {
+    mock(prisma.convocatoria.findMany).mockResolvedValue(CONVOCADOS_2);
+    mock(prisma.eventoJogo.findMany).mockResolvedValue(EVENTOS_2P_COM_GOLO);
+  });
+
+  it("terminarJogoAoVivo grava golos E minutos por parte no registo criado", async () => {
+    mock(prisma.jogo.findFirst).mockResolvedValue({
+      ...JOGO_SEM_SESSAO,
+      sessaoAoVivo: { ...SESSAO_TERMINADA, estado: "EM_CURSO" },
+    });
+
+    const res = await terminarJogoAoVivo(JOGO_ID, 2 * P);
+    expect(res.sucesso).toBe(true);
+
+    const up = upsertPorAtleta();
+    // A: snapshot completo — golo capturado ao vivo + 20+20 min por parte.
+    expect(up.get(A)?.create).toMatchObject({
+      minutos: 40,
+      minutosPorParte: [20, 20],
+      golos: 1,
+      utilizacao: "TITULAR",
+    });
+    // O refresco (update) NÃO toca nos contadores (preserva edição manual, §13.4):
+    // não traz `golos`, só tempo/utilização.
+    expect(up.get(A)?.update).toEqual({
+      minutos: 40,
+      minutosPorParte: [20, 20],
+      utilizacao: "TITULAR",
+    });
+    expect(up.get(A)?.update).not.toHaveProperty("golos");
+
+    // BANCO: não jogou → snapshot coerente a zero/null, sem falsos minutos/golos.
+    expect(up.get(BANCO)?.create).toMatchObject({
+      minutos: null,
+      minutosPorParte: [],
+      golos: 0,
+      utilizacao: "NAO_UTILIZADO",
+    });
+  });
+
+  it("editarEventosJogoAoVivo também grava snapshot completo (golos+partes) no CREATE", async () => {
+    mock(prisma.jogo.findFirst).mockResolvedValue(JOGO_SEM_SESSAO);
+
+    // O editor retroativo só reescreve o cronómetro (não os golos). O GOLO já está
+    // na BD (capturado ao vivo) e sobrevive ao `deleteMany`; o `persistirMinutos`
+    // re-deriva do registo COMPLETO (mock `findMany` = EVENTOS_2P_COM_GOLO).
+    const res = await editarEventosJogoAoVivo(JOGO_ID, [
+      { tipo: "INICIO_PARTE", segundoJogo: 0, parte: 1 },
+      { tipo: "ENTRADA", atletaId: A, segundoJogo: 0, parte: 1 },
+      { tipo: "FIM_PARTE", segundoJogo: P, parte: 1 },
+      { tipo: "INICIO_PARTE", segundoJogo: P, parte: 2 },
+      { tipo: "SAIDA", atletaId: A, segundoJogo: 2 * P, parte: 2 },
+      { tipo: "FIM_PARTE", segundoJogo: 2 * P, parte: 2 },
+    ]);
+    expect(res.sucesso).toBe(true);
+
+    const up = upsertPorAtleta();
+    expect(up.get(A)?.create).toMatchObject({
+      minutos: 40,
+      minutosPorParte: [20, 20],
+      golos: 1,
+      utilizacao: "TITULAR",
+    });
+    // A soma das partes bate com o total (invariante do motor único).
+    const partes = up.get(A)?.create.minutosPorParte as number[];
+    expect(partes.reduce((a, b) => a + b, 0)).toBe(up.get(A)?.create.minutos);
   });
 });

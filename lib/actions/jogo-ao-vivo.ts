@@ -188,8 +188,8 @@ function paraEventoAoVivo(e: {
 }
 
 /**
- * Escreve os minutos/utilização em `EstatisticaAtleta` a partir do motor único de
- * derivação (§10.4 — precedência intervalos > blocos > null), em **paridade total
+ * Escreve as estatísticas derivadas em `EstatisticaAtleta` a partir do motor único
+ * de derivação (§10.4 — precedência intervalos > blocos > null), em **paridade total
  * com o loader** (§8.11): deriva do registo **COMPLETO** do jogo (clássico + Modo
  * Jogo ao Vivo), lido dentro da transação — não apenas dos eventos de cronómetro.
  * Assim, um jogo **legado** cuja utilização foi registada por **blocos**
@@ -199,9 +199,25 @@ function paraEventoAoVivo(e: {
  *
  * Faz **upsert de todos os convocados** (RN-JV-13 alargada, decisão 2026-09-19):
  * não perde os minutos ao vivo quando a grelha de estatísticas nunca chegou a ser
- * aberta. Só escreve `minutos`/`utilizacao` — os contadores da grelha (golos,
- * cartões, métricas…) são **preservados** (last-write-wins da edição manual, §13.4).
- * Corre dentro da transação recebida.
+ * aberta. Corre dentro da transação recebida.
+ *
+ * **Coerência com o loader (§8.11) — correção do bug "golos/minutos somem após
+ * terminar":** o loader (`combinarEstatisticasIniciais`) faz o registo persistido
+ * **sobrepor-se POR INTEIRO** ao derivado, por atleta (last-write-wins, §13.4). Isso
+ * pressupõe que um registo persistido é um **snapshot COMPLETO** (é o que a gravação
+ * manual `guardarEstatisticas` grava). Por isso o upsert distingue os dois caminhos:
+ *  - **create** (o atleta ainda não tinha registo — típico de um jogo conduzido ao
+ *    vivo cuja grelha nunca foi aberta): grava o **snapshot completo derivado**
+ *    (minutos, `minutosPorParte`, utilização, golos, assistências, cartões, GR e
+ *    núcleo de futebol). Sem isto, o registo nascia com golos=0/`minutosPorParte`=[]
+ *    e, ao sobrepor-se ao derivado no loader, **apagava** os golos e os minutos por
+ *    parte capturados ao vivo (bug reportado);
+ *  - **update** (já existe registo — edição manual ou terminar anterior): só refresca
+ *    `minutos`/`minutosPorParte`/`utilizacao`, **preservando** os contadores da grelha
+ *    (golos, cartões, métricas…) já lá gravados (last-write-wins da edição manual).
+ *
+ * As métricas configuráveis (`ValorMetrica`) são linhas próprias e nunca são tocadas
+ * aqui — sobrevivem ao upsert.
  */
 async function persistirMinutos(
   tx: Prisma.TransactionClient,
@@ -252,10 +268,35 @@ async function persistirMinutos(
     const calc = estatisticas.get(atletaId);
     const minutos = calc?.minutos ?? null;
     const utilizacao = calc?.utilizacao ?? "NAO_UTILIZADO";
+    // A soma de `minutosPorParte` é, por construção do motor único, === `minutos`.
+    const minutosPorParte = calc?.minutosPorParte ?? [];
+
+    // Só o tempo/utilização são refrescados quando o registo já existe — os
+    // contadores manuais da grelha são preservados (last-write-wins, §13.4).
+    const refrescoTempo = { minutos, minutosPorParte, utilizacao };
+
     await tx.estatisticaAtleta.upsert({
       where: { jogoId_atletaId: { jogoId: jogo.id, atletaId } },
-      create: { jogoId: jogo.id, atletaId, minutos, utilizacao },
-      update: { minutos, utilizacao },
+      // Snapshot COMPLETO derivado quando o registo nasce agora (paridade com o
+      // loader §8.11: o persistido sobrepõe-se por inteiro ao derivado).
+      create: {
+        jogoId: jogo.id,
+        atletaId,
+        ...refrescoTempo,
+        blocoTempo: calc?.blocoTempo ?? null,
+        golos: calc?.golos ?? 0,
+        assistencias: calc?.assistencias ?? 0,
+        defesas: calc?.defesas ?? null,
+        golosSofridosGR: calc?.golosSofridosGR ?? null,
+        faltasCometidas: calc?.faltasCometidas ?? null,
+        cartaoAmarelo: calc?.cartaoAmarelo ?? 0,
+        cartaoVermelho: calc?.cartaoVermelho ?? 0,
+        remates: calc?.remates ?? null,
+        cantos: calc?.cantos ?? null,
+        forasDeJogo: calc?.forasDeJogo ?? null,
+        desarmes: calc?.desarmes ?? null,
+      },
+      update: refrescoTempo,
     });
   }
 }
