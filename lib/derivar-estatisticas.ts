@@ -247,3 +247,37 @@ export function derivarEstatisticas(
 
   return { estatisticas, golosMarcados, golosSofridos };
 }
+
+/**
+ * Valores iniciais da grelha de Estatísticas (§8.11 — vista consolidada única).
+ *
+ * Combina, por atleta:
+ *  1. o **rascunho derivado dos eventos** (`derivarEstatisticas` — minutos, golos,
+ *     assistências, cartões e secundários), calculado ao carregar a vista, e
+ *  2. a **edição manual persistida** em `EstatisticaAtleta` (a verdade final).
+ *
+ * A edição manual **sobrepõe-se sempre** ao derivado, por atleta (last-write-wins,
+ * §13.4): se existir um registo persistido para o atleta, esse registo prevalece
+ * na íntegra (inclui `valoresMetricas`, que a derivação não produz). Os atletas
+ * sem registo persistido ficam com o rascunho derivado dos eventos — é isto que
+ * substitui o antigo botão "Preencher do registo ao vivo": os valores já vêm
+ * derivados, sem ação manual.
+ *
+ * Função pura — sem I/O, testável sem BD.
+ */
+export function combinarEstatisticasIniciais(
+  eventos: EventoParaDerivacao[],
+  convocados: ConvocadoParaDerivacao[],
+  persistidas: EstatisticaInput[],
+  eFutebol: boolean,
+  formato: FormatoJogo | null,
+): Map<string, EstatisticaInput> {
+  const { estatisticas } = derivarEstatisticas(eventos, convocados, eFutebol, formato);
+  // A edição manual persistida é a verdade final e prevalece sobre o derivado,
+  // por atleta (§13.4). Substituição integral: preserva `valoresMetricas` e
+  // eventuais campos que o treinador editou à mão.
+  for (const p of persistidas) {
+    estatisticas.set(p.atletaId, { ...p });
+  }
+  return estatisticas;
+}

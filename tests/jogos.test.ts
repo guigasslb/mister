@@ -34,7 +34,6 @@ import {
   definirVideo,
   registarEventoJogo,
   removerEventoJogo,
-  previewEstatisticasDeEventos,
 } from "@/lib/actions/jogos";
 import { auth } from "@/lib/auth";
 import { obterClubeIdAtual, obterEpocaAtiva } from "@/lib/epoca-context";
@@ -374,64 +373,9 @@ describe("removerEventoJogo", () => {
   });
 });
 
-// ─── previewEstatisticasDeEventos (bug P0 — motor único §10.4) ─────────────────
-
-describe("previewEstatisticasDeEventos", () => {
-  const M = 60;
-  const JOGO_FUTSAL = {
-    id: JOGO_ID,
-    escalaoId: ESC_ID,
-    epocaId: "ep1",
-    formato: "FUTSAL_5",
-    modalidadeAtividade: null,
-    escalao: { seccao: { modalidade: "FUTSAL" } },
-  };
-
-  it("registo ao vivo (só segundoJogo) → minutos PRECISOS do cronómetro, nunca null", async () => {
-    // Reproduz o bug P0: eventos com segundoJogo (sem bloco). O derivador antigo
-    // devolvia minutos null; o motor único devolve os minutos do cronómetro.
-    mocked(prisma.jogo.findFirst).mockResolvedValue(JOGO_FUTSAL);
-    mocked(prisma.eventoJogo.findMany).mockResolvedValue([
-      { tipo: "INICIO_PARTE", atletaId: null, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: 0, parte: 1 },
-      { tipo: "ENTRADA", atletaId: ATLETA_ID, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: 0, parte: 1 },
-      { tipo: "FIM_PARTE", atletaId: null, atletaSecundarioId: null, bloco: null, minuto: null, segundoJogo: 40 * M, parte: 1 },
-    ]);
-    mocked(prisma.convocatoria.findMany).mockResolvedValue([
-      { atletaId: ATLETA_ID, titularPrevisto: true },
-    ]);
-
-    const r = await previewEstatisticasDeEventos(JOGO_ID);
-    expect(r.sucesso).toBe(true);
-    if (r.sucesso) {
-      const linha = r.dados.find((d) => d.atletaId === ATLETA_ID);
-      expect(linha?.minutos).toBe(40);
-      expect(linha?.minutos).not.toBeNull();
-      expect(linha?.utilizacao).toBe("TITULAR");
-    }
-  });
-
-  it("jogo só com blocos (legado) → minutos derivados do bloco (zero-regressão)", async () => {
-    mocked(prisma.jogo.findFirst).mockResolvedValue(JOGO_FUTSAL);
-    mocked(prisma.eventoJogo.findMany).mockResolvedValue([
-      { tipo: "SUBSTITUICAO", atletaId: ATLETA_ID, atletaSecundarioId: null, bloco: "MEIA_PARTE", minuto: null, segundoJogo: null, parte: 1 },
-    ]);
-    mocked(prisma.convocatoria.findMany).mockResolvedValue([
-      { atletaId: ATLETA_ID, titularPrevisto: false },
-    ]);
-
-    const r = await previewEstatisticasDeEventos(JOGO_ID);
-    expect(r.sucesso).toBe(true);
-    if (r.sucesso) {
-      const linha = r.dados.find((d) => d.atletaId === ATLETA_ID);
-      expect(linha?.minutos).toBe(20); // FUTSAL_5: MEIA_PARTE
-      expect(linha?.utilizacao).toBe("UTILIZADO");
-    }
-  });
-
-  it("falha sem capacidade ESTATISTICAS_GERIR", async () => {
-    mocked(prisma.jogo.findFirst).mockResolvedValue(JOGO_FUTSAL);
-    mocked(exigirCapacidade).mockResolvedValue({ ok: false, erro: "Sem permissão" });
-    const r = await previewEstatisticasDeEventos(JOGO_ID);
-    expect(r.sucesso).toBe(false);
-  });
-});
+// A cobertura P0 do motor único (§10.4) — registo ao vivo (só `segundoJogo`) →
+// minutos precisos nunca null, e jogo legado (só blocos) → minutos do bloco —
+// vive agora em `tests/eventos-para-estatisticas.test.ts`, ao nível de
+// `derivarEstatisticas`/`combinarEstatisticasIniciais` (a derivação passou a ser
+// automática no loader, tornando a antiga action de preview dead code — removida
+// por Regra Nº6).

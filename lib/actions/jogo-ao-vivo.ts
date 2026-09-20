@@ -928,10 +928,20 @@ function reconciliarEstado(
 // ─── 11. editarEventosJogoAoVivo ───────────────────────────────────────────────
 
 /**
- * Edição manual/retroativa (§8.25.6/RN-JV-15): substitui **todos** os eventos ao
- * vivo do jogo por uma nova lista e recalcula os minutos/utilização em
- * `EstatisticaAtleta` (RN-JV-14; só atualiza registos existentes, RN-JV-13). Os
- * eventos clássicos (golos, cartões, …) não são tocados.
+ * Edição manual/inserção retroativa (§8.25.6/RN-JV-15): substitui **todos** os
+ * eventos ao vivo do jogo por uma nova lista e recalcula os minutos/utilização em
+ * `EstatisticaAtleta` fazendo **upsert de todos os convocados** (RN-JV-13 alargada,
+ * decisão 2026-09-19 — não perde minutos quando a grelha nunca foi aberta). Os
+ * eventos clássicos (golos, cartões, …) **não são tocados** (o `deleteMany` filtra
+ * `TIPOS_AO_VIVO`).
+ *
+ * RN-JV-15: **não pressupõe uma sessão ao vivo prévia**. Se o treinador nunca ligou
+ * o Modo Jogo ao Vivo e preenche os tempos inteiramente à mão, a action opera na
+ * mesma e materializa uma `SessaoJogoAoVivo` mínima em estado `TERMINADO` (coerente
+ * com os eventos: nº de partes do jogo, parte e segundo final derivados), para que o
+ * editor volte a abrir pré-preenchido com os minutos ao segundo (§8.25.6). Uma
+ * sessão já existente (ex.: terminada ao vivo) é **preservada intacta** — a edição
+ * retroativa continua disponível sem a alterar.
  */
 export async function editarEventosJogoAoVivo(
   jogoId: string,
@@ -944,6 +954,7 @@ export async function editarEventosJogoAoVivo(
   if (acesso.estado === "erro") return erro(acesso.erro);
 
   const comParte = comParteResolvida(parsed.data);
+  const semSessaoPrevia = acesso.jogo.sessaoAoVivo == null;
 
   await prisma.$transaction(async (tx) => {
     await tx.eventoJogo.deleteMany({ where: { jogoId, tipo: { in: TIPOS_AO_VIVO } } });
@@ -958,6 +969,35 @@ export async function editarEventosJogoAoVivo(
           posicao: (e.posicao ?? null) as Posicao | null,
           clientEventoId: e.clientEventoId ?? null,
         })),
+      });
+    }
+
+    // RN-JV-15: sem sessão prévia e com eventos inseridos à mão, cria a sessão
+    // mínima (TERMINADO) que faltava — o segundo final segue a mesma regra do motor
+    // único (maior FIM_PARTE, senão maior segundo) e a parte é a maior registada.
+    if (semSessaoPrevia && comParte.length > 0) {
+      const fimParteMax = comParte.reduce(
+        (max, e) => (e.tipo === "FIM_PARTE" ? Math.max(max, e.segundoJogo) : max),
+        0,
+      );
+      const segundoFinal =
+        fimParteMax > 0
+          ? fimParteMax
+          : comParte.reduce((max, e) => Math.max(max, e.segundoJogo), 0);
+      const parteAtual = comParte.reduce(
+        (max, e) => Math.max(max, e.parteResolvida),
+        1,
+      );
+      await tx.sessaoJogoAoVivo.create({
+        data: {
+          jogoId,
+          numeroPartes: acesso.jogo.numeroPartes,
+          duracaoParteMins: 20,
+          estado: "TERMINADO",
+          parteAtual,
+          segundosDecorridos: segundoFinal,
+          aCorrerDesde: null,
+        },
       });
     }
 
@@ -977,9 +1017,9 @@ export async function editarEventosJogoAoVivo(
 // ─── 12. previewMinutosJogo ────────────────────────────────────────────────────
 
 /**
- * Pré-visualiza os minutos por atleta (§8.25.5) **sem persistir** (à imagem de
- * `previewEstatisticasDeEventos`, §10.4). Usa o segundo final = tempo corrente do
- * cronómetro (ou o maior segundo registado), para revisão antes de terminar.
+ * Pré-visualiza os minutos por atleta (§8.25.5) **sem persistir**, derivando-os
+ * do motor único (§10.4). Usa o segundo final = tempo corrente do cronómetro
+ * (ou o maior segundo registado), para revisão antes de terminar.
  */
 export async function previewMinutosJogo(
   jogoId: string,

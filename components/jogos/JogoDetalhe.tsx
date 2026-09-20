@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Ban, Check, Radio, TriangleAlert, Wand2 } from "lucide-react";
+import { Ban, Check, Radio, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,7 +29,6 @@ import {
   definirConvocatoria,
   guardarEstatisticas,
   guardarRelatorio,
-  previewEstatisticasDeEventos,
 } from "@/lib/actions/jogos";
 import {
   LABEL_BLOCO_TEMPO,
@@ -40,7 +39,6 @@ import {
 import { parseRelatorio, serializarRelatorio } from "@/lib/relatorio-jogo";
 import { blocoParaMinutos } from "@/lib/modalidade-escalao";
 import { PlanoTatico } from "@/components/jogos/PlanoTatico";
-import { RegistoAoVivo } from "@/components/jogos/RegistoAoVivo";
 import {
   EditorManualMinutos,
   type LinhaMinutos,
@@ -50,7 +48,6 @@ import { TimelineEventos, type EventoTimeline } from "@/components/jogos/Timelin
 import type { DiagramaCampo } from "@/lib/schemas/exercicio";
 import type {
   BlocoTempo,
-  CasaFora,
   FormatoJogo,
   Modalidade,
   ObservacaoAdversario,
@@ -108,15 +105,13 @@ export function JogoDetalhe({
   metricas,
   convocadosIniciais,
   estatisticasIniciais,
+  atletasComStatsPersistidas = [],
   relatorioInicial,
   golosMarcados,
   planoInicial,
   capitaoInicial,
   eventos,
   observacoes,
-  casaFora,
-  adversario,
-  clubeNome,
   modalidade,
   formato,
   suspensoes = [],
@@ -131,7 +126,13 @@ export function JogoDetalhe({
   atletas: Atleta[];
   metricas: Metrica[];
   convocadosIniciais: string[];
+  // §8.11: valores iniciais da grelha já combinam o derivado dos eventos com a
+  // edição manual persistida (esta prevalece). Inclui todos os convocados.
   estatisticasIniciais: Record<string, EstatLinha>;
+  // §22.4: atletas com estatísticas efetivamente PERSISTIDAS (edição manual
+  // guardada). Distingue-os dos que só têm valores derivados — a confirmação de
+  // remoção da convocatória só dispara para estes.
+  atletasComStatsPersistidas?: string[];
   relatorioInicial: string;
   golosMarcados: number | null;
   planoInicial: Record<string, LinhaPlano>;
@@ -139,10 +140,6 @@ export function JogoDetalhe({
   capitaoInicial: string | null;
   eventos: EventoTimeline[];
   observacoes: ObservacaoAdversario[];
-  casaFora: CasaFora;
-  adversario: string;
-  // §9: nome do clube do utilizador (nossa equipa) para compor o título do jogo.
-  clubeNome: string | null | undefined;
   // 🔁 v7 (§10.8): modalidade efetiva do jogo → decide o núcleo estatístico
   // exibido; `formato` alimenta a conversão bloco→minutos (tempo de jogo).
   modalidade: Modalidade;
@@ -179,15 +176,31 @@ export function JogoDetalhe({
   const [pendingConv, startConv] = useTransition();
   const [pendingEstat, startEstat] = useTransition();
   const [pendingRel, startRel] = useTransition();
-  const [pendingPreview, startPreview] = useTransition();
 
   const atletaPorId = new Map(atletas.map((a) => [a.id, a]));
   const convocadosLista = atletas.filter((a) => convocados.has(a.id));
-  // Plano/Ao vivo/Timeline usam a convocatória gravada no servidor (verdade persistida).
+  // Plano/Timeline/editor de minutos usam a convocatória gravada no servidor (verdade persistida).
   const convocadosSalvos = atletas.filter((a) => convocadosIniciais.includes(a.id));
 
-  // Atletas que tinham estatísticas gravadas (chaves de estatisticasIniciais)
-  const comEstatisticas = new Set(Object.keys(estatisticasIniciais));
+  // §8.25.6 / RN-JV-15: o editor de tempo de jogo está SEMPRE disponível nas
+  // Estatísticas. Se houve Modo Jogo ao Vivo (sessão terminada), usa as linhas
+  // derivadas ao segundo; senão, semeia a partir da convocatória gravada para
+  // preenchimento/inserção retroativa à mão (entrada/saída a começar vazias).
+  const linhasEditorMinutos: LinhaMinutos[] =
+    linhasMinutosAoVivo.length > 0
+      ? linhasMinutosAoVivo
+      : convocadosSalvos.map((a) => ({
+          atletaId: a.id,
+          nome: a.nome,
+          numero: a.numero,
+          entradaMin: null,
+          saidaMin: null,
+        }));
+
+  // §22.4: atletas com estatísticas efetivamente PERSISTIDAS (edição manual
+  // guardada) — NÃO os que só têm valores derivados dos eventos. A confirmação
+  // de remoção da convocatória só deve alertar quando há dados guardados a perder.
+  const comEstatisticas = new Set(atletasComStatsPersistidas);
 
   function alternarConvocado(id: string) {
     setConvocados((prev) => {
@@ -290,48 +303,6 @@ export function JogoDetalhe({
     });
   }
 
-  // Fix de produto: os eventos do registo ao vivo derivam a grelha de
-  // estatísticas. Só preenche o estado local — o treinador revê e grava depois.
-  function importarDeEventos() {
-    startPreview(async () => {
-      const res = await previewEstatisticasDeEventos(jogoId);
-      if (!res.sucesso) {
-        toast.error(res.erro);
-        return;
-      }
-      setEstatisticas((prev) => {
-        const novo = { ...prev };
-        for (const d of res.dados) {
-          const existente = novo[d.atletaId];
-          novo[d.atletaId] = {
-            atletaId: d.atletaId,
-            utilizacao: d.utilizacao,
-            blocoTempo: d.blocoTempo ?? null,
-            minutos: d.minutos ?? null,
-            golos: d.golos ?? 0,
-            assistencias: d.assistencias ?? 0,
-            defesas: d.defesas ?? null,
-            golosSofridosGR: d.golosSofridosGR ?? null,
-            faltasCometidas: d.faltasCometidas ?? null,
-            cartaoAmarelo: d.cartaoAmarelo ?? 0,
-            cartaoVermelho: d.cartaoVermelho ?? 0,
-            remates: d.remates ?? null,
-            cantos: d.cantos ?? null,
-            forasDeJogo: d.forasDeJogo ?? null,
-            desarmes: d.desarmes ?? null,
-            // Preserva métricas configuráveis introduzidas à mão — a derivação
-            // de eventos não as toca.
-            valoresMetricas: existente?.valoresMetricas ?? {},
-          };
-        }
-        return novo;
-      });
-      toast.success(
-        "Estatísticas preenchidas a partir do registo ao vivo. Revê e guarda.",
-      );
-    });
-  }
-
   function guardarRel() {
     startRel(async () => {
       const res = await guardarRelatorio(jogoId, serializarRelatorio(relatorio));
@@ -342,17 +313,37 @@ export function JogoDetalhe({
 
   return (
     <Tabs defaultValue="convocatoria">
-      {/* UX-P3-04: 4 separadores. Convocatória agrupa o plano de jogo; "Análise"
-          agrupa relatório e scouting. Os mais usados ficam primeiro. */}
+      {/* 🔁 2026-09-20 (Fase C): 3 separadores. A tab «Ao Vivo» (registo clássico
+          por eventos) foi descontinuada — as Estatísticas são a vista consolidada
+          única (§8.11) e o CTA «Modo Jogo ao Vivo» vive no topo da Convocatória. */}
       <TabsList className="flex-wrap">
         <TabsTrigger value="convocatoria">Convocatória</TabsTrigger>
         <TabsTrigger value="estatisticas">Estatísticas</TabsTrigger>
-        <TabsTrigger value="aovivo">Ao Vivo</TabsTrigger>
         <TabsTrigger value="analise">Análise</TabsTrigger>
       </TabsList>
 
       {/* ─── Convocatória (+ Plano de jogo) ─── */}
       <TabsContent value="convocatoria" className="space-y-4">
+        {/* §8.25: entrada para o ecrã dedicado de condução (Modo Jogo ao Vivo).
+            🔁 Fase C: reposicionado para o topo da Convocatória (a tab «Ao Vivo»
+            deixou de existir). Só com convocatória gravada e jogo não terminado. */}
+        {mostrarModoAoVivo && convocadosSalvos.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-lg border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="flex items-center gap-1.5 text-subtitulo text-cinza-900">
+                <Radio className="h-4 w-4 text-primary" />
+                Modo Jogo ao Vivo
+              </p>
+              <p className="text-corpo-sec text-cinza-600">
+                Cronómetro contínuo, substituições por toque e minutos calculados
+                automaticamente no fim.
+              </p>
+            </div>
+            <Button asChild className="min-h-[44px] flex-shrink-0">
+              <Link href={`/jogos/${jogoId}/ao-vivo`}>Abrir modo jogo</Link>
+            </Button>
+          </div>
+        )}
         <Tabs defaultValue="convocados">
           <TabsList className="flex-wrap">
             <TabsTrigger value="convocados">Convocados</TabsTrigger>
@@ -480,48 +471,6 @@ export function JogoDetalhe({
         </Tabs>
       </TabsContent>
 
-      {/* ─── Ao Vivo (registo de eventos) ─── */}
-      <TabsContent value="aovivo" className="space-y-4">
-        {/* §8.25: entrada para o ecrã dedicado de condução (cronómetro + minutos
-            automáticos). Só quando a convocatória existe e o jogo não terminou. */}
-        {mostrarModoAoVivo && convocadosSalvos.length > 0 && (
-          <div className="flex flex-col gap-2 rounded-lg border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="flex items-center gap-1.5 text-subtitulo text-cinza-900">
-                <Radio className="h-4 w-4 text-primary" />
-                Modo Jogo ao Vivo
-              </p>
-              <p className="text-corpo-sec text-cinza-600">
-                Cronómetro contínuo, substituições por toque e minutos calculados
-                automaticamente no fim.
-              </p>
-            </div>
-            <Button asChild className="min-h-[44px] flex-shrink-0">
-              <Link href={`/jogos/${jogoId}/ao-vivo`}>Abrir modo jogo</Link>
-            </Button>
-          </div>
-        )}
-        {convocadosSalvos.length === 0 ? (
-          <p className="rounded-md border border-dashed border-cinza-300 p-4 text-center text-corpo-sec text-cinza-500">
-            Define a convocatória primeiro para registar eventos ao vivo.
-          </p>
-        ) : (
-          <RegistoAoVivo
-            jogoId={jogoId}
-            eventos={eventos}
-            atletas={convocadosSalvos.map((a) => ({
-              id: a.id,
-              nome: a.nome,
-              numero: a.numero,
-            }))}
-            casaFora={casaFora}
-            adversario={adversario}
-            clubeNome={clubeNome}
-            modalidade={modalidade}
-          />
-        )}
-      </TabsContent>
-
       {/* ─── Estatísticas ─── */}
       <TabsContent value="estatisticas" className="space-y-4">
         {convocadosLista.length === 0 ? (
@@ -530,27 +479,21 @@ export function JogoDetalhe({
           </p>
         ) : (
           <>
-            {/* §8.25.6: editor manual de minutos — disponível depois de a sessão
-                do Modo Jogo ao Vivo terminar (edição/inserção retroativa). */}
-            {sessaoAoVivoTerminada && linhasMinutosAoVivo.length > 0 && (
+            {/* §8.25.6 / RN-JV-15: editor de tempo de jogo SEMPRE disponível.
+                Com Modo Jogo ao Vivo terminado mostra os minutos derivados ao
+                segundo; sem sessão, semeia da convocatória para registo manual
+                (inserção retroativa). Os golos/estatísticas continuam na grelha
+                abaixo (já editável e pré-preenchida com o derivado, §8.11). */}
+            {linhasEditorMinutos.length > 0 && (
               <EditorManualMinutos
                 jogoId={jogoId}
-                linhasIniciais={linhasMinutosAoVivo}
+                linhasIniciais={linhasEditorMinutos}
+                titulo={
+                  sessaoAoVivoTerminada
+                    ? "Editar minutos (Modo Jogo ao Vivo)"
+                    : "Tempo de jogo"
+                }
               />
-            )}
-            {/* Fix de produto: alimenta a grelha a partir dos eventos ao vivo.
-                Só faz sentido com eventos registados. */}
-            {eventos.length > 0 && (
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={importarDeEventos}
-                  disabled={pendingPreview}
-                >
-                  <Wand2 className="h-4 w-4" />
-                  {pendingPreview ? "A preencher…" : "Preencher do registo ao vivo"}
-                </Button>
-              </div>
             )}
             {(() => {
               const somaGolos = convocadosLista.reduce(

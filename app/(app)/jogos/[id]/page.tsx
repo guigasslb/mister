@@ -7,6 +7,7 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { tituloConfronto } from "@/lib/jogo-confronto";
 import { obterJogo, obterSuspensoesPendentes } from "@/lib/actions/jogos";
+import { combinarEstatisticasIniciais } from "@/lib/derivar-estatisticas";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { listarMetricas } from "@/lib/actions/metricas";
 import { listarQuadrosTaticos } from "@/lib/actions/modeloJogo";
@@ -108,33 +109,93 @@ export default async function DetalheJogoPage({
     .filter((c) => c.convocado)
     .map((c) => c.atletaId);
 
+  // §8.11 (vista consolidada única): a grelha de Estatísticas carrega já com os
+  // valores DERIVADOS dos eventos (motor único `derivarEstatisticas` — minutos,
+  // golos/assistências/cartões e secundários por atleta), servindo de valores
+  // iniciais. Onde há edição manual persistida em `EstatisticaAtleta`, esta
+  // prevalece sobre o derivado (last-write-wins, §13.4). Isto substitui o antigo
+  // botão "Preencher do registo ao vivo": não é preciso ação manual.
+  const eFutebolJogo = j.modalidade === "FUTEBOL";
+
+  // Registo COMPLETO (clássico + Modo Jogo ao Vivo): o motor único entende
+  // `segundoJogo` (intervalos ao segundo) E `bloco`/`minuto` (legado).
+  const eventosParaDerivacao = j.eventos.map((e) => ({
+    tipo: e.tipo,
+    atletaId: e.atletaId,
+    atletaSecundarioId: e.atletaSecundarioId,
+    bloco: e.bloco,
+    minuto: e.minuto,
+    segundoJogo: e.segundoJogo,
+    parte: e.parte,
+  }));
+
+  const convocadosParaDerivacao = j.convocatorias
+    .filter((c) => c.convocado)
+    .map((c) => ({ atletaId: c.atletaId, titularPrevisto: c.titularPrevisto }));
+
+  // Estatísticas manuais persistidas (verdade final) — prevalecem por atleta.
+  const persistidas = j.estatisticas.map((e) => ({
+    atletaId: e.atletaId,
+    utilizacao: e.utilizacao,
+    blocoTempo: e.blocoTempo,
+    minutos: e.minutos,
+    golos: e.golos,
+    assistencias: e.assistencias,
+    defesas: e.defesas,
+    golosSofridosGR: e.golosSofridosGR,
+    faltasCometidas: e.faltasCometidas,
+    cartaoAmarelo: e.cartaoAmarelo,
+    cartaoVermelho: e.cartaoVermelho,
+    remates: e.remates,
+    cantos: e.cantos,
+    forasDeJogo: e.forasDeJogo,
+    desarmes: e.desarmes,
+    valoresMetricas: e.valoresMetricas.map((v) => ({
+      metricaId: v.metricaId,
+      valor: v.valor,
+    })),
+  }));
+
+  const estatisticasCombinadas = combinarEstatisticasIniciais(
+    eventosParaDerivacao,
+    convocadosParaDerivacao,
+    persistidas,
+    eFutebolJogo,
+    j.formato,
+  );
+
   const estatisticasIniciais = Object.fromEntries(
-    j.estatisticas.map((e) => [
+    [...estatisticasCombinadas.values()].map((e) => [
       e.atletaId,
       {
         atletaId: e.atletaId,
         utilizacao: e.utilizacao,
-        blocoTempo: e.blocoTempo,
-        minutos: e.minutos,
+        blocoTempo: e.blocoTempo ?? null,
+        minutos: e.minutos ?? null,
         golos: e.golos,
         assistencias: e.assistencias,
-        defesas: e.defesas,
-        golosSofridosGR: e.golosSofridosGR,
-        faltasCometidas: e.faltasCometidas,
+        defesas: e.defesas ?? null,
+        golosSofridosGR: e.golosSofridosGR ?? null,
+        faltasCometidas: e.faltasCometidas ?? null,
         // Disciplina (§3.7): cartões acumulados no jogo (futsal e futebol).
         cartaoAmarelo: e.cartaoAmarelo,
         cartaoVermelho: e.cartaoVermelho,
         // 🔁 v7 (§10.8): núcleo de futebol (null em jogos de futsal).
-        remates: e.remates,
-        cantos: e.cantos,
-        forasDeJogo: e.forasDeJogo,
-        desarmes: e.desarmes,
+        remates: e.remates ?? null,
+        cantos: e.cantos ?? null,
+        forasDeJogo: e.forasDeJogo ?? null,
+        desarmes: e.desarmes ?? null,
         valoresMetricas: Object.fromEntries(
-          e.valoresMetricas.map((v) => [v.metricaId, v.valor]),
+          (e.valoresMetricas ?? []).map((v) => [v.metricaId, v.valor]),
         ),
       },
     ]),
   );
+
+  // Atletas com estatísticas efetivamente PERSISTIDAS (edição manual guardada).
+  // Distinto dos que só têm valores derivados: a confirmação de "remover
+  // convocado com estatísticas" (§22.4) só deve disparar para os persistidos.
+  const atletasComStatsPersistidas = j.estatisticas.map((e) => e.atletaId);
 
   // F5 (M15): plano de dia de jogo por convocado (posição/titularidade prevista).
   const planoInicial = Object.fromEntries(
@@ -326,15 +387,13 @@ export default async function DetalheJogoPage({
         }))}
         convocadosIniciais={convocadosIniciais}
         estatisticasIniciais={estatisticasIniciais}
+        atletasComStatsPersistidas={atletasComStatsPersistidas}
         relatorioInicial={j.relatorio ?? ""}
         golosMarcados={j.golosMarcados}
         planoInicial={planoInicial}
         capitaoInicial={capitaoInicial}
         eventos={eventos}
         observacoes={j.observacoes}
-        casaFora={j.casaFora}
-        clubeNome={clubeNome}
-        adversario={j.adversario}
         modalidade={j.modalidade}
         formato={j.formato}
         suspensoes={suspensoes}

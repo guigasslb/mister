@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   derivarEstatisticas,
+  combinarEstatisticasIniciais,
   type ConvocadoParaDerivacao,
   type EventoParaDerivacao,
 } from "@/lib/derivar-estatisticas";
+import type { EstatisticaInput } from "@/lib/schemas/jogo";
 
 function evento(over: Partial<EventoParaDerivacao>): EventoParaDerivacao {
   return {
@@ -352,7 +354,7 @@ describe("derivarEstatisticas — bug P0 (convergência e não-sobrescrita)", ()
   });
 
   it("convergência: o conjunto completo e o subconjunto ao vivo dão minutos IDÊNTICOS", () => {
-    // previewEstatisticasDeEventos lê TODOS os eventos; terminar/editar leem só os
+    // A derivação consolidada lê TODOS os eventos; terminar/editar leem só os
     // ao vivo. Os minutos têm de bater exatamente (os 3 pontos de entrada convergem).
     const completo = derivarEstatisticas(eventosCompletos(), convs(), false, "FUTSAL_5");
     const aoVivo = derivarEstatisticas(eventosAoVivo(), convs(), false, "FUTSAL_5");
@@ -428,5 +430,159 @@ describe("derivarEstatisticas — captura ao vivo (Fase B, §8.25.3)", () => {
     const r = derivarEstatisticas(eventos, [convocado(A)], false, "FUTSAL_5");
     expect(r.golosMarcados).toBe(1);
     expect(r.estatisticas.get(A)?.golos).toBe(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FASE C — vista consolidada única (§8.11): valores iniciais da grelha combinam
+// o derivado dos eventos com a edição manual persistida (esta prevalece).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("combinarEstatisticasIniciais — derivado + edição manual (§8.11)", () => {
+  // Molde de um registo `EstatisticaAtleta` persistido (verdade final).
+  const persistida = (
+    atletaId: string,
+    over: Partial<EstatisticaInput> = {},
+  ): EstatisticaInput => ({
+    atletaId,
+    utilizacao: "TITULAR",
+    blocoTempo: null,
+    minutos: null,
+    golos: 0,
+    assistencias: 0,
+    defesas: null,
+    golosSofridosGR: null,
+    faltasCometidas: null,
+    cartaoAmarelo: 0,
+    cartaoVermelho: 0,
+    remates: null,
+    cantos: null,
+    forasDeJogo: null,
+    desarmes: null,
+    valoresMetricas: [],
+    ...over,
+  });
+
+  const eventosJogo = (): EventoParaDerivacao[] => [
+    inicio(0),
+    entra(A, 0),
+    entra(B, 0),
+    capt("GOLO", A, 5 * M),
+    capt("ASSISTENCIA", B, 5 * M),
+    capt("CARTAO_AMARELO", A, 10 * M),
+    sai(B, 18 * M),
+    fim(40 * M),
+  ];
+  const capt = (
+    tipo: EventoParaDerivacao["tipo"],
+    atletaId: string | null,
+    segundoJogo: number,
+  ): EventoParaDerivacao => evento({ tipo, atletaId, segundoJogo, parte: 1 });
+
+  it("sem persistidas: bate exatamente com o que o preview/derivarEstatisticas produzia", () => {
+    // Regra da Fase C: os valores derivados automaticamente têm de ser idênticos
+    // aos que o botão "Preencher do registo ao vivo" produzia (mesmos eventos).
+    const eventos = eventosJogo();
+    const convs = [convocado(A), convocado(B)];
+    const combinado = combinarEstatisticasIniciais(eventos, convs, [], false, "FUTSAL_5");
+    const derivado = derivarEstatisticas(eventos, convs, false, "FUTSAL_5").estatisticas;
+
+    for (const id of [A, B]) {
+      expect(combinado.get(id)).toEqual(derivado.get(id));
+    }
+    // Sanidade: os valores derivados vêm preenchidos, sem ação manual.
+    expect(combinado.get(A)?.golos).toBe(1);
+    expect(combinado.get(A)?.cartaoAmarelo).toBe(1);
+    expect(combinado.get(A)?.minutos).toBe(40);
+    expect(combinado.get(B)?.assistencias).toBe(1);
+    expect(combinado.get(B)?.minutos).toBe(18);
+  });
+
+  it("edição manual sobrepõe-se ao derivado, por atleta (last-write-wins §13.4)", () => {
+    const eventos = eventosJogo();
+    const convs = [convocado(A), convocado(B)];
+    // O treinador corrigiu à mão os golos/minutos do A; o B fica só com o derivado.
+    const combinado = combinarEstatisticasIniciais(
+      eventos,
+      convs,
+      [persistida(A, { golos: 3, minutos: 35, cartaoAmarelo: 0 })],
+      false,
+      "FUTSAL_5",
+    );
+    // A: valores manuais prevalecem integralmente sobre o derivado.
+    expect(combinado.get(A)?.golos).toBe(3);
+    expect(combinado.get(A)?.minutos).toBe(35);
+    expect(combinado.get(A)?.cartaoAmarelo).toBe(0);
+    // B: sem registo manual → mantém o derivado dos eventos.
+    expect(combinado.get(B)?.assistencias).toBe(1);
+    expect(combinado.get(B)?.minutos).toBe(18);
+  });
+
+  it("edição manual preserva as métricas configuráveis (valoresMetricas)", () => {
+    const combinado = combinarEstatisticasIniciais(
+      [evento({ tipo: "GOLO", atletaId: A })],
+      [convocado(A)],
+      [persistida(A, { valoresMetricas: [{ metricaId: "m1", valor: 4 }] })],
+      false,
+      "FUTSAL_5",
+    );
+    expect(combinado.get(A)?.valoresMetricas).toEqual([{ metricaId: "m1", valor: 4 }]);
+  });
+
+  it("zero-regressão: jogo legado (só blocos, sem persistidas) mantém os minutos do bloco", () => {
+    const combinado = combinarEstatisticasIniciais(
+      [
+        evento({ tipo: "SUBSTITUICAO", atletaId: A, bloco: "JOGO_COMPLETO" }),
+        evento({ tipo: "SUBSTITUICAO", atletaId: B, bloco: "MEIA_PARTE" }),
+      ],
+      [convocado(A, true), convocado(B), convocado("c")],
+      [],
+      true,
+      "FUTEBOL_11",
+    );
+    expect(combinado.get(A)?.minutos).toBe(90);
+    expect(combinado.get(B)?.minutos).toBe(45);
+    expect(combinado.get("c")?.minutos).toBeNull();
+  });
+
+  it("eventos secundários por atleta corretamente derivados (futebol)", () => {
+    const combinado = combinarEstatisticasIniciais(
+      [
+        evento({ tipo: "REMATE", atletaId: A }),
+        evento({ tipo: "REMATE", atletaId: A }),
+        evento({ tipo: "CANTO", atletaId: A }),
+        evento({ tipo: "FORA_DE_JOGO", atletaId: A }),
+        evento({ tipo: "DESARME", atletaId: B }),
+        evento({ tipo: "DEFESA", atletaId: B }),
+        evento({ tipo: "FALTA", atletaId: B }),
+      ],
+      [convocado(A), convocado(B)],
+      [],
+      true,
+      "FUTEBOL_11",
+    );
+    expect(combinado.get(A)?.remates).toBe(2);
+    expect(combinado.get(A)?.cantos).toBe(1);
+    expect(combinado.get(A)?.forasDeJogo).toBe(1);
+    expect(combinado.get(B)?.desarmes).toBe(1);
+    expect(combinado.get(B)?.defesas).toBe(1);
+    expect(combinado.get(B)?.faltasCometidas).toBe(1);
+  });
+
+  it("eventos secundários por atleta corretamente derivados (futsal: faltas/defesas)", () => {
+    const combinado = combinarEstatisticasIniciais(
+      [
+        evento({ tipo: "FALTA", atletaId: A }),
+        evento({ tipo: "FALTA", atletaId: A }),
+        evento({ tipo: "DEFESA", atletaId: B }),
+      ],
+      [convocado(A), convocado(B)],
+      [],
+      false,
+      "FUTSAL_5",
+    );
+    expect(combinado.get(A)?.faltasCometidas).toBe(2);
+    expect(combinado.get(B)?.defesas).toBe(1);
+    // Núcleo de futebol fica a null em futsal (§10.8).
+    expect(combinado.get(A)?.remates).toBeNull();
   });
 });

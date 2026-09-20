@@ -15,11 +15,9 @@ import {
   isVideoUrlValido,
   LIMITE_AMARELOS_SUSPENSAO,
   type SuspensaoPendente,
-  type EstatisticaInput,
 } from "@/lib/schemas/jogo";
 import { valorMetricaValido } from "@/lib/schemas/metrica";
 import { modalidadeEfetiva, filtroModalidadeJogo } from "@/lib/modalidade-escalao";
-import { derivarEstatisticas } from "@/lib/derivar-estatisticas";
 import { recalcularResultadoJogo } from "@/lib/placar-jogo";
 import {
   Prisma,
@@ -832,65 +830,6 @@ export async function listarEventosJogo(jogoId: string): Promise<Resultado<Event
     orderBy: ORDER_EVENTOS,
   });
   return ok(eventos);
-}
-
-/**
- * Pré-visualiza as estatísticas derivadas dos eventos ao vivo, SEM persistir.
- * Permite ao treinador rever o que os eventos produzem antes de guardar as
- * estatísticas do jogo. Segue o padrão de `guardarEstatisticas`: clube do
- * utilizador + capacidade `ESTATISTICAS_GERIR` + modalidade efetiva (§10.8).
- */
-export async function previewEstatisticasDeEventos(
-  jogoId: string,
-): Promise<Resultado<EstatisticaInput[]>> {
-  const clubeId = await obterClubeIdAtual();
-  if (!clubeId) return erro("Não autenticado");
-
-  const jogo = await prisma.jogo.findFirst({
-    where: { id: jogoId, escalao: { clubeId } },
-    include: { escalao: { select: { seccao: { select: { modalidade: true } } } } },
-  });
-  if (!jogo) return erro("Jogo não encontrado");
-
-  const perm = await exigirCapacidade("ESTATISTICAS_GERIR", jogo.escalaoId);
-  if (!perm.ok) return erro(perm.erro);
-
-  // Modalidade efetiva do jogo (§10.8): decide se o núcleo de futebol é contado.
-  const eFutebol =
-    modalidadeEfetiva(jogo.modalidadeAtividade, jogo.escalao?.seccao?.modalidade) ===
-    "FUTEBOL";
-
-  // Lê o registo COMPLETO (clássico + Modo Jogo ao Vivo): o motor único entende
-  // `segundoJogo` (intervalos ao segundo) E `bloco` (legado), com precedência
-  // intervalos > blocos > null (§10.4). Corrige o bug P0 em que os minutos
-  // precisos do cronómetro eram descartados por o derivador desconhecer `segundoJogo`.
-  const eventos = await prisma.eventoJogo.findMany({
-    where: { jogoId },
-    orderBy: ORDER_EVENTOS,
-    select: {
-      tipo: true,
-      atletaId: true,
-      atletaSecundarioId: true,
-      bloco: true,
-      minuto: true,
-      segundoJogo: true,
-      parte: true,
-    },
-  });
-
-  const convocados = await prisma.convocatoria.findMany({
-    where: { jogoId, convocado: true },
-    select: { atletaId: true, titularPrevisto: true },
-  });
-
-  const { estatisticas } = derivarEstatisticas(
-    eventos,
-    convocados,
-    eFutebol,
-    jogo.formato,
-  );
-
-  return ok([...estatisticas.values()]);
 }
 
 // ─── Disciplina / suspensões (BUG-P1-04) ─────────────────────────────────────

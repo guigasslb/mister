@@ -34,9 +34,14 @@ interface LinhaMinutos {
 export function EditorManualMinutos({
   jogoId,
   linhasIniciais,
+  titulo = "Editar minutos (Modo Jogo ao Vivo)",
 }: {
   jogoId: string;
   linhasIniciais: LinhaMinutos[];
+  // §8.25.6 / RN-JV-15: o mesmo editor serve o Modo Jogo ao Vivo (minutos
+  // derivados ao segundo) e o preenchimento manual/retroativo a partir da
+  // convocatória. `titulo` adapta o cabeçalho ao contexto.
+  titulo?: string;
 }) {
   const [linhas, setLinhas] = useState<LinhaMinutos[]>(linhasIniciais);
   const [pending, startTransition] = useTransition();
@@ -71,7 +76,7 @@ export function EditorManualMinutos({
   return (
     <div className="space-y-3 rounded-lg border border-cinza-200 bg-white p-4 shadow-card">
       <div>
-        <h3 className="text-subtitulo text-cinza-900">Editar minutos (Modo Jogo ao Vivo)</h3>
+        <h3 className="text-subtitulo text-cinza-900">{titulo}</h3>
         <p className="text-legenda text-cinza-500">
           Ajusta a entrada e a saída de cada atleta (em minutos). Os minutos são
           recalculados automaticamente.
