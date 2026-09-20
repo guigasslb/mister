@@ -464,6 +464,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
         eventos: [...estado!.eventos, novoEvento("PAUSA", seg)],
       };
     });
+    toast("Jogo pausado — cronómetro parado");
   }
 
   function retomar() {
@@ -475,6 +476,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
         eventos: [...estado!.eventos, novoEvento("RETOMA", s.segundosDecorridos)],
       };
     });
+    toast.success("Jogo retomado — cronómetro a correr");
   }
 
   function terminar() {
@@ -561,7 +563,12 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   const conteudo = (
-    <div className="fixed inset-0 z-[70] flex flex-col bg-ink text-white">
+    // z-[45]: cobre a barra de topo (z-30) e a navegação inferior (z-40), mas fica
+    // ABAIXO dos diálogos/menus (z-50 — ModalAcoesJogador, ModalSubstituicao, notas,
+    // confirmação de terminar). Se este overlay ficasse acima (ex.: z-[70]), como é
+    // opaco (`bg-ink`) escondia todos esses diálogs por trás e o treinador tocava
+    // no jogador/botões "sem que nada acontecesse" (RN-JV — feedback de toque).
+    <div className="fixed inset-0 z-[45] flex flex-col bg-ink text-white">
       {/* Cabeçalho fixo */}
       <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <Button

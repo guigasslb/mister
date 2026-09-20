@@ -136,16 +136,18 @@ export function BarraControloJogo({
           </>
         )}
 
-        {/* Notas — sempre acessível (exceto quando o jogo terminou). */}
+        {/* Notas — sempre acessível (exceto quando o jogo terminou). Rótulo visível
+            "Notas" (antes era um quadrado só com ícone, que o treinador não
+            reconhecia — RN-JV: nada de botões misteriosos). */}
         {estado !== "TERMINADO" && (
           <Button
             onClick={() => setNotasAberto(true)}
             variant="outline"
-            size="icon"
-            className="min-h-[48px] min-w-[48px] border-white/25 bg-white/10 text-white hover:bg-white/20"
-            aria-label="Notas do jogo"
+            className="min-h-[48px] border-white/25 bg-white/10 text-white hover:bg-white/20"
+            aria-label="Escrever notas do jogo"
           >
-            <StickyNote className="h-5 w-5" />
+            <StickyNote className="h-4 w-4" />
+            Notas
           </Button>
         )}
       </div>
