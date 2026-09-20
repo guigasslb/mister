@@ -17,6 +17,7 @@
     "db:studio": "prisma studio",
     "db:seed:comunicacao": "tsx prisma/data-migrations/f7_seed_comunicacao.ts",
     "db:migrate:cap-admin": "tsx --env-file=.env prisma/data-migrations/reconciliar_capacidades_administrador.ts",
+    "db:migrate:reparar-jogo-ao-vivo": "tsx --env-file=.env prisma/data-migrations/reparar_estatisticas_jogo_ao_vivo.ts",
     "db:seed:sle": "tsx --env-file=.env prisma/data-migrations/seed_sport_lisboa_evora.ts",
     "db:seed:sle-extra": "tsx --env-file=.env prisma/data-migrations/seed_sport_lisboa_evora_extra.ts",
     "db:seed:sle-fix": "tsx --env-file=.env prisma/data-migrations/seed_sport_lisboa_evora_fix.ts",
