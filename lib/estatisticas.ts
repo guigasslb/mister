@@ -160,10 +160,13 @@ export function agregarEstatisticas(entrada: EntradaAgregacao): EstatisticasAgre
     ? minutosRegistados.reduce((acc, m) => acc + m, 0)
     : null;
 
-  // Tempo de jogo acumulado a partir dos blocos (secção 10.1). Ao contrário de
+  // Tempo de jogo acumulado (secção 10.1). Prefere o campo autoritativo `minutos`
+  // (gravado pelo Modo Jogo ao Vivo e pelo editor de minutos por parte) e só usa o
+  // bloco como fallback para jogos legados sem `minutos`. Ao contrário de
   // `totalMinutos` (que distingue "não registado" de zero), este é sempre numérico.
   const tempoJogoAcumulado = estatisticas.reduce(
-    (acc, e) => acc + blocoParaMinutos(e.blocoTempo ?? null, e.formato ?? null),
+    (acc, e) =>
+      acc + (e.minutos ?? blocoParaMinutos(e.blocoTempo ?? null, e.formato ?? null)),
     0,
   );
 

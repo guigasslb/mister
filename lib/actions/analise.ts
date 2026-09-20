@@ -630,7 +630,12 @@ async function calcularComparacaoEquipa(
     prisma.estatisticaAtleta.findMany({
       where: { jogo: filtroJogo },
       // §10.8: formato para o tempo por bloco correto (futebol ≠ futsal).
-      select: { golos: true, blocoTempo: true, jogo: { select: { formato: true } } },
+      select: {
+        golos: true,
+        blocoTempo: true,
+        minutos: true,
+        jogo: { select: { formato: true } },
+      },
     }),
     prisma.presenca.count({
       where: {
@@ -644,7 +649,7 @@ async function calcularComparacaoEquipa(
 
   const totalGolos = estatisticas.reduce((acc, e) => acc + e.golos, 0);
   const totalTempo = estatisticas.reduce(
-    (acc, e) => acc + blocoParaMinutos(e.blocoTempo, e.jogo?.formato),
+    (acc, e) => acc + (e.minutos ?? blocoParaMinutos(e.blocoTempo, e.jogo?.formato)),
     0,
   );
   const slots = nAtletas * sessoes;
@@ -1197,6 +1202,7 @@ export async function obterAnaliticoEscalao(
         golos: true,
         assistencias: true,
         blocoTempo: true,
+        minutos: true,
         utilizacao: true,
         // Disciplina (§3.7): cartões para totais + ranking de disciplina.
         cartaoAmarelo: true,
@@ -1305,7 +1311,7 @@ export async function obterAnaliticoEscalao(
       assistMap.set(e.atletaId, a);
     }
     const u = utilMap.get(e.atletaId) ?? { nome: e.atleta.nome, tempo: 0, jogos: 0 };
-    u.tempo += blocoParaMinutos(e.blocoTempo, e.jogo?.formato);
+    u.tempo += e.minutos ?? blocoParaMinutos(e.blocoTempo, e.jogo?.formato);
     if (e.utilizacao !== "NAO_UTILIZADO") u.jogos++;
     utilMap.set(e.atletaId, u);
     if (e.cartaoAmarelo > 0 || e.cartaoVermelho > 0) {
