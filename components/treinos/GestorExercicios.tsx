@@ -12,8 +12,10 @@ import {
   Check,
   ChevronRight,
   SlidersHorizontal,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -131,6 +133,9 @@ export function GestorExercicios({
   const [expandido, setExpandido] = useState<string | null>(null);
   // Bug 1: exercício da biblioteca expandido no seletor (campo maior + descrição).
   const [bibExpandido, setBibExpandido] = useState<string | null>(null);
+  // Pesquisa por nome na biblioteca do seletor (client-side — a biblioteca já
+  // está carregada como prop). Consistente com a pesquisa do separador Exercícios.
+  const [pesquisa, setPesquisa] = useState("");
   // Bug 2: filtro por fase de treino aplicado à lista da biblioteca no seletor.
   const [filtroFase, setFiltroFase] = useState<FiltroFaseValor>(TODAS_FASES);
   // Filtros por categoria principal e subcategoria (customizável do clube).
@@ -187,14 +192,20 @@ export function GestorExercicios({
     filtroSubcategoria === TODAS_SUBCATEGORIAS ||
     subcategoriasDisponiveis.some((s) => s.id === filtroSubcategoria);
 
+  // Termo de pesquisa normalizado (case-insensitive, como no separador Exercícios).
+  const termoPesquisa = pesquisa.trim().toLowerCase();
+
   // Bug 2: aplicar os filtros à biblioteca mostrada no seletor. Fase filtra pela
   // fase sugerida (`parteTreino`); categoria/subcategoria pela taxonomia do
-  // exercício. Sentinelas "todas" não restringem.
+  // exercício. A pesquisa filtra pelo nome. Sentinelas "todas" não restringem.
+  // A pesquisa aplica-se só à lista final (não afeta as subcategorias disponíveis
+  // no dropdown, que continuam a refletir fase + categoria).
   const bibliotecaFiltrada = bibliotecaPreSubcategoria.filter(
     (ex) =>
-      filtroSubcategoria === TODAS_SUBCATEGORIAS ||
-      !subcategoriaFiltroValido ||
-      ex.subcategoriaId === filtroSubcategoria,
+      (filtroSubcategoria === TODAS_SUBCATEGORIAS ||
+        !subcategoriaFiltroValido ||
+        ex.subcategoriaId === filtroSubcategoria) &&
+      (termoPesquisa === "" || ex.nome.toLowerCase().includes(termoPesquisa)),
   );
 
   // §3.5: agrupamento por fase, preservando a ordem (exercícios já vêm ordenados
@@ -290,7 +301,10 @@ export function GestorExercicios({
             open={dialogAberto}
             onOpenChange={(aberto) => {
               setDialogAberto(aberto);
-              if (!aberto) setBibExpandido(null);
+              if (!aberto) {
+                setBibExpandido(null);
+                setPesquisa("");
+              }
             }}
           >
             <DialogTrigger asChild>
@@ -304,8 +318,25 @@ export function GestorExercicios({
                 <DialogTitle>Adicionar exercício da biblioteca</DialogTitle>
               </DialogHeader>
 
+              {/* Pesquisa por nome — fixa, não scrolla com a lista. */}
+              <div className="px-6 pt-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cinza-400" />
+                  <Input
+                    value={pesquisa}
+                    onChange={(e) => {
+                      setPesquisa(e.target.value);
+                      setBibExpandido(null);
+                    }}
+                    placeholder="Pesquisar exercício por nome…"
+                    className="pl-9"
+                    aria-label="Pesquisar exercício por nome"
+                  />
+                </div>
+              </div>
+
               {/* Filtros fixos — não scrollam com a lista. */}
-              <div className="grid grid-cols-1 gap-3 px-6 py-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 px-6 pb-4 pt-3 sm:grid-cols-2">
                 {/* §3.5: escolher a fase do treino a que o exercício será adicionado. */}
                 <div className="space-y-1.5">
                   <Label htmlFor="fase-adicionar">Adicionar à fase</Label>
@@ -415,7 +446,9 @@ export function GestorExercicios({
                   </p>
                 ) : bibliotecaFiltrada.length === 0 ? (
                   <p className="text-corpo-sec text-cinza-600">
-                    Nenhum exercício corresponde aos filtros selecionados.
+                    {termoPesquisa
+                      ? `Nenhum exercício corresponde a "${pesquisa.trim()}".`
+                      : "Nenhum exercício corresponde aos filtros selecionados."}
                   </p>
                 ) : (
                   <ul className="space-y-2">
@@ -555,7 +588,9 @@ export function GestorExercicios({
               <ol className="space-y-2">
                 {grupos[fase].map((e, i) => {
                   const aberto = expandido === e.id;
-                  const temDetalhe = Boolean(e.exercicio.descricao);
+                  // A adaptação da sessão tem prioridade sobre a descrição da biblioteca.
+                  const descricaoMostrada = e.descricaoOverride ?? e.exercicio.descricao;
+                  const temDetalhe = Boolean(descricaoMostrada || e.notas);
                   return (
                     <li
                       key={e.id}
@@ -661,12 +696,26 @@ export function GestorExercicios({
 
                       {aberto && temDetalhe && (
                         <div className="border-t border-cinza-100 bg-cinza-50 px-3 py-3">
-                          <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
-                            Descrição / montagem
-                          </p>
-                          <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
-                            {e.exercicio.descricao}
-                          </p>
+                          {descricaoMostrada && (
+                            <div>
+                              <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+                                Descrição / montagem
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
+                                {descricaoMostrada}
+                              </p>
+                            </div>
+                          )}
+                          {e.notas && (
+                            <div className={descricaoMostrada ? "mt-3" : undefined}>
+                              <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+                                Notas do treinador
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
+                                {e.notas}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </li>

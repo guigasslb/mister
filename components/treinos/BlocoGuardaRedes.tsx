@@ -1,5 +1,11 @@
+"use client";
+
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Clock, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
+import { Clock, ChevronRight, Trash2, Check, Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { removerExercicioSessao } from "@/lib/actions/treinos";
 import {
   LABEL_CATEGORIA,
   LABEL_PARTE_TREINO,
@@ -34,6 +40,12 @@ type GuardaRedes = {
  *
  * Os exercícios usam o mesmo cartão visual da lista principal (§4.4): miniatura de
  * campo + nome + categoria + fase + duração, clicáveis para o detalhe do exercício.
+ *
+ * Como os exercícios de GR estão excluídos da lista principal numerada
+ * (`GestorExercicios`, RN-GR-3), a remoção tem de existir aqui — segue o mesmo
+ * padrão da lista principal: toggle "Editar"/"Concluir" + botão de remover por
+ * cartão, sobre a MESMA Server Action `removerExercicioSessao` (que valida clube
+ * do utilizador e capacidade TREINOS_GERIR no escalão da sessão).
  */
 export function BlocoGuardaRedes({
   exercicios,
@@ -42,17 +54,47 @@ export function BlocoGuardaRedes({
   exercicios: ExercicioGR[];
   guardaRedes: GuardaRedes[];
 }) {
+  const [modoEdicao, setModoEdicao] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function remover(sessaoExercicioId: string) {
+    startTransition(async () => {
+      const res = await removerExercicioSessao(sessaoExercicioId);
+      if (!res.sucesso) toast.error(res.erro);
+    });
+  }
+
   if (exercicios.length === 0) return null;
 
   return (
     <section className="rounded-lg border border-cinza-200 bg-white p-5 shadow-card">
-      <div className="flex items-center gap-2">
-        <span aria-hidden className="text-lg leading-none">
-          🧤
-        </span>
-        <h2 className="text-corpo font-semibold text-cinza-900">
-          Bloco de Guarda-redes
-        </h2>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="text-lg leading-none">
+            🧤
+          </span>
+          <h2 className="text-corpo font-semibold text-cinza-900">
+            Bloco de Guarda-redes
+          </h2>
+        </div>
+        <Button
+          type="button"
+          variant={modoEdicao ? "default" : "outline"}
+          size="sm"
+          onClick={() => setModoEdicao((v) => !v)}
+        >
+          {modoEdicao ? (
+            <>
+              <Check className="h-4 w-4" />
+              Concluir
+            </>
+          ) : (
+            <>
+              <Pencil className="h-4 w-4" />
+              Editar
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Guarda-redes presentes na sessão */}
@@ -121,19 +163,33 @@ export function BlocoGuardaRedes({
             return (
               <li
                 key={e.id}
-                className="overflow-hidden rounded-md border border-cinza-200 bg-white shadow-card"
+                className="flex items-center overflow-hidden rounded-md border border-cinza-200 bg-white shadow-card"
               >
                 {e.exercicioId ? (
                   <Link
                     href={`/exercicios/${e.exercicioId}`}
-                    className="flex items-center gap-2 p-2.5 transition-colors hover:bg-cinza-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="flex min-w-0 flex-1 items-center gap-2 p-2.5 transition-colors hover:bg-cinza-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     {meta}
                     <ChevronRight className="h-4 w-4 flex-shrink-0 text-cinza-400" />
                   </Link>
                 ) : (
                   // Só snapshot histórico (§4.2.1): sem exercício original para linkar.
-                  <div className="flex items-center gap-2 p-2.5">{meta}</div>
+                  <div className="flex min-w-0 flex-1 items-center gap-2 p-2.5">
+                    {meta}
+                  </div>
+                )}
+
+                {modoEdicao && (
+                  <button
+                    type="button"
+                    onClick={() => remover(e.id)}
+                    disabled={pending}
+                    className="mr-1 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-vermelho-600 hover:bg-vermelho-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+                    aria-label={`Remover ${e.nome}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 )}
               </li>
             );
