@@ -52,6 +52,29 @@ export const brandingSchema = z.object({
   telefone: z.string().max(30).optional(),
 });
 
+// Upload de ficheiro do logótipo do clube (§8.3). SVG excluído: pode conter
+// script/referências externas e não é sanitizado. O tipo declarado e o tamanho
+// validam-se aqui (cliente + servidor); a action confirma ainda os magic bytes.
+export const TIPOS_LOGO_CLUBE = ["image/png", "image/jpeg", "image/webp"] as const;
+export const MAX_BYTES_LOGO_CLUBE = 2 * 1024 * 1024;
+
+export const uploadLogoClubeSchema = z.object({
+  logo: z
+    .custom<File>(
+      (v) => typeof File !== "undefined" && v instanceof File,
+      "Nenhum ficheiro de logótipo recebido",
+    )
+    .refine((f) => f.size > 0, "O ficheiro está vazio")
+    .refine(
+      (f) => f.size <= MAX_BYTES_LOGO_CLUBE,
+      "O logótipo excede o tamanho máximo de 2 MB.",
+    )
+    .refine(
+      (f) => (TIPOS_LOGO_CLUBE as readonly string[]).includes(f.type),
+      "Formato inválido. Usa PNG, JPEG ou WebP.",
+    ),
+});
+
 export type RegistarInput = z.infer<typeof registarSchema>;
 export type CriarClubeInput = z.infer<typeof criarClubeSchema>;
 export type BrandingInput = z.infer<typeof brandingSchema>;

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { atualizarBrandingClube } from "@/lib/actions/clubes";
+import { LogoClubeUpload } from "@/components/definicoes/LogoClubeUpload";
 import type { Clube } from "@prisma/client";
 
 export function BrandingForm({
@@ -22,6 +23,7 @@ export function BrandingForm({
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [corPrimaria, setCorPrimaria] = useState(clube.corPrimaria);
   const [corSecundaria, setCorSecundaria] = useState(clube.corSecundaria);
+  const [logoUrl, setLogoUrl] = useState(clube.logoUrl ?? "");
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -32,7 +34,7 @@ export function BrandingForm({
       nome: String(fd.get("nome")),
       corPrimaria,
       corSecundaria,
-      logoUrl: String(fd.get("logoUrl") ?? "").trim(),
+      logoUrl: logoUrl.trim(),
       morada: String(fd.get("morada") ?? "").trim() || undefined,
       email: String(fd.get("email") ?? "").trim(),
       telefone: String(fd.get("telefone") ?? "").trim() || undefined,
@@ -95,11 +97,12 @@ export function BrandingForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="logoUrl">Logótipo (URL)</Label>
-        <Input id="logoUrl" name="logoUrl" defaultValue={clube.logoUrl ?? ""} placeholder="https://…" />
-        <p className="text-legenda text-cinza-400">
-          Por agora, indica o URL de uma imagem. O upload de ficheiro chega em breve.
-        </p>
+        <LogoClubeUpload
+          valor={logoUrl}
+          onAlterar={setLogoUrl}
+          nomeClube={clube.nome}
+          disabled={!podeEditar}
+        />
         {erros.logoUrl && <p className="text-legenda text-vermelho-600">{erros.logoUrl}</p>}
       </div>
 

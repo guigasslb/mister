@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { atualizarBrandingClube } from "@/lib/actions/clubes";
+import { LogoClubeUpload } from "@/components/definicoes/LogoClubeUpload";
 import { criarEscalao, apagarEscalao } from "@/lib/actions/escaloes";
 import { criarEpoca, definirEpocaAtiva } from "@/lib/actions/epocas";
 import { garantirSeccaoParaModalidade } from "@/lib/actions/seccoes";
@@ -231,20 +232,9 @@ function PassoBranding({
             />
           </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="logoUrl">Logótipo (URL)</Label>
-          <Input
-            id="logoUrl"
-            value={logoUrl}
-            onChange={(e) => setLogoUrl(e.target.value)}
-            placeholder="https://…"
-          />
-        </div>
       </div>
 
-      <p className="text-legenda text-cinza-400">
-        Por agora, indica o URL de uma imagem. O upload de ficheiro chega em breve.
-      </p>
+      <LogoClubeUpload valor={logoUrl} onAlterar={setLogoUrl} nomeClube={nome} />
 
       {/* Pré-visualização */}
       <div className="flex items-center gap-3 rounded-lg border border-cinza-200 p-3">

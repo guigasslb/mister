@@ -2,12 +2,13 @@ import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Cliente do Supabase Storage para ficheiros da app (fotos de atletas, §8.5).
+ * Cliente do Supabase Storage para ficheiros da app (fotos de atletas, §8.5;
+ * logótipos de clube, §8.3).
  *
  * SERVER-ONLY: usa a `service_role` key, que ignora as políticas RLS e NUNCA
  * pode chegar ao browser. O `import "server-only"` acima faz o build falhar se
  * este módulo for importado a partir de código de cliente. É consumido apenas
- * por Server Actions (`lib/actions/atletas.ts`).
+ * por Server Actions (`lib/actions/atletas.ts`, `lib/actions/clubes.ts`).
  *
  * Bucket `atletas` — **público**, com paths não-adivinháveis (UUID por ficheiro):
  * neste contexto (app de treinador com sessão autenticada) as signed URLs
@@ -17,6 +18,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * Storage com URLs não-adivinháveis).
  */
 export const BUCKET_ATLETAS = "atletas";
+
+/** Bucket `clubes` — **público**, logótipos de clube (§8.3), mesmo modelo de paths UUID. */
+export const BUCKET_CLUBES = "clubes";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -58,11 +62,14 @@ export function obterHostnameStorage(): string | null {
  * `null` se o URL não pertence ao nosso Storage / bucket. URLs públicos têm a
  * forma `https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<path>`.
  */
-export function extrairPathDoStorage(fotoUrl: string): string | null {
+export function extrairPathDoStorage(
+  fotoUrl: string,
+  bucket: string = BUCKET_ATLETAS,
+): string | null {
   const hostnameStorage = obterHostnameStorage();
   if (!hostIgual(fotoUrl, hostnameStorage)) return null;
 
-  const marcador = `/storage/v1/object/public/${BUCKET_ATLETAS}/`;
+  const marcador = `/storage/v1/object/public/${bucket}/`;
   const idx = fotoUrl.indexOf(marcador);
   if (idx === -1) return null;
 

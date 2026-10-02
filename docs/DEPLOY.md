@@ -71,6 +71,15 @@ O rework de registo/licenças (bíblia §17) introduziu um **fluxo de pagamento 
 
 > **Segurança:** `RESEND_API_KEY`, `EMAIL_PASS` e afins são secrets — injetar via variáveis de ambiente do host, nunca commitar. O `NEXT_PUBLIC_IBAN` não é secreto (é mostrado ao utilizador), mas continua a ser configuração de ambiente.
 
+### 1.4 Supabase Storage — fotos de atletas e logótipos de clube
+
+| Variável | Descrição |
+|----------|-----------|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL do projeto Supabase (`https://<ref>.supabase.co`) — Project Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Chave `service_role` — **server-only** (nunca `NEXT_PUBLIC_*`), usada só por `lib/supabase-storage.ts` |
+
+Criar em **Supabase → Storage** dois buckets **públicos**: `atletas` (fotos de atletas, §8.5) e `clubes` (logótipos de clube, §8.3). Os ficheiros são re-encodados para WebP no servidor (logótipos ≤2 MB à entrada); a BD guarda apenas o URL público. Sem as variáveis ou sem o bucket, o upload devolve um erro claro e o campo por URL continua a funcionar.
+
 ## 2. Migrações da base de dados
 
 O Prisma usa sempre o `DIRECT_URL` (5432) para qualquer operação de migração — não é preciso alterar variáveis nem scripts entre ambientes; muda apenas o **comando**.
