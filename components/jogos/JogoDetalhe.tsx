@@ -38,7 +38,6 @@ import {
 import { parseRelatorio, serializarRelatorio } from "@/lib/relatorio-jogo";
 import { MINUTOS_POR_PARTE } from "@/lib/estatisticas";
 import { PlanoTatico } from "@/components/jogos/PlanoTatico";
-import { EditorMinutosPorParte } from "@/components/jogos/EditorMinutosPorParte";
 import { ScoutingJogo } from "@/components/jogos/ScoutingJogo";
 import { TimelineEventos, type EventoTimeline } from "@/components/jogos/TimelineEventos";
 import type { DiagramaCampo } from "@/lib/schemas/exercicio";
@@ -286,12 +285,25 @@ export function JogoDetalhe({
   // (2 × minutos-por-parte do formato) é quase de certeza um erro de digitação.
   const duracaoMaxRazoavel = formato ? MINUTOS_POR_PARTE[formato] * 2 : null;
 
-  const linhasMinutosPorParte = convocadosLista.map((a) => ({
-    atletaId: a.id,
-    nome: a.nome,
-    numero: a.numero,
-    minutosPorParte: partesNormalizadas(estatDe(a.id).minutosPorParte),
-  }));
+  // Índices das partes do jogo (0 = Parte 1, …) — colunas de tempo de jogo da
+  // grelha consolidada de estatísticas.
+  const partes = Array.from({ length: Math.max(1, numeroPartes) }, (_, i) => i);
+  // Há pelo menos um guarda-redes nos convocados? Só então se mostram as colunas
+  // específicas de GR (defesas / golos sofridos) na grelha.
+  const haGuardaRedes = convocadosLista.some(
+    (a) => atletaPorId.get(a.id)?.eGR ?? false,
+  );
+
+  // Altera os minutos de UMA parte de um atleta, reconstruindo o array completo
+  // (comprimento = nº de partes; índices em falta → 0). O total é derivado da soma.
+  function alterarMinutoParte(atletaId: string, idx: number, valorStr: string) {
+    const arr = partesNormalizadas(estatDe(atletaId).minutosPorParte);
+    const v = valorStr.trim();
+    let n = v === "" ? 0 : Math.floor(Number(v));
+    if (!Number.isFinite(n) || n < 0) n = 0;
+    arr[idx] = n;
+    atualizarMinutosPorParte(atletaId, arr);
+  }
 
   function guardarEstat() {
     const payload = convocadosLista.map((a) => {
@@ -490,18 +502,6 @@ export function JogoDetalhe({
           </p>
         ) : (
           <>
-            {/* Editor de tempo de jogo por parte: minutos absolutos por cada parte
-                do jogo + total (soma automática). Substitui o antigo editor
-                entrada/saída e o seletor de bloco de tempo. Pré-preenchido com o
-                valor persistido/derivado (§8.11); o total viaja no guardar. */}
-            {linhasMinutosPorParte.length > 0 && (
-              <EditorMinutosPorParte
-                numeroPartes={numeroPartes}
-                linhas={linhasMinutosPorParte}
-                duracaoMaxRazoavel={duracaoMaxRazoavel}
-                onChange={atualizarMinutosPorParte}
-              />
-            )}
             {(() => {
               const somaGolos = convocadosLista.reduce(
                 (acc, a) => acc + (estatDe(a.id).golos ?? 0),
@@ -518,148 +518,289 @@ export function JogoDetalhe({
               }
               return null;
             })()}
-            <div className="space-y-3">
-              {convocadosLista.map((a) => {
-                const e = estatDe(a.id);
-                const eGR = atletaPorId.get(a.id)?.eGR ?? false;
-                return (
-                  <div
-                    key={a.id}
-                    className="rounded-md border border-cinza-200 bg-white p-3 shadow-card"
-                  >
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-corpo font-medium text-cinza-900">
-                        {a.numero != null && (
-                          <span className="mr-1 text-cinza-400">#{a.numero}</span>
-                        )}
-                        {a.nome}
-                        {eGR && <span className="ml-1 text-legenda text-cinza-500">(GR)</span>}
-                      </p>
-                      <Select
-                        value={e.utilizacao}
-                        onValueChange={(v) => atualizarEstat(a.id, { utilizacao: v as Utilizacao })}
-                      >
-                        <SelectTrigger className="w-40" aria-label={`Utilização de ${a.nome}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(["TITULAR", "UTILIZADO", "NAO_UTILIZADO"] as const).map((u) => (
-                            <SelectItem key={u} value={u}>
-                              {LABEL_UTILIZACAO[u]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {/* Núcleo específico do GR (defesas / golos sofridos), comum às
-                          duas modalidades (§10.8). */}
-                      {eGR && (
-                        <>
-                          <CampoNum
-                            label="Defesas"
-                            valor={e.defesas}
-                            onChange={(n) => atualizarEstat(a.id, { defesas: n })}
-                          />
-                          <CampoNum
-                            label="Golos sofridos"
-                            valor={e.golosSofridosGR}
-                            onChange={(n) => atualizarEstat(a.id, { golosSofridosGR: n })}
-                          />
-                        </>
-                      )}
-                      {/* Golos/assistências: só se mostram para jogadores de campo
-                          (mantém o comportamento de futsal — GR não os edita). */}
-                      {!eGR && (
-                        <>
-                          <CampoNum
-                            label="Golos"
-                            valor={e.golos}
-                            onChange={(n) => atualizarEstat(a.id, { golos: n ?? 0 })}
-                          />
-                          <CampoNum
-                            label="Assistências"
-                            valor={e.assistencias}
-                            onChange={(n) => atualizarEstat(a.id, { assistencias: n ?? 0 })}
-                          />
-                        </>
-                      )}
-                      {eFutebol ? (
-                        // 🥅 §10.8: núcleo de futebol substitui as faltas por parte.
-                        <>
-                          <CampoNum
-                            label="Remates"
-                            valor={e.remates}
-                            onChange={(n) => atualizarEstat(a.id, { remates: n })}
-                          />
-                          <CampoNum
-                            label="Cantos"
-                            valor={e.cantos}
-                            onChange={(n) => atualizarEstat(a.id, { cantos: n })}
-                          />
-                          <CampoNum
-                            label="Foras-de-jogo"
-                            valor={e.forasDeJogo}
-                            onChange={(n) => atualizarEstat(a.id, { forasDeJogo: n })}
-                          />
-                          <CampoNum
-                            label="Desarmes"
-                            valor={e.desarmes}
-                            onChange={(n) => atualizarEstat(a.id, { desarmes: n })}
-                          />
-                        </>
-                      ) : (
-                        // ⚽ Futsal: faltas cometidas por atleta.
-                        <CampoNum
-                          label="Faltas"
-                          valor={e.faltasCometidas}
-                          onChange={(n) => atualizarEstat(a.id, { faltasCometidas: n })}
-                        />
-                      )}
-                      {/* Disciplina (§3.7): cartões — comuns a futsal e futebol,
-                          mas ocultos na formação jovem (não aplicáveis a menores). */}
-                      {!escalaoJovem && (
-                        <>
-                          <CampoNum
-                            label={
-                              <>
-                                <span aria-hidden>🟨</span> Cartão amarelo
-                              </>
-                            }
-                            valor={e.cartaoAmarelo}
-                            max={5}
-                            onChange={(n) => atualizarEstat(a.id, { cartaoAmarelo: n ?? 0 })}
-                          />
-                          <CampoNum
-                            label={
-                              <>
-                                <span aria-hidden>🟥</span> Cartão vermelho
-                              </>
-                            }
-                            valor={e.cartaoVermelho}
-                            max={2}
-                            onChange={(n) => atualizarEstat(a.id, { cartaoVermelho: n ?? 0 })}
-                          />
-                        </>
-                      )}
-                    </div>
-
-                    {/* Métricas configuráveis */}
-                    {metricas.length > 0 && (
-                      <div className="mt-2 grid grid-cols-2 gap-2 border-t border-cinza-100 pt-2 sm:grid-cols-4">
-                        {metricas.map((m) => (
-                          <CampoMetrica
-                            key={m.id}
-                            metrica={m}
-                            valor={e.valoresMetricas[m.id] ?? null}
-                            onChange={(n) => atualizarMetrica(a.id, m.id, n)}
-                          />
-                        ))}
-                      </div>
+            {/* Grelha consolidada (§8.11): UMA linha por atleta com o tempo de
+                jogo (minutos por parte + total automático) e todas as
+                estatísticas — estado, golos/assistências, núcleo de GR,
+                faltas/núcleo de futebol, disciplina e métricas de jogo. Substitui
+                os dois quadros separados (editor de minutos + cards por atleta). */}
+            <div className="overflow-x-auto rounded-lg border border-cinza-200 bg-white shadow-card">
+              <table className="w-full text-corpo-sec">
+                <thead>
+                  <tr className="border-b border-cinza-100 text-left text-legenda uppercase tracking-wide text-cinza-500">
+                    <th className="sticky left-0 z-10 bg-white py-2 px-3 font-medium">
+                      Atleta
+                    </th>
+                    <th className="py-2 px-2 font-medium">Estado</th>
+                    {partes.map((p) => (
+                      <th key={p} className="w-16 py-2 px-1 text-center font-medium">
+                        Parte {p + 1}
+                      </th>
+                    ))}
+                    <th className="w-14 py-2 px-1 text-center font-medium">Total</th>
+                    <th className="w-16 py-2 px-1 text-center font-medium">Golos</th>
+                    <th className="w-16 py-2 px-1 text-center font-medium">Assist.</th>
+                    {haGuardaRedes && (
+                      <>
+                        <th className="w-16 py-2 px-1 text-center font-medium">Defesas</th>
+                        <th className="w-16 py-2 px-1 text-center font-medium">Sofridos</th>
+                      </>
                     )}
-                  </div>
-                );
-              })}
+                    {eFutebol ? (
+                      <>
+                        <th className="w-16 py-2 px-1 text-center font-medium">Remates</th>
+                        <th className="w-16 py-2 px-1 text-center font-medium">Cantos</th>
+                        <th className="w-16 py-2 px-1 text-center font-medium">Foras</th>
+                        <th className="w-16 py-2 px-1 text-center font-medium">Desarmes</th>
+                      </>
+                    ) : (
+                      <th className="w-16 py-2 px-1 text-center font-medium">Faltas</th>
+                    )}
+                    {!escalaoJovem && (
+                      <>
+                        <th
+                          className="w-16 py-2 px-1 text-center font-medium"
+                          title="Cartões amarelos"
+                        >
+                          <span aria-hidden>🟨</span>
+                          <span className="sr-only">Cartões amarelos</span>
+                        </th>
+                        <th
+                          className="w-16 py-2 px-1 text-center font-medium"
+                          title="Cartões vermelhos"
+                        >
+                          <span aria-hidden>🟥</span>
+                          <span className="sr-only">Cartões vermelhos</span>
+                        </th>
+                      </>
+                    )}
+                    {metricas.map((m) => (
+                      <th key={m.id} className="py-2 px-1 text-center font-medium">
+                        {m.nome}
+                        {!m.ativa && (
+                          <span className="ml-1 normal-case text-cinza-400">(inativa)</span>
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {convocadosLista.map((a) => {
+                    const e = estatDe(a.id);
+                    const eGR = atletaPorId.get(a.id)?.eGR ?? false;
+                    const mins = partesNormalizadas(e.minutosPorParte);
+                    const total = mins.reduce((acc, m) => acc + m, 0);
+                    return (
+                      <tr
+                        key={a.id}
+                        className="border-b border-cinza-50 align-middle last:border-0"
+                      >
+                        <td className="sticky left-0 z-10 whitespace-nowrap bg-white py-2 px-3 text-cinza-900">
+                          {a.numero != null && (
+                            <span className="mr-1 text-cinza-400">#{a.numero}</span>
+                          )}
+                          {a.nome}
+                          {eGR && (
+                            <span className="ml-1 text-legenda text-cinza-500">(GR)</span>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <Select
+                            value={e.utilizacao}
+                            onValueChange={(v) =>
+                              atualizarEstat(a.id, { utilizacao: v as Utilizacao })
+                            }
+                          >
+                            <SelectTrigger
+                              className="h-10 w-36"
+                              aria-label={`Utilização de ${a.nome}`}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(["TITULAR", "UTILIZADO", "NAO_UTILIZADO"] as const).map(
+                                (u) => (
+                                  <SelectItem key={u} value={u}>
+                                    {LABEL_UTILIZACAO[u]}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        {partes.map((p) => {
+                          const valor = mins[p];
+                          const acimaMax =
+                            duracaoMaxRazoavel != null && valor > duracaoMaxRazoavel;
+                          return (
+                            <td key={p} className="py-1.5 px-1 text-center">
+                              <Input
+                                type="number"
+                                min={0}
+                                inputMode="numeric"
+                                value={valor}
+                                aria-label={`Parte ${p + 1} de ${a.nome} (minutos)`}
+                                title={
+                                  acimaMax
+                                    ? "Valor elevado para uma parte — confirma."
+                                    : undefined
+                                }
+                                onChange={(ev) =>
+                                  alterarMinutoParte(a.id, p, ev.target.value)
+                                }
+                                className={`mx-auto h-10 w-14 text-center ${
+                                  acimaMax
+                                    ? "border-ambar-500 focus-visible:ring-ambar-500"
+                                    : ""
+                                }`}
+                              />
+                            </td>
+                          );
+                        })}
+                        <td className="py-1.5 px-1 text-center font-semibold tabular-nums text-cinza-900">
+                          {total}′
+                        </td>
+                        {/* Golos/assistências: editáveis só para jogadores de campo
+                            (GR mantém o comportamento existente — não os edita). */}
+                        <td className="py-1.5 px-1 text-center">
+                          {eGR ? (
+                            <CelulaVazia />
+                          ) : (
+                            <CelulaNum
+                              valor={e.golos}
+                              ariaLabel={`Golos de ${a.nome}`}
+                              onChange={(n) => atualizarEstat(a.id, { golos: n ?? 0 })}
+                            />
+                          )}
+                        </td>
+                        <td className="py-1.5 px-1 text-center">
+                          {eGR ? (
+                            <CelulaVazia />
+                          ) : (
+                            <CelulaNum
+                              valor={e.assistencias}
+                              ariaLabel={`Assistências de ${a.nome}`}
+                              onChange={(n) =>
+                                atualizarEstat(a.id, { assistencias: n ?? 0 })
+                              }
+                            />
+                          )}
+                        </td>
+                        {/* Núcleo específico do GR (defesas / golos sofridos),
+                            comum às duas modalidades (§10.8). */}
+                        {haGuardaRedes && (
+                          <>
+                            <td className="py-1.5 px-1 text-center">
+                              {eGR ? (
+                                <CelulaNum
+                                  valor={e.defesas}
+                                  ariaLabel={`Defesas de ${a.nome}`}
+                                  onChange={(n) => atualizarEstat(a.id, { defesas: n })}
+                                />
+                              ) : (
+                                <CelulaVazia />
+                              )}
+                            </td>
+                            <td className="py-1.5 px-1 text-center">
+                              {eGR ? (
+                                <CelulaNum
+                                  valor={e.golosSofridosGR}
+                                  ariaLabel={`Golos sofridos de ${a.nome}`}
+                                  onChange={(n) =>
+                                    atualizarEstat(a.id, { golosSofridosGR: n })
+                                  }
+                                />
+                              ) : (
+                                <CelulaVazia />
+                              )}
+                            </td>
+                          </>
+                        )}
+                        {eFutebol ? (
+                          // 🥅 §10.8: núcleo de futebol substitui as faltas por parte.
+                          <>
+                            <td className="py-1.5 px-1 text-center">
+                              <CelulaNum
+                                valor={e.remates}
+                                ariaLabel={`Remates de ${a.nome}`}
+                                onChange={(n) => atualizarEstat(a.id, { remates: n })}
+                              />
+                            </td>
+                            <td className="py-1.5 px-1 text-center">
+                              <CelulaNum
+                                valor={e.cantos}
+                                ariaLabel={`Cantos de ${a.nome}`}
+                                onChange={(n) => atualizarEstat(a.id, { cantos: n })}
+                              />
+                            </td>
+                            <td className="py-1.5 px-1 text-center">
+                              <CelulaNum
+                                valor={e.forasDeJogo}
+                                ariaLabel={`Foras-de-jogo de ${a.nome}`}
+                                onChange={(n) => atualizarEstat(a.id, { forasDeJogo: n })}
+                              />
+                            </td>
+                            <td className="py-1.5 px-1 text-center">
+                              <CelulaNum
+                                valor={e.desarmes}
+                                ariaLabel={`Desarmes de ${a.nome}`}
+                                onChange={(n) => atualizarEstat(a.id, { desarmes: n })}
+                              />
+                            </td>
+                          </>
+                        ) : (
+                          // ⚽ Futsal: faltas cometidas por atleta.
+                          <td className="py-1.5 px-1 text-center">
+                            <CelulaNum
+                              valor={e.faltasCometidas}
+                              ariaLabel={`Faltas de ${a.nome}`}
+                              onChange={(n) =>
+                                atualizarEstat(a.id, { faltasCometidas: n })
+                              }
+                            />
+                          </td>
+                        )}
+                        {/* Disciplina (§3.7): cartões — comuns a futsal e futebol,
+                            mas ocultos na formação jovem (não aplicáveis a menores). */}
+                        {!escalaoJovem && (
+                          <>
+                            <td className="py-1.5 px-1 text-center">
+                              <CelulaNum
+                                valor={e.cartaoAmarelo}
+                                max={5}
+                                ariaLabel={`Cartões amarelos de ${a.nome}`}
+                                onChange={(n) =>
+                                  atualizarEstat(a.id, { cartaoAmarelo: n ?? 0 })
+                                }
+                              />
+                            </td>
+                            <td className="py-1.5 px-1 text-center">
+                              <CelulaNum
+                                valor={e.cartaoVermelho}
+                                max={2}
+                                ariaLabel={`Cartões vermelhos de ${a.nome}`}
+                                onChange={(n) =>
+                                  atualizarEstat(a.id, { cartaoVermelho: n ?? 0 })
+                                }
+                              />
+                            </td>
+                          </>
+                        )}
+                        {/* Métricas configuráveis de jogo (§8.20) */}
+                        {metricas.map((m) => (
+                          <td key={m.id} className="py-1.5 px-1 text-center">
+                            <CampoMetrica
+                              metrica={m}
+                              valor={e.valoresMetricas[m.id] ?? null}
+                              onChange={(n) => atualizarMetrica(a.id, m.id, n)}
+                              ocultarLabel
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
             <div className="flex justify-end">
               <Button onClick={guardarEstat} disabled={pendingEstat}>
@@ -799,43 +940,52 @@ export function JogoDetalhe({
   );
 }
 
-function CampoNum({
-  label,
+/**
+ * Célula numérica da grelha consolidada de estatísticas. O cabeçalho da coluna
+ * dá o rótulo visual; o `ariaLabel` garante a leitura por atleta (acessibilidade).
+ * Mantém a lógica de limpar (vazio → null), teto `max` e piso 0 do antigo CampoNum.
+ */
+function CelulaNum({
   valor,
   onChange,
+  ariaLabel,
   max,
 }: {
-  label: React.ReactNode;
   valor: number | null;
   onChange: (n: number | null) => void;
+  ariaLabel: string;
   max?: number;
 }) {
-  const id = useId();
   return (
-    <div className="space-y-1">
-      <label htmlFor={id} className="text-legenda text-cinza-500">
-        {label}
-      </label>
-      <Input
-        id={id}
-        type="number"
-        min={0}
-        max={max}
-        value={valor ?? ""}
-        onChange={(e) => {
-          const v = e.target.value.trim();
-          if (v === "") {
-            onChange(null);
-            return;
-          }
-          let n = Number(v);
-          if (max != null && n > max) n = max;
-          if (n < 0) n = 0;
-          onChange(n);
-        }}
-        className="h-9"
-      />
-    </div>
+    <Input
+      type="number"
+      min={0}
+      max={max}
+      inputMode="numeric"
+      value={valor ?? ""}
+      aria-label={ariaLabel}
+      onChange={(e) => {
+        const v = e.target.value.trim();
+        if (v === "") {
+          onChange(null);
+          return;
+        }
+        let n = Number(v);
+        if (max != null && n > max) n = max;
+        if (n < 0) n = 0;
+        onChange(n);
+      }}
+      className="mx-auto h-10 w-14 text-center"
+    />
+  );
+}
+
+/** Marcador «—» para colunas não aplicáveis a um atleta (ex.: golos num GR). */
+function CelulaVazia() {
+  return (
+    <span className="text-cinza-300" aria-hidden>
+      —
+    </span>
   );
 }
 
@@ -843,10 +993,14 @@ function CampoMetrica({
   metrica,
   valor,
   onChange,
+  ocultarLabel = false,
 }: {
   metrica: Metrica;
   valor: number | null;
   onChange: (n: number | null) => void;
+  // Na grelha consolidada de estatísticas o rótulo vive no cabeçalho da coluna;
+  // `ocultarLabel` suprime o rótulo próprio e usa `aria-label` para acessibilidade.
+  ocultarLabel?: boolean;
 }) {
   const id = useId();
   const renderLabel = (htmlFor?: string) => (
@@ -855,100 +1009,101 @@ function CampoMetrica({
       {!metrica.ativa && <span className="ml-1 text-cinza-400">(inativa)</span>}
     </label>
   );
+  // Envolve o controlo: com rótulo próprio (cartão) ou só o controlo (célula).
+  const envolver = (controlo: React.ReactNode, label?: React.ReactNode) =>
+    ocultarLabel ? controlo : <div className="space-y-1">{label}{controlo}</div>;
 
   // BOOLEANO: sim/não → 1/0
   if (metrica.tipo === "BOOLEANO") {
-    return (
-      <div className="space-y-1">
-        {renderLabel(id)}
-        <Select
-          value={valor == null ? "" : String(valor)}
-          onValueChange={(v) => onChange(v === "" ? null : Number(v))}
+    return envolver(
+      <Select
+        value={valor == null ? "" : String(valor)}
+        onValueChange={(v) => onChange(v === "" ? null : Number(v))}
+      >
+        <SelectTrigger
+          id={ocultarLabel ? undefined : id}
+          className={ocultarLabel ? "mx-auto h-10 w-24" : "h-9"}
+          aria-label={ocultarLabel ? metrica.nome : undefined}
         >
-          <SelectTrigger id={id} className="h-9">
-            <SelectValue placeholder="—" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="1">Sim</SelectItem>
-            <SelectItem value="0">Não</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+          <SelectValue placeholder="—" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="1">Sim</SelectItem>
+          <SelectItem value="0">Não</SelectItem>
+        </SelectContent>
+      </Select>,
+      renderLabel(id),
     );
   }
 
   // ESCALA: 1 a 5
   if (metrica.tipo === "ESCALA") {
-    return (
-      <div className="space-y-1">
-        {renderLabel(id)}
-        <Select
-          value={valor == null ? "" : String(valor)}
-          onValueChange={(v) => onChange(v === "" ? null : Number(v))}
+    return envolver(
+      <Select
+        value={valor == null ? "" : String(valor)}
+        onValueChange={(v) => onChange(v === "" ? null : Number(v))}
+      >
+        <SelectTrigger
+          id={ocultarLabel ? undefined : id}
+          className={ocultarLabel ? "mx-auto h-10 w-20" : "h-9"}
+          aria-label={ocultarLabel ? metrica.nome : undefined}
         >
-          <SelectTrigger id={id} className="h-9">
-            <SelectValue placeholder="—" />
-          </SelectTrigger>
-          <SelectContent>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <SelectItem key={n} value={String(n)}>
-                {n}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+          <SelectValue placeholder="—" />
+        </SelectTrigger>
+        <SelectContent>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <SelectItem key={n} value={String(n)}>
+              {n}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>,
+      renderLabel(id),
     );
   }
 
   // ESCALA_1_3: 1 a 3 → botões toggle inline
   if (metrica.tipo === "ESCALA_1_3") {
-    return (
-      <div className="space-y-1">
-        {renderLabel()}
-        <div
-          className="flex gap-1.5"
-          role="group"
-          aria-label={metrica.nome}
-        >
-          {[1, 2, 3].map((n) => {
-            const ativo = valor === n;
-            return (
-              <button
-                key={n}
-                type="button"
-                aria-pressed={ativo}
-                onClick={() => onChange(ativo ? null : n)}
-                className={`flex h-11 min-w-[44px] flex-1 items-center justify-center rounded-md border text-corpo font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
-                  ativo
-                    ? "border-primary bg-primary text-white"
-                    : "border-cinza-200 text-cinza-700 hover:bg-primary/5"
-                }`}
-              >
-                {n}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+    return envolver(
+      <div className="flex gap-1.5" role="group" aria-label={metrica.nome}>
+        {[1, 2, 3].map((n) => {
+          const ativo = valor === n;
+          return (
+            <button
+              key={n}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => onChange(ativo ? null : n)}
+              className={`flex h-11 min-w-[44px] flex-1 items-center justify-center rounded-md border text-corpo font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                ativo
+                  ? "border-primary bg-primary text-white"
+                  : "border-cinza-200 text-cinza-700 hover:bg-primary/5"
+              }`}
+            >
+              {n}
+            </button>
+          );
+        })}
+      </div>,
+      renderLabel(),
     );
   }
 
   // NUMERO
-  return (
-    <div className="space-y-1">
-      {renderLabel(id)}
-      <Input
-        id={id}
-        type="number"
-        min={0}
-        value={valor ?? ""}
-        onChange={(e) => {
-          const v = e.target.value.trim();
-          onChange(v === "" ? null : Number(v));
-        }}
-        className="h-9"
-      />
-    </div>
+  return envolver(
+    <Input
+      id={ocultarLabel ? undefined : id}
+      type="number"
+      min={0}
+      inputMode="numeric"
+      value={valor ?? ""}
+      aria-label={ocultarLabel ? metrica.nome : undefined}
+      onChange={(e) => {
+        const v = e.target.value.trim();
+        onChange(v === "" ? null : Number(v));
+      }}
+      className={ocultarLabel ? "mx-auto h-10 w-16 text-center" : "h-9"}
+    />,
+    renderLabel(id),
   );
 }

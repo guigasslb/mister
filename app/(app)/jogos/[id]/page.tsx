@@ -70,7 +70,10 @@ export default async function DetalheJogoPage({
   const j = res.dados;
   const [resAtletas, resMetricas, membro, resQuadros] = await Promise.all([
     listarAtletas(j.escalaoId),
-    listarMetricas(true),
+    // §8.20: só métricas de contexto JOGO (ou AMBOS) entram na grelha de
+    // estatísticas do jogo. As de TREINO (ex.: dedicação na sessão) não fazem
+    // sentido num jogo e são filtradas aqui (a action já suporta o contexto).
+    listarMetricas(true, "JOGO"),
     obterMembroAtual(),
     listarQuadrosTaticos(j.id),
   ]);
