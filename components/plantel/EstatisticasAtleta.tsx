@@ -85,7 +85,7 @@ export function EstatisticasAtleta({
   return (
     <div className="space-y-6">
       {/* Stat tiles */}
-      <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
         {eGR ? (
           <>
             <Cartao valor={stats.totalDefesas ?? 0} label="defesas" />
@@ -99,6 +99,7 @@ export function EstatisticasAtleta({
         )}
         <Cartao valor={stats.jogosUtilizados} label="jogos" />
         <Cartao valor={stats.titularidades} label="titular" />
+        <Cartao valor={stats.jogosCapitao} label="capitão" />
         <Cartao valor={taxa} label="presenças" />
       </div>
 

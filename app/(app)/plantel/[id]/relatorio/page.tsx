@@ -75,6 +75,7 @@ export default async function RelatorioAtletaPage({
             )}
             <Cartao valor={resStats.dados.jogosUtilizados} label="jogos" />
             <Cartao valor={resStats.dados.titularidades} label="titular" />
+            <Cartao valor={resStats.dados.jogosCapitao} label="capitão" />
             <Cartao valor={`${Math.round(resStats.dados.taxaPresenca * 100)}%`} label="presenças" />
             {/* Minutos: `totalMinutos` (registo minuto-a-minuto) tem prioridade;
                 quando o tempo é registado por blocos, `totalMinutos` é null e o

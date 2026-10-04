@@ -739,25 +739,21 @@ export async function obterEstatisticasAtleta(
   // Divisor da taxa de presença: sessões desde o ingresso (secção 22.3).
   const ingresso = atleta.dataIngresso ?? atleta.criadoEm;
 
-  const [jogosConvocado, estatisticas, sessoesTotais, presencas] = await Promise.all([
+  const filtroJogo = {
+    epocaId: epoca.id,
+    ...(escalaoCtx ? { escalaoId: escalaoCtx } : {}),
+  };
+
+  const [jogosConvocado, jogosCapitao, estatisticas, sessoesTotais, presencas] = await Promise.all([
     prisma.convocatoria.count({
-      where: {
-        convocado: true,
-        atletaId: id,
-        jogo: {
-          epocaId: epoca.id,
-          ...(escalaoCtx ? { escalaoId: escalaoCtx } : {}),
-        },
-      },
+      where: { convocado: true, atletaId: id, jogo: filtroJogo },
+    }),
+    // Capitão de equipa (§11.5): mesmo critério de jogo que `jogosConvocado`.
+    prisma.convocatoria.count({
+      where: { convocado: true, capitao: true, atletaId: id, jogo: filtroJogo },
     }),
     prisma.estatisticaAtleta.findMany({
-      where: {
-        atletaId: id,
-        jogo: {
-          epocaId: epoca.id,
-          ...(escalaoCtx ? { escalaoId: escalaoCtx } : {}),
-        },
-      },
+      where: { atletaId: id, jogo: filtroJogo },
     }),
     // Sessões do escalão de contexto na época, a partir do ingresso (secção 22.3).
     // Só sessões NORMAL contam para assiduidade — CAPTACAO/EVENTO/ABERTO não
@@ -789,6 +785,7 @@ export async function obterEstatisticasAtleta(
     agregarEstatisticas({
       eGR,
       jogosConvocado,
+      jogosCapitao,
       sessoesTotais,
       presencas,
       estatisticas,

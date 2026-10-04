@@ -461,6 +461,7 @@ export async function obterAnaliticoAtleta(
 
   const [
     jogosConvocado,
+    jogosCapitao,
     estatisticas,
     sessoes,
     presencas,
@@ -470,6 +471,10 @@ export async function obterAnaliticoAtleta(
   ] = await Promise.all([
       prisma.convocatoria.count({
         where: { convocado: true, atletaId, jogo: filtroJogo },
+      }),
+      // Capitão de equipa (§11.5): mesmo critério de jogo que `jogosConvocado`.
+      prisma.convocatoria.count({
+        where: { convocado: true, capitao: true, atletaId, jogo: filtroJogo },
       }),
       prisma.estatisticaAtleta.findMany({
         where: { atletaId, jogo: filtroJogo },
@@ -568,6 +573,7 @@ export async function obterAnaliticoAtleta(
   const agregado = agregarEstatisticas({
     eGR,
     jogosConvocado,
+    jogosCapitao,
     sessoesTotais: sessoesExecutadas,
     presencas: presencas.length,
     estatisticas: linhas,
@@ -698,9 +704,13 @@ export async function obterResumoAtletaParaComparacao(
   const ingresso = atleta.dataIngresso ?? atleta.criadoEm;
   const filtroJogo = { epocaId, escalaoId };
 
-  const [jogosConvocado, estatisticas, sessoes, presencas] = await Promise.all([
+  const [jogosConvocado, jogosCapitao, estatisticas, sessoes, presencas] = await Promise.all([
     prisma.convocatoria.count({
       where: { convocado: true, atletaId, jogo: filtroJogo },
+    }),
+    // Capitão de equipa (§11.5): mesmo critério de jogo que `jogosConvocado`.
+    prisma.convocatoria.count({
+      where: { convocado: true, capitao: true, atletaId, jogo: filtroJogo },
     }),
     prisma.estatisticaAtleta.findMany({
       where: { atletaId, jogo: filtroJogo },
@@ -757,6 +767,7 @@ export async function obterResumoAtletaParaComparacao(
   const agregado = agregarEstatisticas({
     eGR,
     jogosConvocado,
+    jogosCapitao,
     sessoesTotais: sessoesExecutadas,
     presencas: presencas.length,
     estatisticas: linhas,

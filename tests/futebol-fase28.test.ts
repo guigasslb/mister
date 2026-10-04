@@ -83,6 +83,7 @@ describe("agregarEstatisticas — tempoJogoAcumulado por formato (§10.8)", () =
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 2,
+      jogosCapitao: 0,
       sessoesTotais: 0,
       presencas: 0,
       estatisticas: [
@@ -97,6 +98,7 @@ describe("agregarEstatisticas — tempoJogoAcumulado por formato (§10.8)", () =
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 1,
+      jogosCapitao: 0,
       sessoesTotais: 0,
       presencas: 0,
       estatisticas: [linha({ blocoTempo: "JOGO_COMPLETO" })],

@@ -23,6 +23,7 @@ describe("agregarEstatisticas — jogador de campo", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 3,
+      jogosCapitao: 0,
       sessoesTotais: 10,
       presencas: 8,
       estatisticas: [
@@ -42,6 +43,7 @@ describe("agregarEstatisticas — jogador de campo", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 1,
+      jogosCapitao: 0,
       sessoesTotais: 1,
       presencas: 1,
       estatisticas: [linha({ defesas: 5, golosSofridosGR: 2 })],
@@ -51,11 +53,27 @@ describe("agregarEstatisticas — jogador de campo", () => {
   });
 });
 
+describe("agregarEstatisticas — jogosCapitao (§11.5)", () => {
+  it("devolve o nº de jogos como capitão tal como recebido", () => {
+    const r = agregarEstatisticas({
+      eGR: false,
+      jogosConvocado: 5,
+      jogosCapitao: 2,
+      sessoesTotais: 0,
+      presencas: 0,
+      estatisticas: [],
+    });
+    expect(r.jogosCapitao).toBe(2);
+    expect(r.jogosConvocado).toBe(5);
+  });
+});
+
 describe("agregarEstatisticas — guarda-redes", () => {
   it("soma defesas e golos sofridos quando é GR", () => {
     const r = agregarEstatisticas({
       eGR: true,
       jogosConvocado: 2,
+      jogosCapitao: 0,
       sessoesTotais: 4,
       presencas: 4,
       estatisticas: [
@@ -73,6 +91,7 @@ describe("agregarEstatisticas — totalMinutos (secção 15.2)", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 2,
+      jogosCapitao: 0,
       sessoesTotais: 0,
       presencas: 0,
       estatisticas: [linha({ minutos: null }), linha({ minutos: null })],
@@ -84,6 +103,7 @@ describe("agregarEstatisticas — totalMinutos (secção 15.2)", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 2,
+      jogosCapitao: 0,
       sessoesTotais: 0,
       presencas: 0,
       estatisticas: [linha({ minutos: 18 }), linha({ minutos: null }), linha({ minutos: 12 })],
@@ -95,6 +115,7 @@ describe("agregarEstatisticas — totalMinutos (secção 15.2)", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 1,
+      jogosCapitao: 0,
       sessoesTotais: 0,
       presencas: 0,
       estatisticas: [linha({ minutos: 0 })],
@@ -108,6 +129,7 @@ describe("agregarEstatisticas — taxaPresenca (secção 15.2 / 22.3)", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 0,
+      jogosCapitao: 0,
       sessoesTotais: 0,
       presencas: 0,
       estatisticas: [],
@@ -119,6 +141,7 @@ describe("agregarEstatisticas — taxaPresenca (secção 15.2 / 22.3)", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 0,
+      jogosCapitao: 0,
       sessoesTotais: 10,
       presencas: 8,
       estatisticas: [],
@@ -131,6 +154,7 @@ describe("agregarEstatisticas — taxaPresenca (secção 15.2 / 22.3)", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 0,
+      jogosCapitao: 0,
       sessoesTotais: 5,
       presencas: 5,
       estatisticas: [],

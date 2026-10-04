@@ -10,6 +10,7 @@ import {
   Handshake,
   Swords,
   Star,
+  Crown,
   Percent,
   Clock,
   Crosshair,
@@ -244,6 +245,7 @@ export function PainelAtleta({
         )}
         <CartaoKpi valor={agregado.jogosUtilizados} label="jogos" icon={Swords} cor="primary" />
         <CartaoKpi valor={agregado.titularidades} label="titular" icon={Star} cor="ambar" />
+        <CartaoKpi valor={agregado.jogosCapitao} label="capitão" icon={Crown} cor="ambar" />
         <CartaoKpi
           valor={
             <>
@@ -508,6 +510,11 @@ function ComparacaoDirecta({
   const linhas: { label: string; a: string | number; b: string | number }[] = [
     { label: "Golos", a: atletaA.agregado.totalGolos, b: atletaB.agregado.totalGolos },
     { label: "Jogos", a: atletaA.agregado.jogosUtilizados, b: atletaB.agregado.jogosUtilizados },
+    {
+      label: "Jogos como capitão",
+      a: atletaA.agregado.jogosCapitao,
+      b: atletaB.agregado.jogosCapitao,
+    },
     {
       label: "Presenças",
       a: pct(atletaA.agregado.taxaPresenca),

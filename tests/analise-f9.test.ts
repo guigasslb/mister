@@ -43,6 +43,7 @@ vi.mock("@/lib/db", () => ({
 
 import {
   obterAnaliticoAtleta,
+  obterResumoAtletaParaComparacao,
   obterAnaliticoEscalao,
   obterCompeticoesEscalao,
   obterAnaliticoClubeEpoca,
@@ -52,7 +53,7 @@ import {
   revogarRelatorioPartilhado,
 } from "@/lib/actions/analise";
 import { blocoParaMinutos, MINUTOS_POR_BLOCO, agregarEstatisticas } from "@/lib/estatisticas";
-import { obterEpocaAtiva } from "@/lib/epoca-context";
+import { obterClubeIdAtual, obterEpocaAtiva } from "@/lib/epoca-context";
 import {
   obterMembroAtual,
   podeLerEscalao,
@@ -144,6 +145,7 @@ describe("agregarEstatisticas — tempoJogoAcumulado", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 3,
+      jogosCapitao: 0,
       sessoesTotais: 0,
       presencas: 0,
       estatisticas: [
@@ -159,6 +161,7 @@ describe("agregarEstatisticas — tempoJogoAcumulado", () => {
     const r = agregarEstatisticas({
       eGR: false,
       jogosConvocado: 0,
+      jogosCapitao: 0,
       sessoesTotais: 0,
       presencas: 0,
       estatisticas: [],
@@ -170,6 +173,40 @@ describe("agregarEstatisticas — tempoJogoAcumulado", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Nível 1 — atleta
 // ─────────────────────────────────────────────────────────────────────────────
+
+describe("obterResumoAtletaParaComparacao — jogosCapitao (§11.5)", () => {
+  it("conta jogos como capitão no escalão/época pedidos, simétrico a jogosConvocado", async () => {
+    (obterClubeIdAtual as ReturnType<typeof vi.fn>).mockResolvedValue(CLUBE);
+    p.atleta.findFirst.mockResolvedValue({
+      nome: "João",
+      posicoes: ["ALA"],
+      criadoEm: new Date("2025-08-01"),
+      dataIngresso: null,
+    });
+    p.convocatoria.count.mockImplementation((arg: { where: { capitao?: boolean } }) =>
+      Promise.resolve(arg.where.capitao === true ? 2 : 6),
+    );
+    p.estatisticaAtleta.findMany.mockResolvedValue([]);
+    p.sessao.findMany.mockResolvedValue([]);
+    p.presenca.findMany.mockResolvedValue([]);
+
+    const r = await obterResumoAtletaParaComparacao(ATLETA, ESCALAO, EPOCA);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(r.dados.agregado.jogosCapitao).toBe(2);
+    expect(r.dados.agregado.jogosConvocado).toBe(6);
+
+    const wCap = p.convocatoria.count.mock.calls
+      .map((c) => (c[0] as { where: Record<string, unknown> }).where)
+      .find((w) => w.capitao === true);
+    expect(wCap).toEqual({
+      convocado: true,
+      capitao: true,
+      atletaId: ATLETA,
+      jogo: { epocaId: EPOCA, escalaoId: ESCALAO },
+    });
+  });
+});
 
 describe("obterAnaliticoAtleta", () => {
   it("nega sem capacidade RELATORIOS_VER", async () => {
@@ -226,6 +263,37 @@ describe("obterAnaliticoAtleta", () => {
     expect(r.dados.presencasMensais[0].taxa).toBeCloseTo(0.5);
     expect(r.dados.evolucaoJogos).toHaveLength(1);
     expect(r.dados.comparacaoEquipa).toBeNull();
+  });
+
+  it("devolve jogosCapitao com o mesmo filtro de jogo que jogosConvocado (§11.5)", async () => {
+    p.atleta.findFirst.mockResolvedValue({
+      id: ATLETA,
+      nome: "João",
+      posicoes: ["ALA"],
+      criadoEm: new Date("2025-08-01"),
+      dataIngresso: null,
+      participacoes: [{ escalaoId: ESCALAO, escalao: { nome: "Sub-13" } }],
+    });
+    p.convocatoria.count.mockImplementation((arg: { where: { capitao?: boolean } }) =>
+      Promise.resolve(arg.where.capitao === true ? 1 : 4),
+    );
+    p.estatisticaAtleta.findMany.mockResolvedValue([]);
+    p.sessao.findMany.mockResolvedValue([]);
+    p.presenca.findMany.mockResolvedValue([]);
+
+    const r = await obterAnaliticoAtleta(ATLETA, ESCALAO);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(r.dados.agregado.jogosCapitao).toBe(1);
+    expect(r.dados.agregado.jogosConvocado).toBe(4);
+
+    const wheres = p.convocatoria.count.mock.calls.map(
+      (c) => (c[0] as { where: Record<string, unknown> }).where,
+    );
+    const wConv = wheres.find((w) => w.capitao === undefined);
+    const wCap = wheres.find((w) => w.capitao === true);
+    expect(wCap).toMatchObject({ convocado: true, capitao: true, atletaId: ATLETA });
+    expect(wCap?.jogo).toEqual(wConv?.jogo);
   });
 
   it("agrega métricas configuráveis (NUMERO soma, BOOLEANO conta, ESCALA média)", async () => {

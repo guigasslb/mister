@@ -94,6 +94,8 @@ export function blocoParaMinutos(
 
 export interface EstatisticasAgregadas {
   jogosConvocado: number;
+  /** Jogos em que foi capitão de equipa (`Convocatoria.capitao`, §11.5) — subconjunto de `jogosConvocado`. */
+  jogosCapitao: number;
   jogosUtilizados: number;
   titularidades: number;
   totalGolos: number;
@@ -127,6 +129,7 @@ export interface LinhaEstatistica {
 export interface EntradaAgregacao {
   eGR: boolean;
   jogosConvocado: number;
+  jogosCapitao: number;
   sessoesTotais: number;
   presencas: number;
   estatisticas: LinhaEstatistica[];
@@ -144,7 +147,7 @@ export interface EntradaAgregacao {
  *    desde o ingresso do atleta (calculado a montante — secção 22.3).
  */
 export function agregarEstatisticas(entrada: EntradaAgregacao): EstatisticasAgregadas {
-  const { eGR, jogosConvocado, sessoesTotais, presencas, estatisticas } = entrada;
+  const { eGR, jogosConvocado, jogosCapitao, sessoesTotais, presencas, estatisticas } = entrada;
 
   const jogosUtilizados = estatisticas.filter(
     (e) => e.utilizacao !== "NAO_UTILIZADO",
@@ -181,6 +184,7 @@ export function agregarEstatisticas(entrada: EntradaAgregacao): EstatisticasAgre
 
   return {
     jogosConvocado,
+    jogosCapitao,
     jogosUtilizados,
     titularidades,
     totalGolos,

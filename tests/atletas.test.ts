@@ -202,6 +202,45 @@ describe("obterEstatisticasAtleta", () => {
     }
   });
 
+  it("devolve jogosCapitao contando só convocatórias com capitao=true (mesmo filtro de jogo que jogosConvocado)", async () => {
+    mocked(prisma.atleta.findFirst).mockResolvedValue({
+      ...ATLETA_BD,
+      posicoes: ["FIXO"],
+      criadoEm: new Date("2026-09-01"),
+      dataIngresso: null,
+      participacoes: [{ escalaoId: ESC_ID, tipo: "PRINCIPAL" }],
+    });
+    mocked(prisma.convocatoria.count).mockImplementation((...a: unknown[]) => {
+      const arg = a[0] as { where: { capitao?: boolean } };
+      return Promise.resolve(arg.where.capitao === true ? 3 : 7);
+    });
+    mocked(prisma.estatisticaAtleta.findMany).mockResolvedValue([]);
+    mocked(prisma.sessao.count).mockResolvedValue(0);
+    mocked(prisma.presenca.count).mockResolvedValue(0);
+
+    const r = await obterEstatisticasAtleta(CUID);
+    expect(r.sucesso).toBe(true);
+    if (r.sucesso) {
+      expect(r.dados.jogosCapitao).toBe(3);
+      expect(r.dados.jogosConvocado).toBe(7);
+    }
+
+    const wheres = calls(prisma.convocatoria.count).map(
+      (c) => (c[0] as { where: Record<string, unknown> }).where,
+    );
+    expect(wheres).toHaveLength(2);
+    const wConv = wheres.find((w) => w.capitao === undefined);
+    const wCap = wheres.find((w) => w.capitao === true);
+    expect(wCap).toEqual({
+      convocado: true,
+      capitao: true,
+      atletaId: CUID,
+      jogo: { epocaId: "ep1", escalaoId: ESC_ID },
+    });
+    // Simetria: o filtro de jogo (época ativa + escalão de contexto) é idêntico.
+    expect(wCap?.jogo).toEqual(wConv?.jogo);
+  });
+
   it("consulta Prisma filtrando pelo clube (isolamento multi-tenant)", async () => {
     mocked(prisma.atleta.findFirst).mockResolvedValue({
       ...ATLETA_BD,
