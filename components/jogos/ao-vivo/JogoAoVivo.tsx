@@ -523,6 +523,29 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
     else if (e.tipo === "GOLO_SOFRIDO") golosSofridos += 1;
   }
 
+  // Indicadores desportivos por atleta neste jogo (§8.25.3/§8.25.7), derivados dos
+  // mesmos eventos locais que alimentam o placar: GOLO (marcador em `atletaId`,
+  // assistente em `atletaSecundarioId`) e CARTAO_AMARELO. Só leitura — sem nova
+  // persistência (RN-JV-12: a outbox já guarda e sincroniza estes eventos).
+  const golosPorAtleta = new Map<string, number>();
+  const assistenciasPorAtleta = new Map<string, number>();
+  const cartoesAmarelosPorAtleta = new Map<string, number>();
+  for (const e of estado?.eventos ?? []) {
+    if (e.tipo === "GOLO") {
+      if (e.atletaId) golosPorAtleta.set(e.atletaId, (golosPorAtleta.get(e.atletaId) ?? 0) + 1);
+      if (e.atletaSecundarioId)
+        assistenciasPorAtleta.set(
+          e.atletaSecundarioId,
+          (assistenciasPorAtleta.get(e.atletaSecundarioId) ?? 0) + 1,
+        );
+    } else if (e.tipo === "CARTAO_AMARELO" && e.atletaId) {
+      cartoesAmarelosPorAtleta.set(
+        e.atletaId,
+        (cartoesAmarelosPorAtleta.get(e.atletaId) ?? 0) + 1,
+      );
+    }
+  }
+
   const minutosPorAtleta = new Map<string, number>();
   if (estado) {
     for (const m of calcularMinutosDeEventos(
@@ -548,6 +571,9 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
       numero: c?.numero ?? null,
       posicao,
       minutos: minutosPorAtleta.get(atletaId) ?? 0,
+      golos: golosPorAtleta.get(atletaId) ?? 0,
+      assistencias: assistenciasPorAtleta.get(atletaId) ?? 0,
+      cartoesAmarelos: cartoesAmarelosPorAtleta.get(atletaId) ?? 0,
     };
   }
 

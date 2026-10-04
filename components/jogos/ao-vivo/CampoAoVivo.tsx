@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal } from "lucide-react";
+import { Footprints, Goal, MoreHorizontal, RectangleVertical } from "lucide-react";
 import { ABREV_POSICAO } from "@/lib/schemas/atleta";
 import type { Posicao } from "@prisma/client";
 
@@ -12,6 +12,59 @@ export interface AtletaAoVivo {
   posicao?: Posicao | null;
   /** Minutos jogados até ao segundo corrente (para o cartão). */
   minutos: number;
+  /** Golos marcados por este atleta neste jogo (§8.25.3/§8.25.7). */
+  golos: number;
+  /** Assistências dadas por este atleta neste jogo (§8.25.3/§8.25.7). */
+  assistencias: number;
+  /** Cartões amarelos deste atleta neste jogo (§8.25.3/§8.25.7). */
+  cartoesAmarelos: number;
+}
+
+/**
+ * Selos de estatística do atleta **neste jogo** (§8.25.3/§8.25.7), derivados dos
+ * eventos já registados no Modo Jogo ao Vivo: golos marcados, assistências e
+ * cartões amarelos. Cada selo só aparece quando a contagem é > 0 (ecrã limpo em
+ * beira-campo). Sem persistência nova — é leitura dos eventos existentes.
+ */
+function IndicadoresAtleta({ atleta }: { atleta: AtletaAoVivo }) {
+  const { golos, assistencias, cartoesAmarelos } = atleta;
+  if (golos === 0 && assistencias === 0 && cartoesAmarelos === 0) return null;
+  return (
+    <span className="flex items-center gap-1">
+      {golos > 0 && (
+        <span
+          className="inline-flex items-center gap-0.5 rounded bg-white/10 px-1.5 py-0.5 tabular-nums"
+          title={golos === 1 ? "1 golo" : `${golos} golos`}
+          aria-label={golos === 1 ? "1 golo" : `${golos} golos`}
+        >
+          <Goal className="h-3 w-3 text-primary" aria-hidden />
+          {golos}
+        </span>
+      )}
+      {assistencias > 0 && (
+        <span
+          className="inline-flex items-center gap-0.5 rounded bg-white/10 px-1.5 py-0.5 tabular-nums"
+          title={assistencias === 1 ? "1 assistência" : `${assistencias} assistências`}
+          aria-label={assistencias === 1 ? "1 assistência" : `${assistencias} assistências`}
+        >
+          <Footprints className="h-3 w-3 text-white/80" aria-hidden />
+          {assistencias}
+        </span>
+      )}
+      {cartoesAmarelos > 0 && (
+        <span
+          className="inline-flex items-center gap-0.5 rounded bg-white/10 px-1.5 py-0.5 tabular-nums"
+          title={cartoesAmarelos === 1 ? "1 cartão amarelo" : `${cartoesAmarelos} cartões amarelos`}
+          aria-label={
+            cartoesAmarelos === 1 ? "1 cartão amarelo" : `${cartoesAmarelos} cartões amarelos`
+          }
+        >
+          <RectangleVertical className="h-3 w-3 fill-ambar-500 text-ambar-500" aria-hidden />
+          {cartoesAmarelos}
+        </span>
+      )}
+    </span>
+  );
 }
 
 /**
@@ -65,13 +118,14 @@ export function CampoAoVivo({
                   <span className="block truncate text-corpo font-semibold text-white">
                     {a.nome}
                   </span>
-                  <span className="flex items-center gap-1.5 text-legenda text-white/70">
+                  <span className="flex flex-wrap items-center gap-1.5 gap-y-1 text-legenda text-white/70">
                     {a.posicao && (
                       <span className="rounded bg-white/15 px-1.5 py-0.5 font-medium">
                         {ABREV_POSICAO[a.posicao]}
                       </span>
                     )}
                     <span className="tabular-nums">{a.minutos}′</span>
+                    <IndicadoresAtleta atleta={a} />
                   </span>
                 </span>
                 {interativo && (
@@ -113,8 +167,9 @@ export function CampoAoVivo({
                   <span className="block truncate text-corpo-sec font-medium text-white/90">
                     {a.nome}
                   </span>
-                  <span className="text-legenda tabular-nums text-white/50">
-                    {a.minutos}′ jogados
+                  <span className="flex flex-wrap items-center gap-1.5 gap-y-1 text-legenda text-white/50">
+                    <span className="tabular-nums">{a.minutos}′ jogados</span>
+                    <IndicadoresAtleta atleta={a} />
                   </span>
                 </span>
               </li>
