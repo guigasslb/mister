@@ -136,7 +136,8 @@ export function JogoDetalhe({
   // BUG-P1-04: suspensões pendentes dos convocados (só preenchido quando este é o
   // próximo jogo do escalão). Alimenta o badge/alerta na convocatória.
   suspensoes?: SuspensaoPendente[];
-  // Formação jovem (§3.7): oculta cartões e suspensões (não aplicáveis a menores).
+  // Formação jovem (§3.7): oculta as suspensões. Os cartões são sempre editáveis
+  // na grelha de estatísticas (§8.11, 2026-10-05).
   escalaoJovem?: boolean;
   // §8.10: quadro tático interativo do plano de jogo (persistido em
   // QuadroTatico.diagrama) + gating por MODELO_JOGO_GERIR.
@@ -555,24 +556,20 @@ export function JogoDetalhe({
                     ) : (
                       <th className="w-16 py-2 px-1 text-center font-medium">Faltas</th>
                     )}
-                    {!escalaoJovem && (
-                      <>
-                        <th
-                          className="w-16 py-2 px-1 text-center font-medium"
-                          title="Cartões amarelos"
-                        >
-                          <span aria-hidden>🟨</span>
-                          <span className="sr-only">Cartões amarelos</span>
-                        </th>
-                        <th
-                          className="w-16 py-2 px-1 text-center font-medium"
-                          title="Cartões vermelhos"
-                        >
-                          <span aria-hidden>🟥</span>
-                          <span className="sr-only">Cartões vermelhos</span>
-                        </th>
-                      </>
-                    )}
+                    <th
+                      className="w-16 py-2 px-1 text-center font-medium"
+                      title="Cartões amarelos"
+                    >
+                      <span aria-hidden>🟨</span>
+                      <span className="sr-only">Cartões amarelos</span>
+                    </th>
+                    <th
+                      className="w-16 py-2 px-1 text-center font-medium"
+                      title="Cartões vermelhos"
+                    >
+                      <span aria-hidden>🟥</span>
+                      <span className="sr-only">Cartões vermelhos</span>
+                    </th>
                     {metricas.map((m) => (
                       <th key={m.id} className="py-2 px-1 text-center font-medium">
                         {m.nome}
@@ -759,32 +756,29 @@ export function JogoDetalhe({
                             />
                           </td>
                         )}
-                        {/* Disciplina (§3.7): cartões — comuns a futsal e futebol,
-                            mas ocultos na formação jovem (não aplicáveis a menores). */}
-                        {!escalaoJovem && (
-                          <>
-                            <td className="py-1.5 px-1 text-center">
-                              <CelulaNum
-                                valor={e.cartaoAmarelo}
-                                max={5}
-                                ariaLabel={`Cartões amarelos de ${a.nome}`}
-                                onChange={(n) =>
-                                  atualizarEstat(a.id, { cartaoAmarelo: n ?? 0 })
-                                }
-                              />
-                            </td>
-                            <td className="py-1.5 px-1 text-center">
-                              <CelulaNum
-                                valor={e.cartaoVermelho}
-                                max={2}
-                                ariaLabel={`Cartões vermelhos de ${a.nome}`}
-                                onChange={(n) =>
-                                  atualizarEstat(a.id, { cartaoVermelho: n ?? 0 })
-                                }
-                              />
-                            </td>
-                          </>
-                        )}
+                        {/* Disciplina (§3.7/§8.11): cartões — comuns a futsal e
+                            futebol, editáveis em todos os escalões (incl. formação
+                            e GR). Amarelos 0–5, vermelhos 0–2. */}
+                        <td className="py-1.5 px-1 text-center">
+                          <CelulaNum
+                            valor={e.cartaoAmarelo}
+                            max={5}
+                            ariaLabel={`Cartões amarelos de ${a.nome}`}
+                            onChange={(n) =>
+                              atualizarEstat(a.id, { cartaoAmarelo: n ?? 0 })
+                            }
+                          />
+                        </td>
+                        <td className="py-1.5 px-1 text-center">
+                          <CelulaNum
+                            valor={e.cartaoVermelho}
+                            max={2}
+                            ariaLabel={`Cartões vermelhos de ${a.nome}`}
+                            onChange={(n) =>
+                              atualizarEstat(a.id, { cartaoVermelho: n ?? 0 })
+                            }
+                          />
+                        </td>
                         {/* Métricas configuráveis de jogo (§8.20) */}
                         {metricas.map((m) => (
                           <td key={m.id} className="py-1.5 px-1 text-center">
