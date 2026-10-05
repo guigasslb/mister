@@ -4,6 +4,7 @@ import { Plus, Clock, Backpack, Landmark, Sparkles, LayoutTemplate, BarChart3, H
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { listarExercicios } from "@/lib/actions/exercicios";
+import { listarSubcategorias } from "@/lib/actions/subcategorias";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { EstadoErro, EstadoVazio } from "@/components/layout/EstadosUI";
 import { CampoPesquisa } from "@/components/layout/CampoPesquisa";
@@ -31,11 +32,15 @@ import type { CategoriaExercicioPrincipal } from "@prisma/client";
 type Aba = "pessoal" | "clube";
 
 /** Reconstrói a query string preservando os filtros ao mudar de aba. */
-function href(aba: Aba, filtros: { parte?: string; categoria?: string; q?: string }): string {
+function href(
+  aba: Aba,
+  filtros: { parte?: string; categoria?: string; subcategoria?: string; q?: string },
+): string {
   const params = new URLSearchParams();
   if (aba === "clube") params.set("bib", "clube");
   if (filtros.parte) params.set("parte", filtros.parte);
   if (filtros.categoria) params.set("categoria", filtros.categoria);
+  if (filtros.subcategoria) params.set("subcategoria", filtros.subcategoria);
   if (filtros.q) params.set("q", filtros.q);
   const qs = params.toString();
   return qs ? `/exercicios?${qs}` : "/exercicios";
@@ -116,12 +121,19 @@ export const metadata: Metadata = { title: "Exercícios" };
 export default async function ExerciciosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ bib?: string; parte?: string; categoria?: string; q?: string }>;
+  searchParams: Promise<{
+    bib?: string;
+    parte?: string;
+    categoria?: string;
+    subcategoria?: string;
+    q?: string;
+  }>;
 }) {
   const {
     bib,
     parte: parteParam,
     categoria: categoriaParam,
+    subcategoria: subcategoriaParam,
     q,
   } = await searchParams;
 
@@ -133,9 +145,20 @@ export default async function ExerciciosPage({
     ? (categoriaParam as CategoriaExercicioPrincipal)
     : undefined;
 
+  // Subcategorias do clube (para o dropdown de filtro). Lidas primeiro porque a
+  // validação do filtro de subcategoria depende da lista — um parâmetro de URL
+  // desconhecido (ou de outra categoria) é ignorado para não gerar listas vazias.
+  const resSubcategorias = await listarSubcategorias();
+  const subcategorias = resSubcategorias.sucesso ? resSubcategorias.dados : [];
+  const subcategoria = subcategorias.some(
+    (s) => s.id === subcategoriaParam && (!categoria || s.categoria === categoria),
+  )
+    ? subcategoriaParam
+    : undefined;
+
   // F3: a biblioteca visível é 🎒 pessoal ∪ 🏛️ clube; filtros e pesquisa no servidor.
   const [res, membro] = await Promise.all([
-    listarExercicios(parteTreino, categoria, q),
+    listarExercicios(parteTreino, categoria, q, "TODAS", subcategoria),
     obterMembroAtual(),
   ]);
   if (!res.sucesso) return <EstadoErro mensagem={res.erro} />;
@@ -158,8 +181,8 @@ export default async function ExerciciosPage({
   const doClube = res.dados.filter((e) => e.naBibliotecaDoClube);
   const lista = aba === "pessoal" ? pessoais : doClube;
 
-  const filtros = { parte: parteTreino, categoria, q };
-  const temFiltros = Boolean(parteTreino || categoria || q);
+  const filtros = { parte: parteTreino, categoria, subcategoria, q };
+  const temFiltros = Boolean(parteTreino || categoria || subcategoria || q);
 
   const abas: { chave: Aba; label: string; icone: typeof Backpack; total: number }[] = [
     { chave: "pessoal", label: "Pessoal", icone: Backpack, total: pessoais.length },
@@ -230,7 +253,16 @@ export default async function ExerciciosPage({
 
       <FavoritosProvider>
         <div className="flex flex-wrap items-end gap-4">
-          <FiltrosBiblioteca parteTreino={parteTreino} categoria={categoria} />
+          <FiltrosBiblioteca
+            parteTreino={parteTreino}
+            categoria={categoria}
+            subcategoria={subcategoria}
+            subcategorias={subcategorias.map((s) => ({
+              id: s.id,
+              nome: s.nome,
+              categoria: s.categoria,
+            }))}
+          />
           <div className="space-y-1.5">
             <CampoPesquisa placeholder="Pesquisar exercício por nome…" />
           </div>
@@ -244,6 +276,9 @@ export default async function ExerciciosPage({
             href={href(aba, {
               ...filtros,
               categoria: categoria === "GUARDA_REDES" ? undefined : "GUARDA_REDES",
+              // Mudar a categoria invalida a subcategoria escolhida (passa a pertencer
+              // a outra categoria) — limpa-se para não gerar um filtro sem resultados.
+              subcategoria: undefined,
             })}
             aria-pressed={categoria === "GUARDA_REDES"}
             className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-4 py-1.5 text-corpo-sec font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${

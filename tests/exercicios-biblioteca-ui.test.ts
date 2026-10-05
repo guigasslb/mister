@@ -182,6 +182,29 @@ describe("listarExercicios — anotação origem + naBibliotecaDoClube", () => {
     });
   });
 
+  it("propaga o filtro de subcategoria", async () => {
+    mocked(prisma.exercicio.findMany).mockResolvedValue([]);
+    await listarExercicios(undefined, undefined, undefined, "TODAS", "sub1");
+
+    const args = mocked(prisma.exercicio.findMany).mock.calls[0][0] as {
+      where: { AND: Record<string, unknown>[] };
+    };
+    expect(args.where.AND).toContainEqual({ subcategoriaId: "sub1" });
+  });
+
+  it("sem subcategoria não acrescenta cláusula de subcategoria", async () => {
+    mocked(prisma.exercicio.findMany).mockResolvedValue([]);
+    await listarExercicios();
+
+    const args = mocked(prisma.exercicio.findMany).mock.calls[0][0] as {
+      where: { AND: Record<string, unknown>[] };
+    };
+    const temFiltroSubcategoria = args.where.AND.some(
+      (c) => "subcategoriaId" in c,
+    );
+    expect(temFiltroSubcategoria).toBe(false);
+  });
+
   it("por omissão (TODAS) não filtra por modalidade", async () => {
     mocked(prisma.exercicio.findMany).mockResolvedValue([]);
     await listarExercicios();

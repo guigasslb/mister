@@ -94,15 +94,18 @@ async function contextoLeitura(): Promise<ContextoBiblioteca> {
 /**
  * Biblioteca visível ao membro: 🎒 exercícios pessoais do treinador ∪ 🏛️ exercícios
  * do clube (próprios do clube + contribuições explícitas via PartilhaExercicioClube).
- * Filtros opcionais por parte do treino, categoria principal, pesquisa por nome
- * e modalidade (§8.6). Na modalidade concreta incluem-se os itens universais
- * (`modalidade = null`); `"TODAS"` (default) não filtra por modalidade.
+ * Filtros opcionais por parte do treino, categoria principal, pesquisa por nome,
+ * modalidade e subcategoria (§8.6). Na modalidade concreta incluem-se os itens
+ * universais (`modalidade = null`); `"TODAS"` (default) não filtra por modalidade.
+ * O filtro de subcategoria (`subcategoriaId`) restringe aos exercícios dessa
+ * subcategoria customizável do clube — combinável com os restantes.
  */
 export async function listarExercicios(
   parteTreino?: ParteTreino,
   categoriaPrincipal?: CategoriaExercicioPrincipal,
   q?: string,
   modalidade: FiltroModalidade = "TODAS",
+  subcategoriaId?: string,
 ): Promise<Resultado<ExercicioBiblioteca[]>> {
   const ctx = await contextoLeitura();
   if (ctx.estado === "erro") return erro(ctx.erro);
@@ -117,6 +120,7 @@ export async function listarExercicios(
         filtroVisivel,
         ...(parteTreino ? [{ parteTreino }] : []),
         ...(categoriaPrincipal ? [{ categoriaPrincipal }] : []),
+        ...(subcategoriaId ? [{ subcategoriaId }] : []),
         ...(termo ? [{ nome: { contains: termo, mode: "insensitive" as const } }] : []),
         ...(modalidade !== "TODAS"
           ? [{ OR: [{ modalidade }, { modalidade: null }] }]
