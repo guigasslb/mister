@@ -1072,8 +1072,8 @@ model Presenca {
   escalao      Escalao        @relation("PresencaEscalao", fields: [escalaoId], references: [id])
   estado       EstadoPresenca @default(PRESENTE)
 
-  // Tipo de ausência (só preenchido quando o atleta está ausente).
-  // Nullable para não quebrar presenças existentes.
+  // Motivo da ausência: preenchido SE E SÓ SE `estado = AUSENTE` (CHECK
+  // "Presenca_tipoAusencia_coerente_check" na BD; Prisma não modela CHECKs).
   tipoAusencia TipoAusencia?
   // Nota livre opcional da ausência (max 200 chars validado na app, não no schema).
   notaAusencia String?
@@ -1091,19 +1091,21 @@ model Presenca {
   @@index([marcadoPorId])
 }
 
+// Estado de comparência (§8.8.2 — simplificação 2026-10-04). O PORQUÊ da ausência
+// vive só em `Presenca.tipoAusencia` (taxonomia única), nunca no estado.
 enum EstadoPresenca {
   PRESENTE
-  FALTA
-  FALTA_JUSTIFICADA
-  LESIONADO
-  ATRASADO
+  ATRASADO // compareceu, mas atrasado
+  AUSENTE // não compareceu — `tipoAusencia` obrigatório (CHECK na BD)
 }
 
+// Motivo da ausência — taxonomia única. Só preenchido quando `estado = AUSENTE`.
 enum TipoAusencia {
   LESAO // atleta lesionado
   DOENCA // doença/motivo de saúde
   PESSOAL // motivo pessoal (justificado)
   TRABALHO // trabalho/escola (justificado)
+  FUTEBOL_FUTSAL // justificação própria do clube: atleta pratica futebol e futsal
   SEM_MOTIVO // falta injustificada
   OUTRO // outro motivo justificado (com nota opcional)
 }

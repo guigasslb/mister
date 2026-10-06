@@ -22,7 +22,7 @@ vi.mock("@/lib/db", () => ({
     convocatoria: { count: vi.fn() },
     estatisticaAtleta: { findMany: vi.fn() },
     sessao: { count: vi.fn() },
-    presenca: { count: vi.fn() },
+    presenca: { count: vi.fn(), findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -80,6 +80,7 @@ beforeEach(() => {
   mocked(prisma.estatisticaAtleta.findMany).mockResolvedValue([]);
   mocked(prisma.sessao.count).mockResolvedValue(0);
   mocked(prisma.presenca.count).mockResolvedValue(0);
+  mocked(prisma.presenca.findMany).mockResolvedValue([]);
 });
 
 // ─── apagarAtletaDefinitivamente (P1.3 — RGPD) ───────────────────────────────

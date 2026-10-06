@@ -129,24 +129,24 @@ export const SessaoExternaGRSchema = z.object({
 
 export type SessaoExternaGRFormData = z.infer<typeof SessaoExternaGRSchema>;
 
-export const ESTADOS_PRESENCA = [
-  "PRESENTE",
-  "FALTA",
-  "FALTA_JUSTIFICADA",
-  "LESIONADO",
-  "ATRASADO",
-] as const;
+/**
+ * Estado de comparência (enum `EstadoPresenca`, §8.8.2 — simplificação 2026-10-04).
+ * Diz só SE o atleta compareceu; o PORQUÊ da ausência vive em `tipoAusencia`.
+ */
+export const ESTADOS_PRESENCA = ["PRESENTE", "ATRASADO", "AUSENTE"] as const;
 
 /**
- * Tipo de ausência (enum `TipoAusencia` no Prisma). Só é registado quando o atleta
- * não compareceu — ver `ESTADOS_AUSENCIA`. `SEM_MOTIVO` = falta injustificada;
- * `OUTRO` admite uma nota livre (`notaAusencia`).
+ * Motivo da ausência (enum `TipoAusencia`) — taxonomia única. Obrigatório SE E SÓ SE
+ * `estado = AUSENTE` (também garantido por CHECK na BD). `SEM_MOTIVO` = falta
+ * injustificada; todos os outros são justificados. `FUTEBOL_FUTSAL` é a justificação
+ * própria do clube. `notaAusencia` (opcional) admite texto livre em qualquer motivo.
  */
 export const TIPOS_AUSENCIA = [
   "LESAO",
   "DOENCA",
   "PESSOAL",
   "TRABALHO",
+  "FUTEBOL_FUTSAL",
   "SEM_MOTIVO",
   "OUTRO",
 ] as const;
@@ -156,22 +156,19 @@ export const LABEL_TIPO_AUSENCIA: Record<(typeof TIPOS_AUSENCIA)[number], string
   DOENCA: "Doença",
   PESSOAL: "Motivo pessoal",
   TRABALHO: "Trabalho / escola",
-  SEM_MOTIVO: "Sem motivo",
+  FUTEBOL_FUTSAL: "Pratica futebol e futsal",
+  SEM_MOTIVO: "Sem justificação",
   OUTRO: "Outro",
 };
 
-/**
- * Estados em que o atleta NÃO compareceu — só nestes faz sentido registar
- * `tipoAusencia`/`notaAusencia`. Nos estados de comparência (`PRESENTE`,
- * `ATRASADO`) esses campos são sempre limpos (`null`), tanto na validação
- * (schema) como na gravação (action). Adaptação ao modelo deste projeto, que usa
- * `EstadoPresenca` granular em vez de um único estado `AUSENTE`.
- */
-export const ESTADOS_AUSENCIA = ["FALTA", "FALTA_JUSTIFICADA", "LESIONADO"] as const;
+/** True se o motivo conta como falta justificada (todos exceto `SEM_MOTIVO`). */
+export function tipoAusenciaJustificado(tipo: (typeof TIPOS_AUSENCIA)[number]): boolean {
+  return tipo !== "SEM_MOTIVO";
+}
 
 /** True se o estado de presença representa uma ausência (atleta não compareceu). */
 export function estadoImplicaAusencia(estado: (typeof ESTADOS_PRESENCA)[number]): boolean {
-  return (ESTADOS_AUSENCIA as readonly string[]).includes(estado);
+  return estado === "AUSENTE";
 }
 
 export const presencaSchema = z
@@ -185,10 +182,17 @@ export const presencaSchema = z
     notaAusencia: z.string().max(200, "Máximo de 200 caracteres").nullable().optional(),
   })
   .superRefine((dados, ctx) => {
-    // Ausência só se aplica a estados de não-comparência. Fora disso, os campos
-    // têm de vir vazios (a action também os limpa por defesa, mas rejeitamos aqui
-    // para não mascarar dados incoerentes vindos do cliente).
+    // AUSENTE exige motivo (espelha o CHECK da BD). Nos estados de comparência os
+    // campos de ausência têm de vir vazios — rejeitamos para não mascarar dados
+    // incoerentes vindos do cliente.
     const eAusencia = dados.estado !== null && estadoImplicaAusencia(dados.estado);
+    if (eAusencia && dados.tipoAusencia == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tipoAusencia"],
+        message: "Indica o motivo da ausência.",
+      });
+    }
     if (!eAusencia) {
       if (dados.tipoAusencia != null) {
         ctx.addIssue({
@@ -216,10 +220,8 @@ export const notasSessaoSchema = z.object({
 
 export const LABEL_PRESENCA: Record<(typeof ESTADOS_PRESENCA)[number], string> = {
   PRESENTE: "Presente",
-  FALTA: "Falta",
-  FALTA_JUSTIFICADA: "Falta justificada",
-  LESIONADO: "Lesionado",
   ATRASADO: "Atrasado",
+  AUSENTE: "Ausente",
 };
 
 export const sessaoExercicioOverrideSchema = z.object({

@@ -21,7 +21,7 @@ describe("lib/presencas — presencasAlteradas", () => {
 
   it("deteta mudança de tipo de ausência", () => {
     const base: RegistoPresenca = {
-      estado: "LESIONADO",
+      estado: "AUSENTE",
       tipoAusencia: null,
       notaAusencia: null,
     };
@@ -32,7 +32,7 @@ describe("lib/presencas — presencasAlteradas", () => {
 
   it("nota de ausência null, vazia ou só com espaços são equivalentes", () => {
     const base: RegistoPresenca = {
-      estado: "FALTA",
+      estado: "AUSENTE",
       tipoAusencia: "OUTRO",
       notaAusencia: null,
     };
@@ -43,7 +43,7 @@ describe("lib/presencas — presencasAlteradas", () => {
 
   it("deteta mudança real da nota de ausência (ignora espaços nas pontas)", () => {
     const base: RegistoPresenca = {
-      estado: "FALTA_JUSTIFICADA",
+      estado: "AUSENTE",
       tipoAusencia: "OUTRO",
       notaAusencia: "consulta",
     };
@@ -56,7 +56,7 @@ describe("lib/presencas — presencasAlteradas", () => {
 
   it("campos de ausência ausentes (undefined) equivalem a null", () => {
     // Registos/fixtures antigos não trazem tipoAusencia/notaAusencia.
-    const antigo: RegistoPresenca = { estado: "FALTA" };
+    const antigo: RegistoPresenca = { estado: "AUSENTE" };
     const novo: RegistoPresenca = { ...antigo, tipoAusencia: null, notaAusencia: null };
     expect(presencasAlteradas({ a: antigo }, { a: novo })).toBe(false);
   });
@@ -80,7 +80,7 @@ describe("lib/presencas — presencasAlteradas", () => {
     // Estado carregado do servidor: dois atletas com presença guardada.
     const inicial: Record<string, RegistoPresenca> = {
       a: { estado: "PRESENTE", tipoAusencia: null, notaAusencia: null },
-      b: { estado: "FALTA", tipoAusencia: "DOENCA", notaAusencia: null },
+      b: { estado: "AUSENTE", tipoAusencia: "DOENCA", notaAusencia: null },
     };
     // Após "Repor": tudo por marcar (estado null) — difere do servidor, pelo que
     // "Guardar presenças" fica ativo para persistir a remoção.

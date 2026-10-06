@@ -744,7 +744,8 @@ export async function obterEstatisticasAtleta(
     ...(escalaoCtx ? { escalaoId: escalaoCtx } : {}),
   };
 
-  const [jogosConvocado, jogosCapitao, estatisticas, sessoesTotais, presencas] = await Promise.all([
+  const [jogosConvocado, jogosCapitao, estatisticas, sessoesTotais, presencas, ausencias] =
+    await Promise.all([
     prisma.convocatoria.count({
       where: { convocado: true, atletaId: id, jogo: filtroJogo },
     }),
@@ -779,6 +780,18 @@ export async function obterEstatisticasAtleta(
         ...(escalaoCtx ? { escalaoId: escalaoCtx } : {}),
       },
     }),
+    // Ausências do atleta (§8.8.2 — "perceber o porquê"): mesmo período/sessões
+    // NORMAL do numerador de presenças, em simetria. `tipoAusencia` alimenta o
+    // breakdown por motivo (justificadas vs. injustificadas).
+    prisma.presenca.findMany({
+      where: {
+        atletaId: id,
+        estado: "AUSENTE",
+        sessao: { epocaId: epoca.id, data: { gte: ingresso }, tipoSessao: "NORMAL" },
+        ...(escalaoCtx ? { escalaoId: escalaoCtx } : {}),
+      },
+      select: { tipoAusencia: true },
+    }),
   ]);
 
   return ok(
@@ -789,6 +802,7 @@ export async function obterEstatisticasAtleta(
       sessoesTotais,
       presencas,
       estatisticas,
+      ausencias: ausencias.map((a) => a.tipoAusencia),
     }),
   );
 }

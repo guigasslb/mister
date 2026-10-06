@@ -52,7 +52,12 @@ import {
   listarRelatoriosPartilhados,
   revogarRelatorioPartilhado,
 } from "@/lib/actions/analise";
-import { blocoParaMinutos, MINUTOS_POR_BLOCO, agregarEstatisticas } from "@/lib/estatisticas";
+import {
+  blocoParaMinutos,
+  MINUTOS_POR_BLOCO,
+  agregarEstatisticas,
+  resumoAusenciasVazio,
+} from "@/lib/estatisticas";
 import { obterClubeIdAtual, obterEpocaAtiva } from "@/lib/epoca-context";
 import {
   obterMembroAtual,
@@ -719,9 +724,13 @@ describe("obterAnaliticoEscalao", () => {
       },
     ]);
     p.eventoJogo.findMany.mockResolvedValue([]);
-    p.presenca.findMany.mockResolvedValue([
-      { sessaoId: "s1", atletaId: ATLETA, atleta: { nome: "Ana" } },
-    ]);
+    // 1ª chamada = presenças (numerador da assiduidade); 2ª = ausências (§8.8.2).
+    p.presenca.findMany
+      .mockResolvedValueOnce([{ sessaoId: "s1", atletaId: ATLETA, atleta: { nome: "Ana" } }])
+      .mockResolvedValueOnce([
+        { atletaId: ATLETA, tipoAusencia: "LESAO" },
+        { atletaId: ATLETA, tipoAusencia: "SEM_MOTIVO" },
+      ]);
 
     const r = await obterAnaliticoEscalao(ESCALAO);
     expect(r.sucesso).toBe(true);
@@ -750,6 +759,14 @@ describe("obterAnaliticoEscalao", () => {
       presencas: 1,
       taxaPresenca: 1, // 1 presença / 1 sessão executada
       tempoJogo: 40,
+      // Breakdown de ausências (§8.8.2): LESAO (justificada) + SEM_MOTIVO (injustificada).
+      ausencias: {
+        ...resumoAusenciasVazio(),
+        total: 2,
+        justificadas: 1,
+        injustificadas: 1,
+        porMotivo: { ...resumoAusenciasVazio().porMotivo, LESAO: 1, SEM_MOTIVO: 1 },
+      },
     });
 
     const bruno = r.dados.tabelaAtletas[1];
@@ -768,6 +785,18 @@ describe("obterAnaliticoEscalao", () => {
     const carlos = r.dados.tabelaAtletas[2];
     expect(carlos.estadoParticipacao).toBe("ATIVO");
     expect(carlos.atletaAtivo).toBe(false);
+
+    // Bruno/Carlos sem ausências → resumo vazio.
+    expect(bruno.ausencias).toEqual(resumoAusenciasVazio());
+
+    // Total do escalão (§8.8.2) = Σ das ausências de todos os atletas.
+    expect(r.dados.ausencias).toEqual({
+      ...resumoAusenciasVazio(),
+      total: 2,
+      justificadas: 1,
+      injustificadas: 1,
+      porMotivo: { ...resumoAusenciasVazio().porMotivo, LESAO: 1, SEM_MOTIVO: 1 },
+    });
   });
 
   it("nega escalão inexistente", async () => {

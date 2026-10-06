@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Check, ListChecks, Lock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { marcarPresencas } from "@/lib/actions/treinos";
 import {
   TIPOS_AUSENCIA,
   LABEL_TIPO_AUSENCIA,
+  LABEL_PRESENCA,
   estadoImplicaAusencia,
 } from "@/lib/schemas/treino";
 import { presencasAlteradas, type RegistoPresenca } from "@/lib/presencas";
@@ -18,6 +19,9 @@ type Atleta = {
   id: string;
   nome: string;
   numero: number | null;
+  // §3.2 — atletas de dupla modalidade têm o motivo "Pratica futebol e futsal"
+  // destacado (primeira opção) na marcação da ausência.
+  praticaDuplaModalidade: boolean;
 };
 
 /**
@@ -34,15 +38,48 @@ export type PresencaInicial = {
 const PRESENTES = new Set<EstadoPresenca>(["PRESENTE", "ATRASADO"]);
 
 /**
- * Controlo segmentado de 1 toque (Melhoria 2). Cada segmento fixa o estado
- * diretamente — sem abrir/escolher num Select. Cores garantem contraste AA.
+ * Comparência num toque: Presente / Atrasado. A ausência não tem botão próprio —
+ * escolher diretamente o motivo marca AUSENTE + motivo num só passo (§8.8.2).
+ * Cores garantem contraste AA com texto branco.
  */
-const SEGMENTOS: { estado: EstadoPresenca; label: string; cor: string }[] = [
-  { estado: "PRESENTE", label: "Presente", cor: "#1E9E5A" },
-  { estado: "FALTA", label: "Falta", cor: "#D33A3A" },
-  { estado: "LESIONADO", label: "Lesionado", cor: "#C7430F" },
-  { estado: "FALTA_JUSTIFICADA", label: "Just.", cor: "#2C6BB0" },
+const COMPARENCIA: { estado: "PRESENTE" | "ATRASADO"; cor: string }[] = [
+  { estado: "PRESENTE", cor: "#1E9E5A" },
+  { estado: "ATRASADO", cor: "#8A5A06" },
 ];
+
+/** Cor do motivo de ausência: injustificada a vermelho, lesão a laranja, restantes a azul. */
+function corMotivo(tipo: TipoAusencia): string {
+  if (tipo === "SEM_MOTIVO") return "#D33A3A";
+  if (tipo === "LESAO") return "#C7430F";
+  return "#2C6BB0";
+}
+
+/** Motivos pela ordem a oferecer ao atleta: "Pratica futebol e futsal" primeiro se dupla modalidade. */
+function motivosParaAtleta(praticaDuplaModalidade: boolean): readonly TipoAusencia[] {
+  if (!praticaDuplaModalidade) return TIPOS_AUSENCIA;
+  return ["FUTEBOL_FUTSAL", ...TIPOS_AUSENCIA.filter((t) => t !== "FUTEBOL_FUTSAL")];
+}
+
+/** Badge do estado marcado (só-leitura): "Presente", "Atrasado" ou o motivo da ausência. */
+function BadgeEstado({ registo }: { registo: RegistoPresenca }) {
+  if (registo.estado == null)
+    return <span className="text-legenda text-cinza-400">Por marcar</span>;
+  const ausente = estadoImplicaAusencia(registo.estado) && registo.tipoAusencia != null;
+  const cor = ausente
+    ? corMotivo(registo.tipoAusencia as TipoAusencia)
+    : COMPARENCIA.find((c) => c.estado === registo.estado)?.cor ?? "#6B6B6B";
+  const texto = ausente
+    ? `Ausente · ${LABEL_TIPO_AUSENCIA[registo.tipoAusencia as TipoAusencia]}`
+    : LABEL_PRESENCA[registo.estado];
+  return (
+    <span
+      className="inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-legenda font-semibold text-white"
+      style={{ background: cor }}
+    >
+      {texto}
+    </span>
+  );
+}
 
 export function MarcadorPresencas({
   sessaoId,
@@ -93,44 +130,62 @@ export function MarcadorPresencas({
   // Modo só-leitura: sessão fechada não permite alterar presenças.
   const soLeitura = fechado;
 
+  // Aviso ao sair/recarregar com presenças por guardar (beforeunload). Só ativo
+  // enquanto houver alterações pendentes e a sessão não estiver em só-leitura.
+  useEffect(() => {
+    if (!alterado || soLeitura) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [alterado, soLeitura]);
+
   // Só contam atletas efetivamente marcados: os que estão por marcar (null) não
   // entram em "presentes" nem em "faltas".
   const valores = Object.values(registos);
   const presentes = valores.filter((r) => r.estado != null && PRESENTES.has(r.estado)).length;
-  const faltas = valores.filter((r) => r.estado != null && !PRESENTES.has(r.estado)).length;
+  const nPresente = valores.filter((r) => r.estado === "PRESENTE").length;
+  const nAtrasado = valores.filter((r) => r.estado === "ATRASADO").length;
+  const ausentes = valores.filter((r) => r.estado != null && estadoImplicaAusencia(r.estado));
+  // Resumo dos ausentes por motivo, pela ordem canónica da taxonomia.
+  const ausentesPorMotivo = TIPOS_AUSENCIA.map((t) => ({
+    tipo: t,
+    n: ausentes.filter((r) => r.tipoAusencia === t).length,
+  })).filter((m) => m.n > 0);
 
   // Há alguma presença marcada? Base para habilitar "Repor" (limpar tudo): só faz
   // sentido quando existe pelo menos um atleta marcado — inclui presenças já
   // guardadas, permitindo limpar marcações feitas por engano após guardar.
   const haMarcacoes = valores.some((r) => r.estado != null);
 
-  function mudarEstado(atletaId: string, estado: EstadoPresenca) {
+  /** Presente/Atrasado: limpa motivo e nota de ausência. */
+  function marcarComparencia(atletaId: string, estado: "PRESENTE" | "ATRASADO") {
     if (soLeitura) return;
-    setRegistos((prev) => {
-      const eAusencia = estadoImplicaAusencia(estado);
-      return {
-        ...prev,
-        [atletaId]: {
-          estado,
-          // §8.8.2 — tipo/nota de ausência mantêm-se nos estados de não-comparência
-          // e limpam-se assim que o atleta passa a presente/atrasado.
-          tipoAusencia: eAusencia ? (prev[atletaId].tipoAusencia ?? null) : null,
-          notaAusencia: eAusencia ? (prev[atletaId].notaAusencia ?? null) : null,
-        },
-      };
-    });
+    setRegistos((prev) => ({
+      ...prev,
+      [atletaId]: { estado, tipoAusencia: null, notaAusencia: null },
+    }));
   }
 
   /**
-   * Seleciona (ou alterna) o tipo de ausência (§8.8.2). Toggle: clicar no tipo
-   * já ativo remove-o. A nota livre mantém-se — aplica-se a qualquer tipo.
+   * Um toque no motivo marca AUSENTE + motivo (§8.8.2). Mantém a nota se o
+   * atleta já estava ausente (só muda o motivo).
    */
-  function mudarTipoAusencia(atletaId: string, tipo: TipoAusencia) {
+  function marcarAusencia(atletaId: string, tipo: TipoAusencia) {
     if (soLeitura) return;
     setRegistos((prev) => {
       const atual = prev[atletaId];
-      const novoTipo = atual.tipoAusencia === tipo ? null : tipo;
-      return { ...prev, [atletaId]: { ...atual, tipoAusencia: novoTipo } };
+      const jaAusente = atual.estado != null && estadoImplicaAusencia(atual.estado);
+      return {
+        ...prev,
+        [atletaId]: {
+          estado: "AUSENTE",
+          tipoAusencia: tipo,
+          notaAusencia: jaAusente ? (atual.notaAusencia ?? null) : null,
+        },
+      };
     });
   }
 
@@ -249,100 +304,121 @@ export function MarcadorPresencas({
         </div>
       )}
 
+      {/* Resumo da sessão (§8.8.2) — presentes/atrasados e ausentes por motivo.
+          Sempre visível (inclui modo só-leitura) para leitura rápida. */}
+      <div className="flex flex-wrap items-center gap-1.5 text-legenda">
+        <span className="inline-flex items-center rounded-full bg-verde-600/10 px-2.5 py-0.5 font-semibold text-verde-600">
+          {nPresente} presentes
+        </span>
+        <span className="inline-flex items-center rounded-full bg-ambar-600/10 px-2.5 py-0.5 font-semibold text-ambar-600">
+          {nAtrasado} atrasados
+        </span>
+        {ausentesPorMotivo.length === 0 ? (
+          <span className="inline-flex items-center rounded-full bg-cinza-100 px-2.5 py-0.5 font-semibold text-cinza-500">
+            0 ausentes
+          </span>
+        ) : (
+          ausentesPorMotivo.map((m) => (
+            <span
+              key={m.tipo}
+              className="inline-flex items-center rounded-full px-2.5 py-0.5 font-semibold text-white"
+              style={{ background: corMotivo(m.tipo) }}
+            >
+              {m.n} {LABEL_TIPO_AUSENCIA[m.tipo].toLowerCase()}
+            </span>
+          ))
+        )}
+      </div>
+
       <ul className="space-y-2">
         {atletas.map((a) => {
           const registo = registos[a.id];
           const eAusencia = registo.estado != null && estadoImplicaAusencia(registo.estado);
+          const motivos = motivosParaAtleta(a.praticaDuplaModalidade);
           return (
             <li
               key={a.id}
               className="rounded-md border border-cinza-200 bg-white p-2.5 shadow-card"
             >
-              <div className="min-h-[44px] items-center gap-2 sm:flex">
-                <span className="mb-2 block min-w-0 flex-1 truncate text-corpo font-medium text-cinza-900 sm:mb-0">
+              <div className="mb-2 flex min-h-[28px] items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-corpo font-medium text-cinza-900">
                   {a.numero != null && (
                     <span className="mr-1 text-cinza-400">#{a.numero}</span>
                   )}
                   {a.nome}
                 </span>
-                <div
-                  role="group"
-                  aria-label={`Estado de presença de ${a.nome}`}
-                  className="grid grid-cols-4 gap-1 sm:w-auto sm:flex-shrink-0"
-                >
-                  {SEGMENTOS.map((seg) => {
-                    const ativo = registo.estado === seg.estado;
-                    return (
-                      <button
-                        key={seg.estado}
-                        type="button"
-                        aria-pressed={ativo}
-                        disabled={soLeitura}
-                        onClick={() => mudarEstado(a.id, seg.estado)}
-                        className="flex h-11 items-center justify-center rounded-md border px-1 text-legenda font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60 sm:w-20"
-                        style={
-                          ativo
-                            ? { background: seg.cor, borderColor: seg.cor, color: "#fff" }
-                            : { borderColor: "#E4E1DB", color: "#6B6B6B" }
-                        }
-                      >
-                        {seg.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                <BadgeEstado registo={registo} />
               </div>
 
-              {/* §8.8.2 — Tipo de ausência (aplica-se a todos os estados de
-                  não-comparência, incl. Lesionado) + nota livre opcional. */}
-              {eAusencia && (
-                <div className="mt-2 space-y-2 border-t border-cinza-100 pt-2">
-                  <span className="block text-legenda text-cinza-500">
-                    Tipo de ausência (opcional)
-                  </span>
-                  <div
-                    role="group"
-                    aria-label={`Tipo de ausência de ${a.nome}`}
-                    className="flex flex-wrap gap-1.5"
-                  >
-                    {TIPOS_AUSENCIA.map((t) => {
-                      const ativo = registo.tipoAusencia === t;
-                      return (
-                        <Button
-                          key={t}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          aria-pressed={ativo}
-                          disabled={soLeitura}
-                          onClick={() => mudarTipoAusencia(a.id, t)}
-                          className={
-                            ativo ? "border-primary bg-primary/5 text-primary" : ""
-                          }
-                        >
-                          {LABEL_TIPO_AUSENCIA[t]}
-                        </Button>
-                      );
-                    })}
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor={`nota-ausencia-${a.id}`}
-                      className="mb-1 block text-legenda text-cinza-500"
-                    >
-                      Nota da ausência (opcional)
-                    </label>
-                    <Input
-                      id={`nota-ausencia-${a.id}`}
-                      value={registo.notaAusencia ?? ""}
-                      onChange={(ev) => mudarNotaAusencia(a.id, ev.target.value)}
+              {/* Marcação num só passo (§8.8.2): Presente/Atrasado ou, diretamente,
+                  o motivo da ausência — que fixa AUSENTE + motivo de uma vez. */}
+              <div
+                role="group"
+                aria-label={`Marcar presença de ${a.nome}`}
+                className="flex flex-wrap gap-1.5"
+              >
+                {COMPARENCIA.map((seg) => {
+                  const ativo = registo.estado === seg.estado;
+                  return (
+                    <button
+                      key={seg.estado}
+                      type="button"
+                      aria-pressed={ativo}
                       disabled={soLeitura}
-                      maxLength={200}
-                      placeholder="Ex.: entorse no tornozelo, viagem de trabalho…"
-                      className="h-11"
-                    />
-                  </div>
+                      onClick={() => marcarComparencia(a.id, seg.estado)}
+                      className="flex h-11 items-center justify-center rounded-md border px-3 text-legenda font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                      style={
+                        ativo
+                          ? { background: seg.cor, borderColor: seg.cor, color: "#fff" }
+                          : { borderColor: "#E4E1DB", color: "#6B6B6B" }
+                      }
+                    >
+                      {LABEL_PRESENCA[seg.estado]}
+                    </button>
+                  );
+                })}
+                <span className="mx-0.5 hidden self-stretch border-l border-cinza-200 sm:block" />
+                {motivos.map((t) => {
+                  const ativo = eAusencia && registo.tipoAusencia === t;
+                  const cor = corMotivo(t);
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      aria-pressed={ativo}
+                      disabled={soLeitura}
+                      onClick={() => marcarAusencia(a.id, t)}
+                      className="flex h-11 items-center justify-center rounded-md border px-3 text-legenda font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                      style={
+                        ativo
+                          ? { background: cor, borderColor: cor, color: "#fff" }
+                          : { borderColor: "#E4E1DB", color: "#6B6B6B" }
+                      }
+                    >
+                      {LABEL_TIPO_AUSENCIA[t]}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Nota livre opcional — visível quando o atleta está ausente. */}
+              {eAusencia && (
+                <div className="mt-2">
+                  <label
+                    htmlFor={`nota-ausencia-${a.id}`}
+                    className="mb-1 block text-legenda text-cinza-500"
+                  >
+                    Nota da ausência (opcional)
+                  </label>
+                  <Input
+                    id={`nota-ausencia-${a.id}`}
+                    value={registo.notaAusencia ?? ""}
+                    onChange={(ev) => mudarNotaAusencia(a.id, ev.target.value)}
+                    disabled={soLeitura}
+                    maxLength={200}
+                    placeholder="Ex.: entorse no tornozelo, viagem de trabalho…"
+                    className="h-11"
+                  />
                 </div>
               )}
             </li>
@@ -354,7 +430,7 @@ export function MarcadorPresencas({
       {!soLeitura && (
         <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 border-t border-cinza-200 bg-white px-1 py-3">
           <p className="text-corpo-sec text-cinza-600">
-            {presentes} presentes · {faltas} faltas
+            {presentes} presentes · {ausentes.length} ausentes
           </p>
           <Button
             onClick={guardar}

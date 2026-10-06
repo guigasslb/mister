@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import type { EstatisticasAgregadas } from "@/lib/actions/atletas";
 import type { JogoDadosAtleta, PresencaMensal } from "@/lib/actions/analise";
+import { ResumoAusenciasAtleta } from "@/components/analiticos/Ausencias";
 
 const GraficoLinhas = dynamic(
   () => import("@/components/graficos/GraficoLinhas").then((m) => ({ default: m.GraficoLinhas })),
@@ -102,6 +103,9 @@ export function EstatisticasAtleta({
         <Cartao valor={stats.jogosCapitao} label="capitão" />
         <Cartao valor={taxa} label="presenças" />
       </div>
+
+      {/* Ausências com motivo (§8.8.2) — justificadas vs. injustificadas + breakdown */}
+      <ResumoAusenciasAtleta ausencias={stats.ausencias} />
 
       {/* Evolution chart: golos + assistências por jogo */}
       {temEvolucaoJogos && (

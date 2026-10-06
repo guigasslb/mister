@@ -31,6 +31,7 @@
 import {
   PrismaClient,
   EstadoPresenca,
+  TipoAusencia,
   TipoJogo,
   CasaFora,
   Utilizacao,
@@ -304,7 +305,8 @@ export async function seedSleFix(prisma: PrismaClient): Promise<ResultadoSeedFix
           sessaoId: s.id,
           atletaId: aid,
           escalaoId: escalao.id,
-          estado: idx < alvo ? EstadoPresenca.PRESENTE : EstadoPresenca.FALTA,
+          estado: idx < alvo ? EstadoPresenca.PRESENTE : EstadoPresenca.AUSENTE,
+          tipoAusencia: idx < alvo ? null : TipoAusencia.SEM_MOTIVO,
         }));
         if (data.length > 0) {
           const r = await tx.presenca.createMany({ data, skipDuplicates: true });

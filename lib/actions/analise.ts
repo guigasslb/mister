@@ -10,6 +10,7 @@ import {
   type Modalidade,
   type ParteTreino,
   type Posicao,
+  type TipoAusencia,
   type TipoEventoJogo,
   type TipoJogo,
   type TipoMetrica,
@@ -27,10 +28,12 @@ import {
 } from "@/lib/permissoes";
 import { ok, erro, erroDeValidacao, type Resultado } from "@/lib/utils";
 import {
+  agregarAusencias,
   agregarEstatisticas,
   blocoParaMinutos,
   type EstatisticasAgregadas,
   type LinhaEstatistica,
+  type ResumoAusencias,
 } from "@/lib/estatisticas";
 import { filtroModalidadeJogo } from "@/lib/modalidade-escalao";
 import {
@@ -465,6 +468,7 @@ export async function obterAnaliticoAtleta(
     estatisticas,
     sessoes,
     presencas,
+    ausencias,
     valoresMetricas,
     valoresMetricasTreino,
     valoresMetricasGR,
@@ -516,6 +520,17 @@ export async function obterAnaliticoAtleta(
           escalaoId: { in: escaloesCtx },
         },
         select: { sessaoId: true },
+      }),
+      // Ausências (§8.8.2): mesmo período/sessões NORMAL do numerador de
+      // presenças; `tipoAusencia` alimenta o breakdown por motivo no agregado.
+      prisma.presenca.findMany({
+        where: {
+          atletaId,
+          estado: "AUSENTE",
+          sessao: { epocaId: epoca.id, data: { gte: ingresso }, tipoSessao: "NORMAL" },
+          escalaoId: { in: escaloesCtx },
+        },
+        select: { tipoAusencia: true },
       }),
       // Métricas configuráveis registadas por jogo (bíblia §8.14) — surgem agregadas.
       prisma.valorMetrica.findMany({
@@ -577,6 +592,7 @@ export async function obterAnaliticoAtleta(
     sessoesTotais: sessoesExecutadas,
     presencas: presencas.length,
     estatisticas: linhas,
+    ausencias: ausencias.map((a) => a.tipoAusencia),
   });
 
   const evolucaoJogos: JogoDadosAtleta[] = estatisticas.map((e) => ({
@@ -704,7 +720,8 @@ export async function obterResumoAtletaParaComparacao(
   const ingresso = atleta.dataIngresso ?? atleta.criadoEm;
   const filtroJogo = { epocaId, escalaoId };
 
-  const [jogosConvocado, jogosCapitao, estatisticas, sessoes, presencas] = await Promise.all([
+  const [jogosConvocado, jogosCapitao, estatisticas, sessoes, presencas, ausencias] =
+    await Promise.all([
     prisma.convocatoria.count({
       where: { convocado: true, atletaId, jogo: filtroJogo },
     }),
@@ -747,6 +764,16 @@ export async function obterResumoAtletaParaComparacao(
       },
       select: { sessaoId: true },
     }),
+    // Ausências (§8.8.2): mesmo período/sessões NORMAL; `tipoAusencia` → breakdown.
+    prisma.presenca.findMany({
+      where: {
+        atletaId,
+        estado: "AUSENTE",
+        sessao: { epocaId, data: { gte: ingresso }, tipoSessao: "NORMAL" },
+        escalaoId,
+      },
+      select: { tipoAusencia: true },
+    }),
   ]);
 
   const linhas: LinhaEstatistica[] = estatisticas.map((e) => ({
@@ -771,6 +798,7 @@ export async function obterResumoAtletaParaComparacao(
     sessoesTotais: sessoesExecutadas,
     presencas: presencas.length,
     estatisticas: linhas,
+    ausencias: ausencias.map((a) => a.tipoAusencia),
   });
 
   return ok({ nome: atleta.nome, posicoes: atleta.posicoes, eGR, agregado });
@@ -1009,6 +1037,12 @@ export interface LinhaAtletaEscalao {
   presencas: number;
   taxaPresenca: number; // 0–1
   tempoJogo: number; // minutos acumulados
+  /**
+   * Detalhe das ausências do atleta no escalão/época (§8.8.2). Breakdown por
+   * motivo + justificadas vs. injustificadas — o "porquê" por detrás da
+   * assiduidade. Vazio quando o atleta não tem ausências registadas.
+   */
+  ausencias: ResumoAusencias;
 }
 
 export interface AnaliticoEscalao {
@@ -1041,6 +1075,11 @@ export interface AnaliticoEscalao {
   nAtletasInativos: number;
   /** Tabela de TODOS os participantes da época com o resumo por atleta (§10.2). */
   tabelaAtletas: LinhaAtletaEscalao[];
+  /**
+   * Total de ausências do escalão na época (§8.8.2), agregado por motivo e
+   * justificadas vs. injustificadas — Σ das ausências de todos os atletas.
+   */
+  ausencias: ResumoAusencias;
   taxaPresencaMedia: number;
   marcadores: RankingAtleta[];
   assistentes: RankingAtleta[];
@@ -1171,6 +1210,7 @@ export async function obterAnaliticoEscalao(
     estatisticas,
     eventos,
     presencas,
+    ausenciasEscalao,
     valoresMetricas,
   ] = await Promise.all([
     prisma.jogo.findMany({
@@ -1237,6 +1277,17 @@ export async function obterAnaliticoEscalao(
       // atletaId + nome alimentam o ranking de assiduidade (mesma query, sem
       // round-trip adicional); sessaoId mantém a assiduidade mensal da equipa.
       select: { sessaoId: true, atletaId: true, atleta: { select: { nome: true } } },
+    }),
+    // Ausências do escalão na época (§8.8.2): simetria com a query de presenças
+    // acima (mesmo `escalaoId` + `sessao.epocaId`). `tipoAusencia` alimenta o
+    // breakdown por motivo — por atleta (tabela) e total da equipa.
+    prisma.presenca.findMany({
+      where: {
+        escalaoId,
+        estado: "AUSENTE",
+        sessao: { epocaId: epoca.id },
+      },
+      select: { atletaId: true, tipoAusencia: true },
     }),
     // Métricas configuráveis registadas por jogo (bíblia §8.14) — rankings de equipa.
     prisma.valorMetrica.findMany({
@@ -1463,6 +1514,16 @@ export async function obterAnaliticoEscalao(
   const convocatoriasPorAtleta = new Map<string, number>(
     convocatoriasAtleta.map((c) => [c.atletaId, c._count._all]),
   );
+  // Ausências por atleta (§8.8.2): motivos agrupados por `atletaId` para o
+  // breakdown da tabela; o total do escalão agrega a lista completa.
+  const ausenciasPorAtleta = new Map<string, Array<TipoAusencia | null>>();
+  for (const a of ausenciasEscalao) {
+    if (!a.atletaId) continue;
+    const lista = ausenciasPorAtleta.get(a.atletaId) ?? [];
+    lista.push(a.tipoAusencia);
+    ausenciasPorAtleta.set(a.atletaId, lista);
+  }
+  const ausenciasEquipa = agregarAusencias(ausenciasEscalao.map((a) => a.tipoAusencia));
   const tabelaAtletas: LinhaAtletaEscalao[] = participacoes
     .map((p) => {
       const g = golosMap.get(p.atletaId);
@@ -1483,6 +1544,7 @@ export async function obterAnaliticoEscalao(
         taxaPresenca:
           totalSessoes > 0 ? Math.min((ass?.presencas ?? 0) / totalSessoes, 1) : 0,
         tempoJogo: u?.tempo ?? 0,
+        ausencias: agregarAusencias(ausenciasPorAtleta.get(p.atletaId) ?? []),
       };
     })
     .sort((x, y) => x.nome.localeCompare(y.nome, "pt"));
@@ -1506,6 +1568,7 @@ export async function obterAnaliticoEscalao(
     nAtletasAtivos,
     nAtletasInativos,
     tabelaAtletas,
+    ausencias: ausenciasEquipa,
     // Denominador = nAtletas × sessoesExecutadas (BUG-P1-08). Cap a 1 (100%):
     // atletas que saíram a meio da época podem gerar presenças sem contribuir
     // para o denominador de slots atual, o que inflaria a taxa acima de 100%

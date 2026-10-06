@@ -322,13 +322,13 @@ async function ensureSessoes(opts: {
       if (r >= taxaPresenca) {
         const resto = (r - taxaPresenca) / (1 - taxaPresenca); // 0..1
         if (resto < 0.55) {
-          estado = EstadoPresenca.FALTA;
+          estado = EstadoPresenca.AUSENTE;
           tipoAusencia = TipoAusencia.SEM_MOTIVO;
         } else if (resto < 0.8) {
-          estado = EstadoPresenca.FALTA_JUSTIFICADA;
+          estado = EstadoPresenca.AUSENTE;
           tipoAusencia = TipoAusencia.DOENCA;
         } else if (resto < 0.95) {
-          estado = EstadoPresenca.LESIONADO;
+          estado = EstadoPresenca.AUSENTE;
           tipoAusencia = TipoAusencia.LESAO;
         } else {
           estado = EstadoPresenca.ATRASADO;

@@ -331,6 +331,8 @@ export default async function DetalheSessaoPage({
           nome: a.nome,
           // Número da participação neste escalão (F1).
           numero: a.participacaoContexto?.numero ?? s.numeroPorAtleta[a.id] ?? null,
+          // §3.2 — destaca "Pratica futebol e futsal" como motivo de ausência.
+          praticaDuplaModalidade: a.praticaDuplaModalidade,
         }))}
         presencasIniciais={presencasIniciais}
         // Sessão fechada → marcação de presenças em modo só-leitura (§8).

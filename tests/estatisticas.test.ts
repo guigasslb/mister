@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  agregarAusencias,
   agregarEstatisticas,
   maxTitulares,
+  resumoAusenciasVazio,
   JOGADORES_EM_CAMPO,
   type LinhaEstatistica,
 } from "@/lib/estatisticas";
@@ -181,5 +183,95 @@ describe("maxTitulares — limite de titulares do plano de jogo", () => {
     expect(maxTitulares(null, "FUTSAL")).toBe(5);
     expect(maxTitulares(null, "FUTEBOL")).toBe(11);
     expect(maxTitulares(undefined)).toBe(5);
+  });
+});
+
+describe("agregarAusencias — breakdown por motivo (§8.8.2)", () => {
+  it("lista vazia → resumo vazio (todos os motivos a 0)", () => {
+    const r = agregarAusencias([]);
+    expect(r).toEqual(resumoAusenciasVazio());
+    expect(r.total).toBe(0);
+    expect(r.justificadas).toBe(0);
+    expect(r.injustificadas).toBe(0);
+    expect(r.porMotivo.LESAO).toBe(0);
+    expect(r.porMotivo.SEM_MOTIVO).toBe(0);
+  });
+
+  it("conta por motivo e separa justificadas de injustificadas", () => {
+    const r = agregarAusencias([
+      "LESAO",
+      "LESAO",
+      "DOENCA",
+      "SEM_MOTIVO",
+      "FUTEBOL_FUTSAL",
+      "OUTRO",
+    ]);
+    expect(r.total).toBe(6);
+    expect(r.porMotivo.LESAO).toBe(2);
+    expect(r.porMotivo.DOENCA).toBe(1);
+    expect(r.porMotivo.FUTEBOL_FUTSAL).toBe(1);
+    expect(r.porMotivo.OUTRO).toBe(1);
+    expect(r.porMotivo.SEM_MOTIVO).toBe(1);
+    // Justificadas = tudo exceto SEM_MOTIVO (5); injustificadas = SEM_MOTIVO (1).
+    expect(r.justificadas).toBe(5);
+    expect(r.injustificadas).toBe(1);
+    expect(r.justificadas + r.injustificadas).toBe(r.total);
+  });
+
+  it("SEM_MOTIVO é o único injustificado", () => {
+    const r = agregarAusencias(["SEM_MOTIVO", "SEM_MOTIVO", "PESSOAL"]);
+    expect(r.injustificadas).toBe(2);
+    expect(r.justificadas).toBe(1);
+  });
+
+  it("ignora entradas null/undefined (não são ausências com motivo)", () => {
+    const r = agregarAusencias(["LESAO", null, undefined, "SEM_MOTIVO"]);
+    expect(r.total).toBe(2);
+    expect(r.justificadas).toBe(1);
+    expect(r.injustificadas).toBe(1);
+  });
+});
+
+describe("agregarEstatisticas — campo ausencias (§8.8.2)", () => {
+  function linha(over: Partial<LinhaEstatistica> = {}): LinhaEstatistica {
+    return {
+      utilizacao: "TITULAR",
+      minutos: null,
+      golos: 0,
+      assistencias: 0,
+      defesas: null,
+      golosSofridosGR: null,
+      ...over,
+    };
+  }
+
+  it("sem `ausencias` no input → resumo de ausências vazio (retrocompat)", () => {
+    const r = agregarEstatisticas({
+      eGR: false,
+      jogosConvocado: 1,
+      jogosCapitao: 0,
+      sessoesTotais: 5,
+      presencas: 4,
+      estatisticas: [linha()],
+    });
+    expect(r.ausencias).toEqual(resumoAusenciasVazio());
+  });
+
+  it("agrega os motivos recebidos sem alterar a taxa de presença", () => {
+    const r = agregarEstatisticas({
+      eGR: false,
+      jogosConvocado: 1,
+      jogosCapitao: 0,
+      sessoesTotais: 10,
+      presencas: 7,
+      estatisticas: [linha()],
+      ausencias: ["LESAO", "SEM_MOTIVO", "DOENCA"],
+    });
+    // Taxa continua PRESENTE/ATRASADO / sessões — independente das ausências.
+    expect(r.taxaPresenca).toBeCloseTo(0.7);
+    expect(r.ausencias.total).toBe(3);
+    expect(r.ausencias.justificadas).toBe(2);
+    expect(r.ausencias.injustificadas).toBe(1);
+    expect(r.ausencias.porMotivo.LESAO).toBe(1);
   });
 });

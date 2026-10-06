@@ -512,9 +512,17 @@ describe("sessaoSchema", () => {
 });
 
 describe("presencaSchema", () => {
-  it("aceita os cinco estados de presença", () => {
-    for (const estado of ["PRESENTE", "FALTA", "FALTA_JUSTIFICADA", "LESIONADO", "ATRASADO"]) {
+  it("aceita os estados de comparência sem motivo", () => {
+    for (const estado of ["PRESENTE", "ATRASADO"]) {
       expect(presencaSchema.safeParse({ atletaId: CUID, estado }).success).toBe(true);
+    }
+  });
+
+  it("rejeita os estados antigos (FALTA/FALTA_JUSTIFICADA/LESIONADO — §8.8.2 2026-10-04)", () => {
+    for (const estado of ["FALTA", "FALTA_JUSTIFICADA", "LESIONADO"]) {
+      expect(
+        presencaSchema.safeParse({ atletaId: CUID, estado, tipoAusencia: "LESAO" }).success,
+      ).toBe(false);
     }
   });
 
@@ -526,25 +534,33 @@ describe("presencaSchema", () => {
     expect(presencaSchema.safeParse({ atletaId: CUID, estado: null }).success).toBe(true);
   });
 
-  it("aceita tipo de ausência (§8.8.2) e null em estado de ausência", () => {
+  it("aceita AUSENTE com cada motivo (§8.8.2), incluindo FUTEBOL_FUTSAL", () => {
     for (const tipoAusencia of [
       "LESAO",
       "DOENCA",
       "PESSOAL",
       "TRABALHO",
+      "FUTEBOL_FUTSAL",
       "SEM_MOTIVO",
       "OUTRO",
-      null,
     ]) {
       expect(
-        presencaSchema.safeParse({ atletaId: CUID, estado: "FALTA", tipoAusencia }).success,
+        presencaSchema.safeParse({ atletaId: CUID, estado: "AUSENTE", tipoAusencia }).success,
       ).toBe(true);
     }
   });
 
+  it("rejeita AUSENTE sem motivo (espelha o CHECK da BD)", () => {
+    expect(presencaSchema.safeParse({ atletaId: CUID, estado: "AUSENTE" }).success).toBe(false);
+    expect(
+      presencaSchema.safeParse({ atletaId: CUID, estado: "AUSENTE", tipoAusencia: null }).success,
+    ).toBe(false);
+  });
+
   it("rejeita tipo de ausência inválido", () => {
     expect(
-      presencaSchema.safeParse({ atletaId: CUID, estado: "FALTA", tipoAusencia: "FERIAS" }).success,
+      presencaSchema.safeParse({ atletaId: CUID, estado: "AUSENTE", tipoAusencia: "FERIAS" })
+        .success,
     ).toBe(false);
   });
 

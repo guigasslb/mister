@@ -1,4 +1,6 @@
-import type { BlocoTempo, FormatoJogo, Utilizacao } from "@prisma/client";
+import type { BlocoTempo, FormatoJogo, TipoAusencia, Utilizacao } from "@prisma/client";
+
+import { TIPOS_AUSENCIA, tipoAusenciaJustificado } from "@/lib/schemas/treino";
 
 /**
  * Conversão de cada bloco de tempo em minutos (secção 10.1 da bíblia).
@@ -92,6 +94,53 @@ export function blocoParaMinutos(
   return minutosPorBlocoDoFormato(formato)[bloco];
 }
 
+/**
+ * Detalhe das ausências de um atleta/equipa num período (§8.8.2 — "perceber o
+ * porquê"). `AUSENTE ⇔ tipoAusencia não nulo`, logo `total` é o nº de ausências
+ * com motivo. `justificadas` = todos os motivos exceto `SEM_MOTIVO`;
+ * `injustificadas` = `SEM_MOTIVO` (regra única: `tipoAusenciaJustificado`).
+ * `porMotivo` traz TODOS os motivos (0 incluído) para a UI poder renderizar a
+ * taxonomia completa sem ter de a reconstruir.
+ */
+export interface ResumoAusencias {
+  /** Nº total de ausências (registos `AUSENTE`, i.e. com `tipoAusencia`). */
+  total: number;
+  /** Ausências justificadas (todos os motivos exceto `SEM_MOTIVO`). */
+  justificadas: number;
+  /** Ausências injustificadas (`SEM_MOTIVO`). */
+  injustificadas: number;
+  /** Contagem por cada motivo da taxonomia (`TIPOS_AUSENCIA`; 0 incluído). */
+  porMotivo: Record<TipoAusencia, number>;
+}
+
+/** Resumo de ausências vazio — todos os motivos a 0. Função pura. */
+export function resumoAusenciasVazio(): ResumoAusencias {
+  const porMotivo = Object.fromEntries(TIPOS_AUSENCIA.map((t) => [t, 0])) as Record<
+    TipoAusencia,
+    number
+  >;
+  return { total: 0, justificadas: 0, injustificadas: 0, porMotivo };
+}
+
+/**
+ * Agrega uma lista de motivos de ausência (um por registo `AUSENTE`) no
+ * `ResumoAusencias`. Entradas `null`/`undefined` são ignoradas (não são
+ * ausências com motivo). Função pura — testável sem BD.
+ */
+export function agregarAusencias(
+  tipos: ReadonlyArray<TipoAusencia | null | undefined>,
+): ResumoAusencias {
+  const resumo = resumoAusenciasVazio();
+  for (const tipo of tipos) {
+    if (tipo == null) continue;
+    resumo.total++;
+    resumo.porMotivo[tipo]++;
+    if (tipoAusenciaJustificado(tipo)) resumo.justificadas++;
+    else resumo.injustificadas++;
+  }
+  return resumo;
+}
+
 export interface EstatisticasAgregadas {
   jogosConvocado: number;
   /** Jogos em que foi capitão de equipa (`Convocatoria.capitao`, §11.5) — subconjunto de `jogosConvocado`. */
@@ -108,6 +157,12 @@ export interface EstatisticasAgregadas {
   sessoesTotais: number;
   presencas: number;
   taxaPresenca: number;
+  /**
+   * Detalhe das ausências do período (§8.8.2). Independente da `taxaPresenca`
+   * (que só olha a PRESENTE/ATRASADO): aqui vive o PORQUÊ das faltas, por motivo
+   * e justificadas vs. injustificadas. Vazio quando não há ausências registadas.
+   */
+  ausencias: ResumoAusencias;
 }
 
 export interface LinhaEstatistica {
@@ -133,6 +188,11 @@ export interface EntradaAgregacao {
   sessoesTotais: number;
   presencas: number;
   estatisticas: LinhaEstatistica[];
+  /**
+   * Motivos das ausências do atleta no período (um por registo `AUSENTE`).
+   * Opcional para retrocompatibilidade: ausente/`[]` → `ResumoAusencias` vazio.
+   */
+  ausencias?: ReadonlyArray<TipoAusencia | null>;
 }
 
 /**
@@ -148,6 +208,7 @@ export interface EntradaAgregacao {
  */
 export function agregarEstatisticas(entrada: EntradaAgregacao): EstatisticasAgregadas {
   const { eGR, jogosConvocado, jogosCapitao, sessoesTotais, presencas, estatisticas } = entrada;
+  const ausencias = agregarAusencias(entrada.ausencias ?? []);
 
   const jogosUtilizados = estatisticas.filter(
     (e) => e.utilizacao !== "NAO_UTILIZADO",
@@ -196,5 +257,6 @@ export function agregarEstatisticas(entrada: EntradaAgregacao): EstatisticasAgre
     sessoesTotais,
     presencas,
     taxaPresenca,
+    ausencias,
   };
 }

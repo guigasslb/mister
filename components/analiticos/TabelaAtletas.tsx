@@ -9,6 +9,7 @@ import type { EstadoParticipacao, Posicao } from "@prisma/client";
 import type { LinhaAtletaEscalao } from "@/lib/actions/analise";
 import { ABREV_POSICAO, LABEL_POSICAO } from "@/lib/schemas/atleta";
 import { BadgeEstadoParticipacao } from "@/components/plantel/BadgesParticipacao";
+import { AusenciasCelula } from "@/components/analiticos/Ausencias";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -146,6 +147,12 @@ export function TabelaAtletas({ atletas, sessoesExecutadas }: TabelaAtletasProps
                 <th className="px-3 py-3 font-medium">Estado</th>
                 <th className="px-3 py-3 text-right font-medium">Presenças</th>
                 <th className="px-3 py-3 font-medium">Taxa</th>
+                <th
+                  className="px-3 py-3 text-right font-medium"
+                  title="Total de ausências; a vermelho as injustificadas"
+                >
+                  Ausências
+                </th>
                 <th className="px-3 py-3 text-right font-medium">Golos</th>
                 <th className="px-3 py-3 text-right font-medium">Assist.</th>
                 <th className="px-3 py-3 text-right font-medium">Jogos</th>
@@ -204,6 +211,9 @@ export function TabelaAtletas({ atletas, sessoesExecutadas }: TabelaAtletasProps
                           {taxaPct}%
                         </span>
                       </div>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <AusenciasCelula ausencias={a.ausencias} />
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums font-semibold">
                       {a.golos}

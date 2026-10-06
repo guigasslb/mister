@@ -26,6 +26,7 @@ import {
   TipoParticipacao,
   EstadoParticipacao,
   EstadoPresenca,
+  TipoAusencia,
   FormatoCompeticao,
   TipoJogo,
   CasaFora,
@@ -339,7 +340,8 @@ async function main() {
         sessaoId: sessao.id,
         atletaId: atletaIdPorNome.get(a.nome) as string,
         escalaoId: traquinas.id,
-        estado: presente ? EstadoPresenca.PRESENTE : EstadoPresenca.FALTA,
+        estado: presente ? EstadoPresenca.PRESENTE : EstadoPresenca.AUSENTE,
+        tipoAusencia: presente ? null : TipoAusencia.SEM_MOTIVO,
       };
     });
     await prisma.presenca.createMany({ data: presencas });

@@ -21,6 +21,7 @@ import { FiltroCompeticao } from "./FiltroCompeticao";
 import { RankingsMetricas } from "./RankingsMetricas";
 import { RankingAssiduidade } from "./RankingAssiduidade";
 import { TabelaAtletas } from "./TabelaAtletas";
+import { AusenciasMotivos } from "./Ausencias";
 import { Kpi, SecaoAnalitico, GrelhaMeses, type AcentoKpi } from "./Kpi";
 import { pct, n1 } from "./Cartao";
 import { formatarDataHoraLisboa } from "@/lib/utils-datas";
@@ -236,6 +237,28 @@ export function PainelEscalao({
       {presencaPorMes.length >= 2 && (
         <SecaoAnalitico titulo="Assiduidade mensal">
           <GrelhaMeses meses={presencaPorMes} />
+        </SecaoAnalitico>
+      )}
+
+      {/* Ausências do escalão (§8.8.2) — total + justificadas vs. injustificadas
+          e breakdown por motivo. Oculta quando não há ausências registadas
+          (inclui snapshots antigos sem o campo). */}
+      {(dados.ausencias?.total ?? 0) > 0 && (
+        <SecaoAnalitico titulo="Ausências">
+          <div className="grid grid-cols-3 gap-3 sm:max-w-md">
+            <Kpi valor={dados.ausencias!.total} label="total" acento="neutro" />
+            <Kpi
+              valor={dados.ausencias!.justificadas}
+              label="justificadas"
+              acento="verde"
+            />
+            <Kpi
+              valor={dados.ausencias!.injustificadas}
+              label="injustificadas"
+              acento="vermelho"
+            />
+          </div>
+          <AusenciasMotivos ausencias={dados.ausencias} />
         </SecaoAnalitico>
       )}
 
