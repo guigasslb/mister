@@ -72,7 +72,7 @@ export default async function DetalheSessaoPage({
     ? resSubcategorias.dados.map((sc) => ({
         id: sc.id,
         nome: sc.nome,
-        categorias: sc.categorias,
+        categoria: sc.categoria,
       }))
     : [];
 

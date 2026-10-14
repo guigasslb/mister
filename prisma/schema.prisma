@@ -34,14 +34,6 @@ model Clube {
   // F10 — flag de onboarding concluído (assistente de arranque).
   onboardingConcluido Boolean @default(false)
 
-  // 🔁 2026-10-06 (§3.16.1, §5.5): partilha de imagem/nome de atletas menores nos cards sociais MVP e
-  // Ranking dos escalões de formação. ATIVA por defeito (também nos clubes existentes). Só o
-  // Administrador do clube altera. Em/PorId = última alteração; sem histórico.
-  autorizaPartilhaImagemMenores      Boolean     @default(true)
-  autorizaPartilhaImagemMenoresEm    DateTime?
-  autorizaPartilhaImagemMenoresPorId String?
-  autorizaPartilhaImagemMenoresPor   Utilizador? @relation("AutorizacaoImagemClube", fields: [autorizaPartilhaImagemMenoresPorId], references: [id], onDelete: SetNull)
-
   membros       MembroClube[]
   perfis        Perfil[]
   epocas        Epoca[]
@@ -52,8 +44,6 @@ model Clube {
   metricas      MetricaConfig[]
   reunioes      Reuniao[]
   subcategorias SubcategoriaExercicio[]
-  // §3.3: partes do treino customizáveis por clube (4 de sistema + as do clube).
-  partesTreino  ParteTreinoClube[]
   atletas       Atleta[]
 
   // F3 (expand): propriedade explícita e partilha da biblioteca de exercícios.
@@ -197,9 +187,6 @@ model Utilizador {
   // capacidades/papel, não uma pessoa) — o estado `visto` é por pessoa.
   lembretesCriados   Lembrete[]             @relation("LembreteCriadoPor")
   lembretesRecebidos LembreteDestinatario[] @relation("LembreteDestinatario")
-
-  // 🔁 2026-10-06 (§3.16.1): inversa de Clube.autorizaPartilhaImagemMenoresPor.
-  autorizacoesImagemClube Clube[] @relation("AutorizacaoImagemClube")
 
   // P2.4 (§8.17): histórico de carreira do treinador (portátil, pertence à pessoa,
   // não ao clube — âncora do "o que crias é teu para toda a carreira", §17.3).
@@ -720,12 +707,7 @@ model Exercicio {
   clubeProprietario   Clube?  @relation("ExercicioClube", fields: [clubeProprietarioId], references: [id])
 
   // Parte do treino onde o exercício se aplica.
-  // Expand/contract (2026-10-12): `parteTreino` (enum) mantém-se como legado até a
-  // UI/actions passarem a escrever `parteTreinoId`; `parteTreinoId` aponta para a
-  // parte do clube (ParteTreinoClube) — backfill por (clubeId, chaveSistema).
-  parteTreino      ParteTreino?
-  parteTreinoId    String?
-  parteTreinoClube ParteTreinoClube? @relation(fields: [parteTreinoId], references: [id], onDelete: Restrict)
+  parteTreino ParteTreino?
 
   // Escalão-alvo (texto livre, para filtros da biblioteca).
   escalaoAlvo String?
@@ -741,13 +723,10 @@ model Exercicio {
   @@index([autorId])
   @@index([clubeProprietarioId])
   @@index([parteTreino])
-  @@index([parteTreinoId])
 }
 
-// Partes de SISTEMA do treino (bíblia §3.3). Desde 2026-10-12 as partes são
-// customizáveis por clube (ParteTreinoClube); este enum passa a identificar as 4
-// partes de sistema (`ParteTreinoClube.chaveSistema`) e mantém-se nas colunas
-// legadas `parteTreino` durante a fase expand.
+// Parte do treino (organização da biblioteca de exemplo e dos templates de sessão).
+// Valores conforme a bíblia §3.3.
 enum ParteTreino {
   AQUECIMENTO
   PRINCIPAL
@@ -815,40 +794,12 @@ model ModeloSessaoExercicio {
   exercicio      Exercicio    @relation(fields: [exercicioId], references: [id], onDelete: Restrict)
   ordem          Int          @default(0)
   duracaoMin     Int?
-  parteTreino    ParteTreino? // legado (expand) — ver Exercicio.parteTreino
-  parteTreinoId  String?
-  parteTreinoClube ParteTreinoClube? @relation(fields: [parteTreinoId], references: [id], onDelete: Restrict)
+  parteTreino    ParteTreino?
   notas          String?      @db.Text
 
   @@unique([modeloSessaoId, ordem])
   @@index([modeloSessaoId])
   @@index([exercicioId])
-  @@index([parteTreinoId])
-}
-
-// Parte do treino customizável por clube (bíblia §3.3). Cada clube tem as 4 partes
-// de sistema (`chaveSistema` preenchida, criadas no backfill e na criação do clube)
-// e pode criar as suas. Partes com histórico não se apagam — arquivam-se
-// (`arquivada`); as FKs que apontam para aqui são onDelete: Restrict.
-model ParteTreinoClube {
-  id           String       @id @default(cuid())
-  clubeId      String
-  clube        Clube        @relation(fields: [clubeId], references: [id], onDelete: Cascade)
-  nome         String
-  ordem        Int          @default(0)
-  cor          String? // hex opcional (ex: "#F0531E")
-  chaveSistema ParteTreino? // não-null = parte de sistema (uma por chave por clube)
-  arquivada    Boolean      @default(false)
-  criadoEm     DateTime     @default(now())
-  atualizadoEm DateTime     @updatedAt
-
-  exercicios              Exercicio[]
-  modelosSessaoExercicios ModeloSessaoExercicio[]
-  sessoesExercicios       SessaoExercicio[]
-
-  @@unique([clubeId, nome])
-  @@unique([clubeId, chaveSistema])
-  @@index([clubeId, ordem])
 }
 
 // Subcategoria de exercício, customizável por clube (ex: "Finalização", "1x1", "Contra-ataque").
@@ -857,18 +808,14 @@ model SubcategoriaExercicio {
   clubeId   String
   clube     Clube                       @relation(fields: [clubeId], references: [id], onDelete: Cascade)
   nome      String
-  // 2026-10-12: uma subcategoria pode pertencer a várias categorias principais
-  // (≥1 — CHECK na BD). O exercício mantém UMA categoriaPrincipal, que tem de
-  // estar contida nas `categorias` da subcategoria escolhida.
-  categorias CategoriaExercicioPrincipal[]
+  categoria CategoriaExercicioPrincipal
   ordem     Int                         @default(0)
   sistema   Boolean                     @default(false) // instalada por seed, não apagável pelo utilizador
   criadoEm  DateTime                    @default(now())
 
   exercicios Exercicio[]
 
-  @@index([clubeId])
-  @@index([categorias], type: Gin)
+  @@index([clubeId, categoria])
 }
 
 // De quem é o conteúdo metodológico criado (ver secção 4.2 da bíblia).
@@ -1091,11 +1038,7 @@ model SessaoExercicio {
   // enum ParteTreino já usado em Exercicio/ModeloSessaoExercicio: AQUECIMENTO |
   // PRINCIPAL | JOGO_REDUZIDO | RETORNO_CALMA. Null = sem fase atribuída (rows
   // legadas). Override por sessão — não altera a biblioteca.
-  // Expand (2026-10-12): `parteTreinoId` → ParteTreinoClube do clube do escalão da
-  // sessão; o enum fica como legado até as actions escreverem a FK.
   parteTreino             ParteTreino?
-  parteTreinoId           String?
-  parteTreinoClube        ParteTreinoClube? @relation(fields: [parteTreinoId], references: [id], onDelete: Restrict)
   // Exercícios em PARALELO (§3.5, 2026-10-14): linhas da mesma sessão com o mesmo
   // `grupoParalelo` (não-null) decorrem em simultâneo. Null = sequencial (todas as
   // rows legadas). Os membros de um grupo ocupam valores de `ordem` CONSECUTIVOS
@@ -1121,7 +1064,6 @@ model SessaoExercicio {
   @@unique([sessaoId, ordem])
   @@index([sessaoId])
   @@index([exercicioId])
-  @@index([parteTreinoId])
 }
 
 model Presenca {
@@ -2088,15 +2030,4 @@ model MatchManoMano {
   @@index([sessaoId])
   @@index([estado])
   @@index([competicaoId, ronda])
-}
-
-// 🔁 2026-10-10 (§5.1): rate-limit partilhado entre instâncias serverless (login e
-// recuperação de password). Janela fixa por chave: uma linha por chave, incremento
-// atómico num único upsert; linhas com `expiraEm` no passado podem ser apagadas.
-model LimiteTentativa {
-  chave    String   @id
-  contagem Int      @default(1)
-  expiraEm DateTime
-
-  @@index([expiraEm])
 }
