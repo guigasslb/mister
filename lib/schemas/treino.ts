@@ -242,3 +242,19 @@ export type SessaoExercicioOverrideInput = z.infer<typeof sessaoExercicioOverrid
  * quando ausente, a action herda a `parteTreino` do próprio exercício da biblioteca.
  */
 export const parteTreinoSessaoSchema = z.enum(PARTES_TREINO).nullable().optional();
+
+/**
+ * Exercícios em paralelo (§3.5): juntar ≥2 exercícios da mesma sessão num grupo
+ * (`agruparExerciciosParalelo`). Ids distintos.
+ */
+export const agruparExerciciosParaleloSchema = z.object({
+  sessaoExercicioIds: z
+    .array(z.string().cuid("Exercício inválido"))
+    .min(2, "São precisos pelo menos 2 exercícios")
+    .refine((ids) => new Set(ids).size === ids.length, "Exercícios repetidos"),
+});
+
+/** Exercícios em paralelo (§3.5): retirar um exercício do seu grupo (`desagruparExercicioParalelo`). */
+export const desagruparExercicioParaleloSchema = z.object({
+  sessaoExercicioId: z.string().cuid("Exercício inválido"),
+});

@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
@@ -13,11 +14,13 @@ import {
   sessaoExercicioOverrideSchema,
   parteTreinoSessaoSchema,
   estadoImplicaAusencia,
+  agruparExerciciosParaleloSchema,
+  desagruparExercicioParaleloSchema,
 } from "@/lib/schemas/treino";
 import { alcanceSchema } from "@/lib/schemas/planoSemanal";
 import { construirSnapshotExercicio } from "@/lib/snapshot-exercicio";
-import { combinarDataHora, duracaoEntreHoras, horaDeData, somarMinutos } from "@/lib/plano-semanal";
-import { Prisma, type Epoca, type Sessao } from "@prisma/client";
+import { combinarDataHora, duracaoEntreHoras, horaDeData, inicioDoDia, somarMinutos } from "@/lib/plano-semanal";
+import { Prisma, type Epoca, type ParteTreino, type Sessao } from "@prisma/client";
 
 const PATH = "/treinos";
 
@@ -111,7 +114,10 @@ async function resolverPlaneamentoAuto(
       epocaId,
       escalao: { clubeId },
       dataInicio: { lte: data },
-      dataFim: { gte: data },
+      // `dataFim` é guardada a 00:00 do último dia; comparar com o instante exato
+      // da sessão excluiria sessões criadas mais tarde nesse último dia (BUG-P2).
+      // Comparar com o início do dia da sessão inclui o dia final por completo.
+      dataFim: { gte: inicioDoDia(data) },
     },
     orderBy: { dataInicio: "desc" },
     select: { id: true },
@@ -571,14 +577,38 @@ export async function removerExercicioSessao(
 
   const se = await prisma.sessaoExercicio.findFirst({
     where: { id: sessaoExercicioId, sessao: { escalao: { clubeId } } },
-    select: { id: true, sessaoId: true, sessao: { select: { escalaoId: true } } },
+    select: {
+      id: true,
+      sessaoId: true,
+      grupoParalelo: true,
+      sessao: { select: { escalaoId: true } },
+    },
   });
   if (!se) return erro("Exercício da sessão não encontrado");
 
   const perm = await exigirCapacidade("TREINOS_GERIR", se.sessao.escalaoId);
   if (!perm.ok) return erro(perm.erro);
 
-  await prisma.sessaoExercicio.delete({ where: { id: sessaoExercicioId } });
+  // §3.5: um grupo paralelo que fique com 1 membro desfaz-se (esse volta a sequencial).
+  // Os restantes membros continuam contíguos (a linha removida estava dentro do bloco).
+  const operacoes: Prisma.PrismaPromise<unknown>[] = [
+    prisma.sessaoExercicio.delete({ where: { id: sessaoExercicioId } }),
+  ];
+  if (se.grupoParalelo !== null) {
+    const restantes = await prisma.sessaoExercicio.findMany({
+      where: { sessaoId: se.sessaoId, grupoParalelo: se.grupoParalelo, id: { not: se.id } },
+      select: { id: true },
+    });
+    if (restantes.length < 2) {
+      operacoes.push(
+        prisma.sessaoExercicio.updateMany({
+          where: { id: { in: restantes.map((r) => r.id) } },
+          data: { grupoParalelo: null },
+        }),
+      );
+    }
+  }
+  await prisma.$transaction(operacoes);
   revalidatePath(`${PATH}/${se.sessaoId}`);
   return ok(undefined);
 }
@@ -598,7 +628,13 @@ export async function atualizarExercicioSessao(
 
   const se = await prisma.sessaoExercicio.findFirst({
     where: { id: sessaoExercicioId, sessao: { escalao: { clubeId } } },
-    select: { id: true, sessaoId: true, sessao: { select: { escalaoId: true } } },
+    select: {
+      id: true,
+      sessaoId: true,
+      parteTreino: true,
+      grupoParalelo: true,
+      sessao: { select: { escalaoId: true } },
+    },
   });
   if (!se) return erro("Exercício da sessão não encontrado");
 
@@ -608,10 +644,23 @@ export async function atualizarExercicioSessao(
   const parsed = sessaoExercicioOverrideSchema.safeParse(dados);
   if (!parsed.success) return erroDeValidacao(parsed.error);
 
-  await prisma.sessaoExercicio.update({
+  const atualizacao = prisma.sessaoExercicio.update({
     where: { id: sessaoExercicioId },
     data: parsed.data,
   });
+  // §3.5: os membros de um grupo paralelo partilham a parte do treino — mudar a
+  // parte de um membro retira-o do grupo (fica logo a seguir ao bloco).
+  const mudaDeParte =
+    parsed.data.parteTreino !== undefined && parsed.data.parteTreino !== se.parteTreino;
+  if (se.grupoParalelo !== null && mudaDeParte) {
+    const linhas = await linhasDaSessao(se.sessaoId);
+    await prisma.$transaction([
+      atualizacao,
+      ...operacoesRetirarDoGrupo(linhas, se.id, se.grupoParalelo),
+    ]);
+  } else {
+    await atualizacao;
+  }
   revalidatePath(`${PATH}/${se.sessaoId}`);
   return ok(undefined);
 }
@@ -632,13 +681,18 @@ export async function reordenarExercicios(
   // Validação: todos os ids têm de pertencer a esta sessão (impede reordenar/corromper
   // SessaoExercicio de outra sessão via id forjado).
   const ids = ordens.map((o) => o.id);
-  if (ids.length > 0) {
-    const validos = await prisma.sessaoExercicio.count({
-      where: { id: { in: ids }, sessaoId },
-    });
-    if (validos !== ids.length)
-      return erro("Um ou mais exercícios não pertencem a esta sessão.");
-  }
+  const linhas = await prisma.sessaoExercicio.findMany({
+    where: { sessaoId },
+    select: { id: true, ordem: true, grupoParalelo: true },
+  });
+  const daSessao = new Set(linhas.map((l) => l.id));
+  if (new Set(ids).size !== ids.length || ids.some((id) => !daSessao.has(id)))
+    return erro("Um ou mais exercícios não pertencem a esta sessão.");
+
+  // §3.5: a ordem resultante não pode partir um grupo paralelo — é REJEITADA (não
+  // corrigida): o cliente move o grupo como um bloco.
+  if (partiriaGrupoParalelo(linhas, ordens))
+    return erro("Os exercícios em paralelo têm de ficar juntos — o grupo move-se como um bloco.");
 
   // Evita colisões no unique [sessaoId, ordem]: desloca para offset alto, depois assenta.
   await prisma.$transaction([
@@ -650,6 +704,184 @@ export async function reordenarExercicios(
     ),
   ]);
   revalidatePath(`${PATH}/${sessaoId}`);
+  return ok(undefined);
+}
+
+// ─── Exercícios em paralelo (§3.5) ───────────────────────────────────────────
+
+type LinhaSessao = {
+  id: string;
+  ordem: number;
+  grupoParalelo: string | null;
+  parteTreino: ParteTreino | null;
+};
+
+/** Linhas da sessão por `ordem` crescente. */
+function linhasDaSessao(sessaoId: string): Promise<LinhaSessao[]> {
+  return prisma.sessaoExercicio.findMany({
+    where: { sessaoId },
+    orderBy: { ordem: "asc" },
+    select: { id: true, ordem: true, grupoParalelo: true, parteTreino: true },
+  });
+}
+
+/**
+ * Operações que assentam a `sequencia` de ids reutilizando os valores de `ordem`
+ * já existentes (por ordem crescente). Só toca nas linhas cuja `ordem` muda; para
+ * não colidir no unique [sessaoId, ordem] desloca-as primeiro para acima do máximo.
+ */
+function operacoesOrdem(linhas: LinhaSessao[], sequencia: string[]) {
+  const valores = linhas.map((l) => l.ordem).sort((a, b) => a - b);
+  const atual = new Map(linhas.map((l) => [l.id, l.ordem]));
+  const mudancas = sequencia
+    .map((id, i) => ({ id, ordem: valores[i] }))
+    .filter((m) => atual.get(m.id) !== m.ordem);
+  const offset = (valores[valores.length - 1] ?? 0) + 1;
+  return [
+    ...mudancas.map((m, i) =>
+      prisma.sessaoExercicio.update({ where: { id: m.id }, data: { ordem: offset + i } }),
+    ),
+    ...mudancas.map((m) =>
+      prisma.sessaoExercicio.update({ where: { id: m.id }, data: { ordem: m.ordem } }),
+    ),
+  ];
+}
+
+/**
+ * Operações que retiram `id` do grupo `grupoParalelo`: passa a sequencial e fica
+ * imediatamente a seguir ao bloco. Se o grupo ficar com 1 membro, esse também
+ * volta a sequencial.
+ */
+function operacoesRetirarDoGrupo(linhas: LinhaSessao[], id: string, grupoParalelo: string) {
+  const restantes = linhas.filter((l) => l.grupoParalelo === grupoParalelo && l.id !== id);
+  const paraSequencial = restantes.length < 2 ? [id, ...restantes.map((r) => r.id)] : [id];
+  const ultimo = restantes[restantes.length - 1]?.id;
+  const sequencia: string[] = [];
+  for (const l of linhas) {
+    if (l.id === id && ultimo !== undefined) continue;
+    sequencia.push(l.id);
+    if (l.id === ultimo) sequencia.push(id);
+  }
+  return [
+    prisma.sessaoExercicio.updateMany({
+      where: { id: { in: paraSequencial } },
+      data: { grupoParalelo: null },
+    }),
+    ...operacoesOrdem(linhas, sequencia),
+  ];
+}
+
+/** True se, aplicadas as `ordens`, os membros de algum grupo deixarem de estar contíguos. */
+function partiriaGrupoParalelo(
+  linhas: { id: string; ordem: number; grupoParalelo: string | null }[],
+  ordens: { id: string; ordem: number }[],
+): boolean {
+  const ordemFinal = new Map(linhas.map((l) => [l.id, l.ordem]));
+  for (const o of ordens) ordemFinal.set(o.id, o.ordem);
+  const ordenadas = [...linhas].sort((a, b) => ordemFinal.get(a.id)! - ordemFinal.get(b.id)!);
+  const vistos = new Set<string>();
+  let anterior: string | null = null;
+  for (const { grupoParalelo } of ordenadas) {
+    if (grupoParalelo !== null && grupoParalelo !== anterior) {
+      if (vistos.has(grupoParalelo)) return true;
+      vistos.add(grupoParalelo);
+    }
+    anterior = grupoParalelo;
+  }
+  return false;
+}
+
+/**
+ * Junta ≥2 exercícios da mesma sessão num grupo paralelo (decorrem em simultâneo).
+ * Se algum já pertencer a um grupo, todos os membros desse(s) grupo(s) entram no
+ * mesmo grupo, reutilizando o identificador do primeiro (por `ordem`); senão gera-se
+ * um novo. Os membros passam a ocupar posições contíguas a partir do primeiro
+ * (dentro do grupo mantém-se a ordem relativa = colunas da esquerda para a direita).
+ */
+export async function agruparExerciciosParalelo(
+  sessaoExercicioIds: string[],
+): Promise<Resultado<void>> {
+  const parsed = agruparExerciciosParaleloSchema.safeParse({ sessaoExercicioIds });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+  const ids = parsed.data.sessaoExercicioIds;
+
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const selecionados = await prisma.sessaoExercicio.findMany({
+    where: { id: { in: ids }, sessao: { escalao: { clubeId } } },
+    select: { sessaoId: true, sessao: { select: { escalaoId: true } } },
+  });
+  if (selecionados.length !== ids.length) return erro("Exercício da sessão não encontrado");
+  const { sessaoId, sessao } = selecionados[0];
+  if (selecionados.some((s) => s.sessaoId !== sessaoId))
+    return erro("Os exercícios têm de pertencer à mesma sessão.");
+
+  const perm = await exigirCapacidade("TREINOS_GERIR", sessao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const linhas = await linhasDaSessao(sessaoId);
+  const escolhidos = new Set(ids);
+  const gruposExistentes = new Set(
+    linhas.filter((l) => escolhidos.has(l.id) && l.grupoParalelo !== null).map((l) => l.grupoParalelo),
+  );
+  const membros = linhas.filter(
+    (l) => escolhidos.has(l.id) || (l.grupoParalelo !== null && gruposExistentes.has(l.grupoParalelo)),
+  );
+  if (new Set(membros.map((m) => m.parteTreino)).size > 1)
+    return erro("Os exercícios em paralelo têm de pertencer à mesma parte do treino.");
+
+  const grupoParalelo = membros.find((m) => m.grupoParalelo !== null)?.grupoParalelo ?? randomUUID();
+  const idsMembros = membros.map((m) => m.id);
+  const sequencia: string[] = [];
+  for (const l of linhas) {
+    if (l.id === idsMembros[0]) sequencia.push(...idsMembros);
+    else if (!idsMembros.includes(l.id)) sequencia.push(l.id);
+  }
+
+  await prisma.$transaction([
+    prisma.sessaoExercicio.updateMany({
+      where: { id: { in: idsMembros } },
+      data: { grupoParalelo },
+    }),
+    ...operacoesOrdem(linhas, sequencia),
+  ]);
+  revalidatePath(`${PATH}/${sessaoId}`);
+  return ok(undefined);
+}
+
+/**
+ * Retira um exercício do seu grupo paralelo: passa a sequencial e fica logo a seguir
+ * ao bloco. Se o grupo ficar com 1 membro, esse também volta a sequencial.
+ */
+export async function desagruparExercicioParalelo(
+  sessaoExercicioId: string,
+): Promise<Resultado<void>> {
+  const parsed = desagruparExercicioParaleloSchema.safeParse({ sessaoExercicioId });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const se = await prisma.sessaoExercicio.findFirst({
+    where: { id: parsed.data.sessaoExercicioId, sessao: { escalao: { clubeId } } },
+    select: {
+      id: true,
+      sessaoId: true,
+      grupoParalelo: true,
+      sessao: { select: { escalaoId: true } },
+    },
+  });
+  if (!se) return erro("Exercício da sessão não encontrado");
+
+  const perm = await exigirCapacidade("TREINOS_GERIR", se.sessao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  if (se.grupoParalelo === null) return erro("O exercício não está em paralelo.");
+
+  const linhas = await linhasDaSessao(se.sessaoId);
+  await prisma.$transaction(operacoesRetirarDoGrupo(linhas, se.id, se.grupoParalelo));
+  revalidatePath(`${PATH}/${se.sessaoId}`);
   return ok(undefined);
 }
 

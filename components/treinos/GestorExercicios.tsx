@@ -13,6 +13,8 @@ import {
   ChevronRight,
   SlidersHorizontal,
   Search,
+  Columns2,
+  Unlink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +37,11 @@ import {
   adicionarExercicioSessao,
   removerExercicioSessao,
   reordenarExercicios,
+  agruparExerciciosParalelo,
+  desagruparExercicioParalelo,
 } from "@/lib/actions/treinos";
+import { calcularDuracaoExercicios } from "@/lib/utils/duracaoSessao";
+import { agruparEmBlocos, letraColuna } from "@/lib/treino-paralelo";
 import {
   LABEL_CATEGORIA,
   CATEGORIAS,
@@ -61,6 +67,8 @@ type ExercicioSessao = {
   // §4.2.1: overrides de nº de jogadores/espaço desta sessão (null = usa a base).
   numeroJogadoresOverride: string | null;
   espacoOverride: string | null;
+  // §3.5: mesmo valor = exercícios em simultâneo (lado a lado); null = sequencial.
+  grupoParalelo: string | null;
   exercicio: {
     id: string;
     nome: string;
@@ -94,7 +102,7 @@ type ExercicioBiblioteca = {
 type Subcategoria = {
   id: string;
   nome: string;
-  categoria: CategoriaExercicioPrincipal;
+  categorias: CategoriaExercicioPrincipal[];
 };
 
 // Sentinela do filtro "todas as fases" no seletor da biblioteca.
@@ -162,7 +170,8 @@ export function GestorExercicios({
     (e) => e.exercicio.categoriaPrincipal === "GUARDA_REDES",
   );
 
-  const total = exerciciosVisiveis.reduce((acc, e) => acc + (e.duracaoMin ?? 0), 0);
+  // §3.5: cada grupo em paralelo conta uma só vez (pelo exercício mais longo).
+  const total = calcularDuracaoExercicios(exerciciosVisiveis);
   // "+1"/"Adicionar" no seletor considera todos os exercícios já na sessão (incl. GR).
   const jaAdicionados = new Set(exercicios.map((e) => e.exercicio.id));
 
@@ -219,11 +228,23 @@ export function GestorExercicios({
   };
   for (const e of exerciciosVisiveis) grupos[e.parteTreino ?? SEM_FASE].push(e);
 
-  // Numeração global na ordem de visualização (fase a fase).
-  const numeroDe: Record<string, number> = {};
+  // §3.5: dentro de cada fase, linhas seguidas do mesmo `grupoParalelo` formam
+  // um bloco lado a lado (em simultâneo); cada exercício sequencial é um bloco.
+  const blocosDe = Object.fromEntries(
+    ORDEM_FASES.map((fase) => [fase, agruparEmBlocos(grupos[fase])]),
+  ) as Record<FaseKey, ExercicioSessao[][]>;
+
+  // Numeração global por bloco na ordem de visualização (fase a fase); num bloco
+  // em paralelo, cada exercício leva a letra da coluna ("3a", "3b").
+  const numeroDe: Record<string, string> = {};
   let contador = 0;
   for (const fase of ORDEM_FASES)
-    for (const e of grupos[fase]) numeroDe[e.id] = ++contador;
+    for (const bloco of blocosDe[fase]) {
+      contador++;
+      bloco.forEach((e, i) => {
+        numeroDe[e.id] = bloco.length > 1 ? `${contador}${letraColuna(i)}` : `${contador}`;
+      });
+    }
 
   function adicionar(exercicioId: string) {
     startTransition(async () => {
@@ -244,19 +265,43 @@ export function GestorExercicios({
     });
   }
 
-  // §3.5: reordenar DENTRO de uma fase. Reatribui `ordem` global (fase a fase)
-  // para manter a sequência coerente com a visualização e evitar colisões no
-  // unique [sessaoId, ordem].
-  function mover(fase: FaseKey, indexNoGrupo: number, direcao: -1 | 1) {
-    const grupo = grupos[fase];
-    const alvo = indexNoGrupo + direcao;
-    if (alvo < 0 || alvo >= grupo.length) return;
+  // §3.5: pôr um exercício em paralelo com o bloco anterior da mesma fase — o
+  // exercício entra como nova coluna à direita (ids pela ordem esquerda→direita).
+  function emParaleloComAnterior(fase: FaseKey, indiceBloco: number) {
+    const anterior = blocosDe[fase][indiceBloco - 1];
+    const atual = blocosDe[fase][indiceBloco];
+    if (!anterior || !atual) return;
+    startTransition(async () => {
+      const res = await agruparExerciciosParalelo([
+        ...anterior.map((e) => e.id),
+        ...atual.map((e) => e.id),
+      ]);
+      if (res.sucesso) toast.success("Exercícios em simultâneo");
+      else toast.error(res.erro);
+    });
+  }
 
-    const novoGrupo = [...grupo];
-    [novoGrupo[indexNoGrupo], novoGrupo[alvo]] = [novoGrupo[alvo], novoGrupo[indexNoGrupo]];
+  function retirarDoParalelo(sessaoExercicioId: string) {
+    startTransition(async () => {
+      const res = await desagruparExercicioParalelo(sessaoExercicioId);
+      if (!res.sucesso) toast.error(res.erro);
+    });
+  }
+
+  // §3.5: reordenar DENTRO de uma fase, bloco a bloco (um grupo em paralelo move
+  // como um todo). Reatribui `ordem` global (fase a fase) para manter a sequência
+  // coerente com a visualização e evitar colisões no unique [sessaoId, ordem].
+  function mover(fase: FaseKey, indiceBloco: number, direcao: -1 | 1) {
+    const blocos = blocosDe[fase];
+    const alvo = indiceBloco + direcao;
+    if (alvo < 0 || alvo >= blocos.length) return;
+
+    const novosBlocos = [...blocos];
+    [novosBlocos[indiceBloco], novosBlocos[alvo]] = [novosBlocos[alvo], novosBlocos[indiceBloco]];
 
     const flat: ExercicioSessao[] = [];
-    for (const f of ORDEM_FASES) flat.push(...(f === fase ? novoGrupo : grupos[f]));
+    for (const f of ORDEM_FASES)
+      flat.push(...(f === fase ? novosBlocos.flat() : grupos[f]));
     // Anexar os exercícios de GR (fora desta lista, no "Bloco de Guarda-redes")
     // preservando a sua ordem relativa: a reatribuição de `ordem` tem de cobrir
     // TODOS os SessaoExercicio da sessão, senão as linhas GR omitidas mantêm o
@@ -268,6 +313,186 @@ export function GestorExercicios({
       const res = await reordenarExercicios(sessaoId, ordens);
       if (!res.sucesso) toast.error(res.erro);
     });
+  }
+
+  // Setas de reordenação (≥44px) — movem o bloco inteiro (um exercício ou um
+  // grupo em paralelo) dentro da fase.
+  function setasBloco(fase: FaseKey, indiceBloco: number, nome: string) {
+    return (
+      <div className="flex flex-col justify-center">
+        <button
+          type="button"
+          onClick={() => mover(fase, indiceBloco, -1)}
+          disabled={indiceBloco === 0 || pending}
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+          aria-label={`Subir ${nome}`}
+        >
+          <ChevronUp className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => mover(fase, indiceBloco, 1)}
+          disabled={indiceBloco === blocosDe[fase].length - 1 || pending}
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+          aria-label={`Descer ${nome}`}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  // Cartão de um exercício da sessão. `emParalelo` = coluna de um bloco em
+  // simultâneo: miniatura mais estreita, setas no bloco e ação "Retirar do
+  // paralelo"; sequencial (não o 1.º da fase) → ação "Em paralelo com o anterior".
+  function cartao(
+    e: ExercicioSessao,
+    fase: FaseKey,
+    indiceBloco: number,
+    emParalelo: boolean,
+  ) {
+    const aberto = expandido === e.id;
+    // A adaptação da sessão tem prioridade sobre a descrição da biblioteca.
+    const descricaoMostrada = e.descricaoOverride ?? e.exercicio.descricao;
+    const temDetalhe = Boolean(descricaoMostrada || e.notas);
+    return (
+      <li
+        key={e.id}
+        className="overflow-hidden rounded-md border border-cinza-200 bg-white shadow-card"
+      >
+        <div className="flex items-stretch gap-2 p-2.5">
+          {modoEdicao && !emParalelo && setasBloco(fase, indiceBloco, e.exercicio.nome)}
+
+          <button
+            type="button"
+            onClick={() => setExercicioModal(e.exercicio)}
+            title="Ver diagrama em grande"
+            aria-label="Ver diagrama em grande"
+            className="flex-shrink-0 cursor-pointer rounded transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            {emParalelo ? (
+              <DiagramaCartao
+                diagrama={e.exercicio.diagrama}
+                nome={e.exercicio.nome}
+                largura={72}
+                className="w-[72px]"
+              />
+            ) : (
+              <DiagramaCartao diagrama={e.exercicio.diagrama} nome={e.exercicio.nome} />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => (temDetalhe ? setExpandido(aberto ? null : e.id) : undefined)}
+            aria-expanded={temDetalhe ? aberto : undefined}
+            className="flex min-w-0 flex-1 items-start gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <span className="mt-0.5 text-corpo font-semibold text-cinza-400">
+              {numeroDe[e.id]}.
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-corpo font-medium text-cinza-900">
+                {e.exercicio.nome}
+              </span>
+              <span className="block text-legenda text-cinza-500">
+                {e.exercicio.categoriaPrincipal
+                  ? LABEL_CATEGORIA[e.exercicio.categoriaPrincipal]
+                  : "Sem categoria"}
+                {e.duracaoMin ? ` · ${e.duracaoMin} min` : ""}
+              </span>
+              {e.exercicio.objetivo && (
+                <span className="mt-0.5 block line-clamp-2 text-legenda text-cinza-600">
+                  {e.exercicio.objetivo}
+                </span>
+              )}
+            </span>
+            {temDetalhe && (
+              <ChevronRight
+                className={`mt-1 h-4 w-4 flex-shrink-0 text-cinza-400 transition-transform ${
+                  aberto ? "rotate-90" : ""
+                }`}
+              />
+            )}
+          </button>
+
+          {!modoEdicao && (
+            <button
+              type="button"
+              onClick={() => setExercicioAdaptar(e)}
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-cinza-400 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-label="Adaptar para esta sessão"
+              title="Adaptar para esta sessão"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+            </button>
+          )}
+
+          {modoEdicao && emParalelo && (
+            <button
+              type="button"
+              onClick={() => retirarDoParalelo(e.id)}
+              disabled={pending}
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-cinza-500 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+              aria-label={`Retirar ${e.exercicio.nome} do paralelo`}
+              title="Retirar do paralelo"
+            >
+              <Unlink className="h-4 w-4" />
+            </button>
+          )}
+
+          {modoEdicao && !emParalelo && indiceBloco > 0 && (
+            <button
+              type="button"
+              onClick={() => emParaleloComAnterior(fase, indiceBloco)}
+              disabled={pending}
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-cinza-500 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+              aria-label={`Pôr ${e.exercicio.nome} em simultâneo com o anterior`}
+              title="Em simultâneo com o anterior"
+            >
+              <Columns2 className="h-4 w-4" />
+            </button>
+          )}
+
+          {modoEdicao && (
+            <button
+              type="button"
+              onClick={() => remover(e.id)}
+              disabled={pending}
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-vermelho-600 hover:bg-vermelho-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
+              aria-label={`Remover ${e.exercicio.nome}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {aberto && temDetalhe && (
+          <div className="border-t border-cinza-100 bg-cinza-50 px-3 py-3">
+            {descricaoMostrada && (
+              <div>
+                <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+                  Descrição / montagem
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
+                  {descricaoMostrada}
+                </p>
+              </div>
+            )}
+            {e.notas && (
+              <div className={descricaoMostrada ? "mt-3" : undefined}>
+                <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+                  Notas do treinador
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
+                  {e.notas}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </li>
+    );
   }
 
   return (
@@ -586,138 +811,36 @@ export function GestorExercicios({
               </div>
 
               <ol className="space-y-2">
-                {grupos[fase].map((e, i) => {
-                  const aberto = expandido === e.id;
-                  // A adaptação da sessão tem prioridade sobre a descrição da biblioteca.
-                  const descricaoMostrada = e.descricaoOverride ?? e.exercicio.descricao;
-                  const temDetalhe = Boolean(descricaoMostrada || e.notas);
+                {blocosDe[fase].map((bloco, iBloco) => {
+                  if (bloco.length === 1) return cartao(bloco[0], fase, iBloco, false);
+                  // §3.5: bloco em paralelo — exercícios em simultâneo lado a lado (em
+                  // mobile empilham, dentro do mesmo contentor "Em simultâneo").
+                  const duracaoBloco = calcularDuracaoExercicios(bloco);
                   return (
                     <li
-                      key={e.id}
-                      className="overflow-hidden rounded-md border border-cinza-200 bg-white shadow-card"
+                      key={bloco[0].id}
+                      className="rounded-md border border-primary/30 bg-primary/5 p-2"
                     >
-                      <div className="flex items-stretch gap-2 p-2.5">
-                        {modoEdicao && (
-                          <div className="flex flex-col justify-center">
-                            <button
-                              type="button"
-                              onClick={() => mover(fase, i, -1)}
-                              disabled={i === 0 || pending}
-                              className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                              aria-label={`Subir ${e.exercicio.nome}`}
-                            >
-                              <ChevronUp className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => mover(fase, i, 1)}
-                              disabled={i === grupos[fase].length - 1 || pending}
-                              className="flex h-8 w-8 items-center justify-center rounded text-cinza-400 hover:text-cinza-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                              aria-label={`Descer ${e.exercicio.nome}`}
-                            >
-                              <ChevronDown className="h-4 w-4" />
-                            </button>
-                          </div>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => setExercicioModal(e.exercicio)}
-                          title="Ver diagrama em grande"
-                          aria-label="Ver diagrama em grande"
-                          className="flex-shrink-0 cursor-pointer rounded transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        >
-                          <DiagramaCartao
-                            diagrama={e.exercicio.diagrama}
-                            nome={e.exercicio.nome}
-                          />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            temDetalhe ? setExpandido(aberto ? null : e.id) : undefined
-                          }
-                          aria-expanded={temDetalhe ? aberto : undefined}
-                          className="flex min-w-0 flex-1 items-start gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        >
-                          <span className="mt-0.5 text-corpo font-semibold text-cinza-400">
-                            {numeroDe[e.id]}.
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-corpo font-medium text-cinza-900">
-                              {e.exercicio.nome}
-                            </span>
-                            <span className="block text-legenda text-cinza-500">
-                              {e.exercicio.categoriaPrincipal
-                                ? LABEL_CATEGORIA[e.exercicio.categoriaPrincipal]
-                                : "Sem categoria"}
-                              {e.duracaoMin ? ` · ${e.duracaoMin} min` : ""}
-                            </span>
-                            {e.exercicio.objetivo && (
-                              <span className="mt-0.5 block line-clamp-2 text-legenda text-cinza-600">
-                                {e.exercicio.objetivo}
-                              </span>
-                            )}
-                          </span>
-                          {temDetalhe && (
-                            <ChevronRight
-                              className={`mt-1 h-4 w-4 flex-shrink-0 text-cinza-400 transition-transform ${
-                                aberto ? "rotate-90" : ""
-                              }`}
-                            />
+                      <p className="flex items-center gap-1.5 px-1 pb-2 text-legenda font-semibold uppercase tracking-wide text-primary">
+                        <Columns2 className="h-4 w-4" aria-hidden />
+                        Em simultâneo · {bloco.length} exercícios
+                        {duracaoBloco > 0 && ` · ${duracaoBloco} min`}
+                      </p>
+                      <div className="flex items-stretch gap-2">
+                        {modoEdicao &&
+                          setasBloco(
+                            fase,
+                            iBloco,
+                            bloco.map((e) => e.exercicio.nome).join(" e "),
                           )}
-                        </button>
-
-                        {!modoEdicao && (
-                          <button
-                            type="button"
-                            onClick={() => setExercicioAdaptar(e)}
-                            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-cinza-400 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            aria-label="Adaptar para esta sessão"
-                            title="Adaptar para esta sessão"
-                          >
-                            <SlidersHorizontal className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {modoEdicao && (
-                          <button
-                            type="button"
-                            onClick={() => remover(e.id)}
-                            disabled={pending}
-                            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-vermelho-600 hover:bg-vermelho-600/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
-                            aria-label={`Remover ${e.exercicio.nome}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                        <ul
+                          className={`grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 ${
+                            bloco.length > 2 ? "lg:grid-cols-3" : ""
+                          }`}
+                        >
+                          {bloco.map((e) => cartao(e, fase, iBloco, true))}
+                        </ul>
                       </div>
-
-                      {aberto && temDetalhe && (
-                        <div className="border-t border-cinza-100 bg-cinza-50 px-3 py-3">
-                          {descricaoMostrada && (
-                            <div>
-                              <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
-                                Descrição / montagem
-                              </p>
-                              <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
-                                {descricaoMostrada}
-                              </p>
-                            </div>
-                          )}
-                          {e.notas && (
-                            <div className={descricaoMostrada ? "mt-3" : undefined}>
-                              <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
-                                Notas do treinador
-                              </p>
-                              <p className="mt-1 whitespace-pre-wrap text-corpo-sec text-cinza-900">
-                                {e.notas}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </li>
                   );
                 })}

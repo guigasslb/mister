@@ -8,6 +8,7 @@ import { obterEpocaAtiva } from "@/lib/epoca-context";
 import { obterMembroAtual } from "@/lib/permissoes";
 import { resolverExercicioSessao } from "@/lib/snapshot-exercicio";
 import { PARTES_TREINO } from "@/lib/schemas/exercicio";
+import { calcularDuracaoExercicios } from "@/lib/utils/duracaoSessao";
 import { BotaoImprimir } from "@/components/relatorios/BotaoImprimir";
 import { AutoImprimir } from "@/components/treinos/AutoImprimir";
 import { ForcarModoClaroImpressao } from "@/components/treinos/ForcarModoClaroImpressao";
@@ -63,6 +64,8 @@ export default async function ImprimirTreinoPage({
       numeroJogadores: r.numeroJogadores,
       espaco: r.espaco,
       diagrama: r.diagrama,
+      // §3.5: exercícios em paralelo — impressos lado a lado.
+      grupoParalelo: se.grupoParalelo,
     };
   });
 
@@ -81,9 +84,11 @@ export default async function ImprimirTreinoPage({
       indiceFase(a.parteTreino) - indiceFase(b.parteTreino) || a.ordem - b.ordem,
   );
 
-  // Duração total: a planeada na sessão, ou o somatório dos exercícios.
-  const somaExercicios = exercicios.reduce((tot, e) => tot + (e.duracaoMin ?? 0), 0);
-  const duracaoTotalMin = s.duracaoMin ?? (somaExercicios > 0 ? somaExercicios : null);
+  // Duração total: a planeada na sessão, ou a dos exercícios (§3.5: cada grupo
+  // em paralelo conta uma só vez, pelo exercício mais longo).
+  const duracaoExercicios = calcularDuracaoExercicios(exercicios);
+  const duracaoTotalMin =
+    s.duracaoMin ?? (duracaoExercicios > 0 ? duracaoExercicios : null);
 
   // Presenças (Gap 4): presentes = PRESENTE ou ATRASADO; denominador = registados.
   const nRegistados = s.presencas.length;
@@ -94,6 +99,7 @@ export default async function ImprimirTreinoPage({
   const dados: DadosImpressaoTreino = {
     clubeNome: membro?.clube.nome ?? "Clube",
     clubeLogoUrl: membro?.clube.logoUrl ?? null,
+    clubeCorPrimaria: membro?.clube.corPrimaria ?? null,
     epocaNome: epoca?.nome ?? null,
     escalaoNome: s.escalao.nome,
     data: s.data,

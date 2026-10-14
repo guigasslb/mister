@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   LogOut,
   Plus,
+  Columns2,
 } from "lucide-react";
 import {
   LABEL_CATEGORIA,
@@ -31,6 +32,7 @@ import {
   ordenarExerciciosPorFase,
   type FaseKey,
 } from "@/lib/treino-fases";
+import { agruparEmBlocos } from "@/lib/treino-paralelo";
 import type { CategoriaExercicioPrincipal } from "@prisma/client";
 
 export type ExercicioModo = {
@@ -52,6 +54,8 @@ export type ExercicioModo = {
   espaco: string | null;
   numeroJogadoresOverride: string | null;
   espacoOverride: string | null;
+  // §3.5: mesmo valor = exercícios em simultâneo; null = sequencial.
+  grupoParalelo: string | null;
 };
 
 // Rótulos das fases na barra de navegação — reusa os rótulos da biblioteca e
@@ -182,6 +186,20 @@ export function ModoTreino({
     [exerciciosOrdenados],
   );
 
+  // §3.5: blocos da sequência (um exercício, ou um grupo em paralelo) com os
+  // índices de início/fim de cada exercício — "Anterior"/"Próximo" saltam o bloco
+  // inteiro; os exercícios em simultâneo alcançam-se pelos atalhos do painel.
+  const blocoDe = useMemo(() => {
+    const mapa = new Map<string, { inicio: number; fim: number }>();
+    let inicio = 0;
+    for (const bloco of agruparEmBlocos(exerciciosOrdenados)) {
+      const fim = inicio + bloco.length - 1;
+      for (const e of bloco) mapa.set(e.id, { inicio, fim });
+      inicio = fim + 1;
+    }
+    return mapa;
+  }, [exerciciosOrdenados]);
+
   // Cronómetro ascendente (tempo total decorrido na sessão). Não incrementa
   // enquanto estiver em pausa.
   useEffect(() => {
@@ -215,7 +233,14 @@ export function ModoTreino({
 
   const total = exerciciosOrdenados.length;
   const atual = exerciciosOrdenados[indice];
-  const ultimo = indice >= total - 1;
+  const blocoAtual = atual ? blocoDe.get(atual.id) : undefined;
+  const inicioBloco = blocoAtual?.inicio ?? indice;
+  const fimBloco = blocoAtual?.fim ?? indice;
+  const ultimo = fimBloco >= total - 1;
+  // Restantes exercícios do bloco em paralelo do exercício atual (esquerda→direita).
+  const emSimultaneo = exerciciosOrdenados
+    .slice(inicioBloco, fimBloco + 1)
+    .filter((e) => e.id !== atual?.id);
   const faseAtual: FaseKey | null = atual ? atual.parteTreino ?? SEM_FASE : null;
 
   function terminarDefinitivo() {
@@ -235,15 +260,19 @@ export function ModoTreino({
     onSuspend();
   }
 
+  // Navegação bloco a bloco (§3.5): do bloco atual para o 1.º exercício do
+  // bloco anterior/seguinte.
   function anterior() {
-    setIndice((i) => Math.max(0, i - 1));
+    if (inicioBloco === 0) return;
+    const anteriorBloco = blocoDe.get(exerciciosOrdenados[inicioBloco - 1].id);
+    setIndice(anteriorBloco?.inicio ?? inicioBloco - 1);
     setSegundos(0);
   }
 
   function proximo() {
     if (ultimo) terminarDefinitivo();
     else {
-      setIndice((i) => Math.min(total - 1, i + 1));
+      setIndice(fimBloco + 1);
       setSegundos(0);
     }
   }
@@ -389,6 +418,29 @@ export function ModoTreino({
               </button>
             </div>
 
+            {/* §3.5: exercícios a decorrer ao mesmo tempo (ex.: outra metade do
+                campo). Trocar entre eles não reinicia o cronómetro. */}
+            {emSimultaneo.length > 0 && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
+                <p className="flex items-center gap-1.5 text-legenda font-semibold uppercase tracking-wide text-primary">
+                  <Columns2 className="h-4 w-4" aria-hidden />
+                  Em simultâneo com
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {emSimultaneo.map((e) => (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => setIndice(exerciciosOrdenados.indexOf(e))}
+                      className="flex h-11 max-w-full items-center rounded-md border border-cinza-200 bg-white px-3 text-corpo-sec font-medium text-cinza-700 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      <span className="truncate">{e.nome}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <DiagramaGrande diagrama={atual.diagrama} nome={atual.nome} />
 
             {atual.objetivo && (
@@ -441,7 +493,7 @@ export function ModoTreino({
         <button
           type="button"
           onClick={anterior}
-          disabled={indice === 0}
+          disabled={inicioBloco === 0}
           aria-label="Exercício anterior"
           className="flex h-14 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-cinza-200 bg-white px-4 text-corpo font-medium text-cinza-700 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-30"
         >

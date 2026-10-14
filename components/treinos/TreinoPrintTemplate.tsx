@@ -1,4 +1,3 @@
-import { Logo } from "@/components/layout/Logo";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
 import {
   diagramaSchema,
@@ -14,15 +13,16 @@ import {
 } from "@/lib/schemas/treino";
 import { LABEL_PERIODO } from "@/lib/schemas/planeamento";
 import { formatarDataHoraLisboa } from "@/lib/utils-datas";
+import { agruparEmBlocos, letraColuna } from "@/lib/treino-paralelo";
+import { calcularDuracaoExercicios } from "@/lib/utils/duracaoSessao";
+import { cssPaginaPdf, temaPdf, variaveisTemaPdf, type TemaPdf } from "@/lib/pdf/tema";
+import type { CSSProperties } from "react";
 import type {
   TipoSessao,
   ParteTreino,
   CategoriaExercicioPrincipal,
   PeriodoEpoca,
 } from "@prisma/client";
-
-/** Laranja da marca Mister (§12 / docs/BRAND.md) — acento dos cabeçalhos de secção. */
-const MISTER_LARANJA = "#F0531E";
 
 // §3.5: ordem canónica das fases + bucket para exercícios sem fase (rows legadas).
 // Idêntico ao ecrã (GestorExercicios): a impressão agrupa e numera os exercícios
@@ -54,11 +54,15 @@ export type ExercicioImpressao = {
   espaco?: string | null;
   /** Diagrama de campo (DiagramaCampo em JSON) ou null. */
   diagrama: unknown;
+  /** §3.5: mesmo valor = exercícios em simultâneo (impressos lado a lado); null = sequencial. */
+  grupoParalelo: string | null;
 };
 
 export type DadosImpressaoTreino = {
   clubeNome: string;
   clubeLogoUrl: string | null;
+  /** Cor primária do clube (acento do documento, §12); ausente → laranja da marca. */
+  clubeCorPrimaria?: string | null;
   epocaNome: string | null;
   escalaoNome: string;
   data: Date;
@@ -94,6 +98,14 @@ function formatarDataLonga(data: Date): string {
   });
   const dataCapitalizada = dataStr.charAt(0).toUpperCase() + dataStr.slice(1);
   return `${dataCapitalizada} às ${horaStr}`;
+}
+
+function formatarDataCurta(data: Date): string {
+  return formatarDataHoraLisboa(data, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 function formatarDataImpressao(data: Date): string {
@@ -144,23 +156,36 @@ function MetaCabecalho({ rotulo, valor }: { rotulo: string; valor: string }) {
 }
 
 /**
- * Cartão de um exercício na impressão. O `numero` é a posição GLOBAL do
- * exercício na sequência do treino (corre fase a fase — igual ao ecrã). A fase
- * não aparece como chip por já ser o cabeçalho do grupo onde o cartão vive.
+ * Cartão de um exercício na impressão. O `numero` é a posição GLOBAL do bloco
+ * na sequência do treino (corre fase a fase — igual ao ecrã); num bloco em
+ * paralelo leva a letra da coluna ("3a", "3b"). A fase não aparece como chip por
+ * já ser o cabeçalho do grupo onde o cartão vive. Em paralelo (`emParalelo`), o
+ * cartão ocupa meia largura e empilha o diagrama sobre o texto.
  */
 function ItemExercicioImpressao({
   ex,
   numero,
+  tema,
+  emParalelo,
 }: {
   ex: ExercicioImpressao;
-  numero: number;
+  numero: string;
+  tema: TemaPdf;
+  emParalelo: boolean;
 }) {
   return (
-    <li className="flex break-inside-avoid gap-4 rounded-lg border border-cinza-200 p-4">
-      {/* Número de ordem (global, fase a fase) */}
+    <li className="relative flex break-inside-avoid gap-4 overflow-hidden rounded-lg border border-cinza-200 p-4 pl-5">
+      {/* Filete lateral na cor do clube (elemento próprio: o print do globals
+          força a cor das bordas `border-cinza-*`). */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: tema.acento }}
+      />
+      {/* Número de ordem (global, fase a fase) — texto claro/escuro AA sobre a cor do clube */}
       <div
-        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-corpo font-bold text-white"
-        style={{ backgroundColor: MISTER_LARANJA }}
+        className="flex h-9 min-w-9 flex-shrink-0 px-1.5 items-center justify-center rounded-full text-corpo font-bold"
+        style={{ backgroundColor: tema.solidoFundo, color: tema.solidoTexto }}
         aria-hidden
       >
         {numero}
@@ -193,7 +218,9 @@ function ItemExercicioImpressao({
         </div>
 
         {/* Corpo: diagrama + texto lado a lado */}
-        <div className="mt-3 flex flex-col gap-4 sm:flex-row">
+        <div
+          className={`mt-3 flex flex-col gap-4 ${emParalelo ? "" : "sm:flex-row"}`}
+        >
           <DiagramaImpressao diagrama={ex.diagrama} nome={ex.nome} />
           <div className="min-w-0 flex-1 space-y-2">
             {ex.objetivo && (
@@ -240,6 +267,7 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
   const {
     clubeNome,
     clubeLogoUrl,
+    clubeCorPrimaria,
     epocaNome,
     escalaoNome,
     data,
@@ -280,37 +308,84 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
   for (const ex of exercicios) grupos[ex.parteTreino ?? SEM_FASE].push(ex);
   for (const fase of ORDEM_FASES) grupos[fase].sort((a, b) => a.ordem - b.ordem);
 
-  const numeroDe: Record<string, number> = {};
+  // §3.5: dentro de cada fase, linhas seguidas do mesmo `grupoParalelo` formam
+  // um bloco impresso lado a lado. A numeração corre por bloco; num bloco em
+  // paralelo, cada exercício leva a letra da coluna ("3a", "3b").
+  const blocosDe = Object.fromEntries(
+    ORDEM_FASES.map((fase) => [fase, agruparEmBlocos(grupos[fase])]),
+  ) as Record<FaseKey, ExercicioImpressao[][]>;
+  const numeroDe: Record<string, string> = {};
   let contador = 0;
   for (const fase of ORDEM_FASES)
-    for (const ex of grupos[fase]) numeroDe[ex.id] = ++contador;
+    for (const bloco of blocosDe[fase]) {
+      contador++;
+      bloco.forEach((ex, i) => {
+        numeroDe[ex.id] = bloco.length > 1 ? `${contador}${letraColuna(i)}` : `${contador}`;
+      });
+    }
 
   const fasesComExercicios = ORDEM_FASES.filter((fase) => grupos[fase].length > 0);
 
+  // Acento do documento = cor do clube (§12 / docs/BRAND.md); a marca Mister
+  // fica só no rodapé. As variáveis alimentam também o `[data-brand]` em print.
+  const tema = temaPdf(clubeCorPrimaria);
+  const estiloTema = variaveisTemaPdf(tema) as CSSProperties;
+
   return (
-    <article className="mx-auto max-w-[820px] bg-white px-8 py-8 text-cinza-900 print:px-0 print:py-0">
-      {/* Cabeçalho: logótipo Mister (produto) + clube/época no contexto da página.
-          §BRAND: o logótipo do clube nunca fica em lockup ao lado do produto. */}
-      <header className="mb-6 flex items-start justify-between gap-4 border-b-2 border-cinza-200 pb-5">
-        <Logo variant="light" size={24} />
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 text-right">
-            <p className="truncate font-display text-subtitulo font-semibold text-cinza-900">
-              {clubeNome}
-            </p>
-            {epocaNome && (
-              <p className="text-legenda text-cinza-600">Época {epocaNome}</p>
+    <article
+      className="mx-auto max-w-[820px] bg-white px-8 py-8 text-cinza-900 print:px-0 print:py-0"
+      style={estiloTema}
+    >
+      {/* A4 + numeração de páginas na impressão (tokens partilhados com os
+          relatórios dos analíticos — lib/pdf/tema.ts). */}
+      <style dangerouslySetInnerHTML={{ __html: `@media print {${cssPaginaPdf()}}` }} />
+
+      {/* Cabeçalho: faixa na cor do clube; identidade do clube (escudo, nome,
+          escalão/época) à esquerda e a data da sessão à direita. Sem logótipo
+          do produto — a marca Mister vive apenas no rodapé (§BRAND). */}
+      <header className="mb-6 break-inside-avoid">
+        <div className="h-[5px] rounded-full" style={{ backgroundColor: tema.acento }} />
+        <div className="flex items-center justify-between gap-4 border-b border-cinza-200 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            {clubeLogoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={clubeLogoUrl}
+                alt={clubeNome}
+                data-print-logo
+                className="h-12 w-12 flex-shrink-0 object-contain"
+              />
+            ) : (
+              <div
+                aria-hidden
+                className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl font-display text-subtitulo font-bold"
+                style={{ backgroundColor: tema.solidoFundo, color: tema.solidoTexto }}
+              >
+                {(clubeNome.trim()[0] ?? "?").toUpperCase()}
+              </div>
             )}
+            <div className="min-w-0">
+              <p className="truncate font-display text-subtitulo font-bold text-cinza-900">
+                {clubeNome}
+              </p>
+              <p className="text-legenda text-cinza-600">
+                {escalaoNome}
+                {epocaNome && ` · Época ${epocaNome}`}
+              </p>
+            </div>
           </div>
-          {clubeLogoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={clubeLogoUrl}
-              alt={clubeNome}
-              data-print-logo
-              className="h-10 w-10 flex-shrink-0 object-contain"
-            />
-          )}
+          <div className="flex-shrink-0 text-right">
+            <p
+              data-brand
+              className="text-legenda font-bold uppercase tracking-wide"
+              style={{ color: tema.acentoTexto }}
+            >
+              Data
+            </p>
+            <p className="text-corpo font-semibold text-cinza-900">
+              {formatarDataCurta(data)}
+            </p>
+          </div>
         </div>
       </header>
 
@@ -318,8 +393,8 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
       <div className="mb-6">
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <span
-            className="rounded-full px-2.5 py-0.5 text-legenda font-semibold text-white"
-            style={{ backgroundColor: MISTER_LARANJA }}
+            className="rounded-full px-2.5 py-0.5 text-legenda font-semibold"
+            style={{ backgroundColor: tema.solidoFundo, color: tema.solidoTexto }}
           >
             {LABEL_TIPO_SESSAO_TODOS[tipoSessao]}
           </span>
@@ -367,7 +442,7 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
         <h2
           data-brand
           className="mb-3 text-legenda font-bold uppercase tracking-wide"
-          style={{ color: MISTER_LARANJA }}
+          style={{ color: tema.acentoTexto }}
         >
           Resumo da sessão
         </h2>
@@ -414,7 +489,7 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
         <h2
           data-brand
           className="mb-4 text-legenda font-bold uppercase tracking-wide"
-          style={{ color: MISTER_LARANJA }}
+          style={{ color: tema.acentoTexto }}
         >
           Exercícios
         </h2>
@@ -429,6 +504,11 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
               <div key={fase} className="space-y-3">
                 {/* Cabeçalho da fase — evita ficar órfão no fim da página. */}
                 <div className="flex items-center gap-2 [break-after:avoid]">
+                  <span
+                    aria-hidden
+                    className="h-3.5 w-1 rounded-full"
+                    style={{ backgroundColor: tema.acento }}
+                  />
                   <h3 className="text-legenda font-bold uppercase tracking-wide text-cinza-700">
                     {LABEL_FASE[fase]}
                   </h3>
@@ -439,13 +519,40 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
                 </div>
 
                 <ol className="space-y-5">
-                  {grupos[fase].map((ex) => (
-                    <ItemExercicioImpressao
-                      key={ex.id}
-                      ex={ex}
-                      numero={numeroDe[ex.id]}
-                    />
-                  ))}
+                  {blocosDe[fase].map((bloco) => {
+                    if (bloco.length === 1)
+                      return (
+                        <ItemExercicioImpressao
+                          key={bloco[0].id}
+                          ex={bloco[0]}
+                          numero={numeroDe[bloco[0].id]}
+                          tema={tema}
+                          emParalelo={false}
+                        />
+                      );
+                    // §3.5: bloco em paralelo — exercícios em simultâneo lado a lado;
+                    // a duração do bloco é a do exercício mais longo.
+                    const duracaoBloco = calcularDuracaoExercicios(bloco);
+                    return (
+                      <li key={bloco[0].id} className="break-inside-avoid space-y-2">
+                        <p className="text-legenda font-semibold uppercase tracking-wide text-cinza-700">
+                          Em simultâneo · {bloco.length} exercícios
+                          {duracaoBloco > 0 && ` · ${duracaoBloco} min`}
+                        </p>
+                        <ol className="grid grid-cols-2 gap-3">
+                          {bloco.map((ex) => (
+                            <ItemExercicioImpressao
+                              key={ex.id}
+                              ex={ex}
+                              numero={numeroDe[ex.id]}
+                              tema={tema}
+                              emParalelo
+                            />
+                          ))}
+                        </ol>
+                      </li>
+                    );
+                  })}
                 </ol>
               </div>
             ))}
@@ -456,9 +563,12 @@ export function TreinoPrintTemplate({ dados }: { dados: DadosImpressaoTreino }) 
       {/* Rodapé — nunca forçar quebra antes (evita página em branco no fim) e
           manter íntegro na mesma página. */}
       <footer className="mt-8 flex break-inside-avoid items-center justify-between gap-4 border-t border-cinza-200 pt-4 text-legenda text-cinza-500 [break-before:avoid]">
-        <span className="min-w-0 truncate">{clubeNome}</span>
+        <span className="min-w-0 truncate">
+          <span className="font-semibold text-cinza-700">{clubeNome}</span>
+          {epocaNome && ` · Época ${epocaNome}`}
+        </span>
         <span className="flex-shrink-0 text-right">
-          Impresso em {formatarDataImpressao(new Date())} · Mister
+          Impresso em {formatarDataImpressao(new Date())} · Gerado com Mister
         </span>
       </footer>
     </article>

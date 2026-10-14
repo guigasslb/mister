@@ -26,7 +26,7 @@ vi.mock("@/lib/db", () => ({
     valorMetrica: { upsert: vi.fn() },
     metricaConfig: { findMany: vi.fn() },
     sessao: { findFirst: vi.fn(), count: vi.fn() },
-    sessaoExercicio: { count: vi.fn(), update: vi.fn() },
+    sessaoExercicio: { findMany: vi.fn(), update: vi.fn() },
     escalao: { findFirst: vi.fn(), delete: vi.fn() },
     planeamento: { count: vi.fn() },
     competicao: { count: vi.fn() },
@@ -167,7 +167,10 @@ describe("guardarEstatisticas — só atletas convocados (secção 12.5)", () =>
 describe("reordenarExercicios — ids têm de pertencer à sessão (auditoria M4)", () => {
   it("rejeita quando algum id não pertence à sessão", async () => {
     mocked(prisma.sessao.findFirst).mockResolvedValue({ id: "s1", escalaoId: "esc1" });
-    mocked(prisma.sessaoExercicio.count).mockResolvedValue(1); // só 1 dos 2 pertence
+    // A sessão só tem se1 — se2 é de outra sessão.
+    mocked(prisma.sessaoExercicio.findMany).mockResolvedValue([
+      { id: "se1", ordem: 0, grupoParalelo: null },
+    ]);
 
     const r = await reordenarExercicios("s1", [
       { id: "se1", ordem: 0 },

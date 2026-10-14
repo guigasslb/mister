@@ -72,7 +72,7 @@ export default async function DetalheSessaoPage({
     ? resSubcategorias.dados.map((sc) => ({
         id: sc.id,
         nome: sc.nome,
-        categoria: sc.categoria,
+        categorias: sc.categorias,
       }))
     : [];
 
@@ -126,6 +126,8 @@ export default async function DetalheSessaoPage({
       espacoOverride: se.espacoOverride ?? null,
       // §3.5: fase do treino deste exercício nesta sessão (agrupamento na visualização).
       parteTreino: se.parteTreino ?? null,
+      // §3.5: exercícios em paralelo (mesmo valor = em simultâneo; null = sequencial).
+      grupoParalelo: se.grupoParalelo,
     };
   });
 
@@ -320,6 +322,7 @@ export default async function DetalheSessaoPage({
           espaco: e.espaco,
           numeroJogadoresOverride: e.numeroJogadoresOverride,
           espacoOverride: e.espacoOverride,
+          grupoParalelo: e.grupoParalelo,
         }))}
       />
 
@@ -352,6 +355,7 @@ export default async function DetalheSessaoPage({
           parteTreino: e.parteTreino,
           numeroJogadoresOverride: e.numeroJogadoresOverride,
           espacoOverride: e.espacoOverride,
+          grupoParalelo: e.grupoParalelo,
           exercicio: {
             id: e.exercicioId,
             nome: e.nome,
