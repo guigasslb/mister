@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { listarJogos } from "@/lib/actions/jogos";
+import { ordenarJogosPorProximidade } from "@/lib/ordenacao-jogos";
 import { LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { filtrarEscaloesLegiveis, obterMembroAtual } from "@/lib/permissoes";
@@ -117,7 +118,10 @@ export default async function JogosPage({
   // o filtro server-side de `listarJogos` — um treinador nunca vê escalões alheios.
   const escaloes = await filtrarEscaloesLegiveis(resEscaloes.dados);
   const seccoes = resSeccoes.sucesso ? resSeccoes.dados : [];
-  const jogos = resJogos.dados;
+  // §8.11: ordenação especial APENAS nesta listagem — futuros primeiro (data asc,
+  // o próximo jogo no topo), depois os passados (data desc, o mais antigo no fim).
+  // Aplicada aqui (e não em `listarJogos`) para não afetar outros consumidores.
+  const jogos = ordenarJogosPorProximidade(resJogos.dados, new Date());
 
   // §3.2: modalidade por escalão + deteção de clube multi-secção (2+ secções).
   const modalidadePorEscalao = mapaModalidadePorEscalao(escaloes, seccoes);
