@@ -172,6 +172,10 @@ export async function listarJogos(
     include: INCLUDE_LISTA,
     orderBy: { data: "desc" },
   });
+  // Ordem base por data descendente (mais recente primeiro). A ordenação especial
+  // por proximidade (§8.11 — próximo jogo no topo) é aplicada APENAS na listagem
+  // /jogos, no próprio componente de página, para não afetar outros consumidores
+  // de `listarJogos` (dashboard, agenda, etc.).
   return ok(
     jogos.map((j) => ({
       ...j,
