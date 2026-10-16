@@ -15,7 +15,7 @@ vi.mock("@/lib/permissoes", () => ({
 }));
 vi.mock("@/lib/db", () => ({
   prisma: {
-    jogo: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    jogo: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
     escalao: { findFirst: vi.fn() },
     competicao: { findFirst: vi.fn() },
     convocatoria: { findFirst: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn(), create: vi.fn() },

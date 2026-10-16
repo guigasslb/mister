@@ -14,7 +14,7 @@ vi.mock("@/lib/permissoes", () => ({
 }));
 vi.mock("@/lib/db", () => ({
   prisma: {
-    jogo: { findFirst: vi.fn(), update: vi.fn() },
+    jogo: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     convocatoria: { findMany: vi.fn() },
     sessaoJogoAoVivo: { update: vi.fn() },
     eventoJogo: {
@@ -196,7 +196,7 @@ describe("recalcularResultadoJogo — placar coerente e idempotente", () => {
       .mockImplementation((args: { where: { tipo: string } }) =>
         Promise.resolve(args.where.tipo === "GOLO" ? 3 : 2),
       );
-    const tx = { eventoJogo: { count }, jogo: { update } };
+    const tx = { eventoJogo: { count }, jogo: { update, findUnique: vi.fn() } };
 
     await recalcularResultadoJogo(tx as never, JOGO_ID);
 

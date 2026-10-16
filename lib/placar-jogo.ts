@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { sincronizarConfrontoDoJogo } from "@/lib/sincronizacao-jogo-confronto";
 
 /**
  * Recalcula o resultado do jogo (`golosMarcados`/`golosSofridos`) a partir da
@@ -28,4 +29,6 @@ export async function recalcularResultadoJogo(
     where: { id: jogoId },
     data: { golosMarcados, golosSofridos },
   });
+  // §23.6: se o jogo estiver ligado a um confronto, o placar reflete-se na competição.
+  await sincronizarConfrontoDoJogo(tx, jogoId);
 }
