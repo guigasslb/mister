@@ -19,6 +19,7 @@ import {
 import { valorMetricaValido } from "@/lib/schemas/metrica";
 import { modalidadeEfetiva, filtroModalidadeJogo } from "@/lib/modalidade-escalao";
 import { recalcularResultadoJogo } from "@/lib/placar-jogo";
+import { sincronizarConfrontoDoJogo } from "@/lib/sincronizacao-jogo-confronto";
 import {
   Prisma,
   type Epoca,
@@ -318,29 +319,34 @@ export async function atualizarJogo(id: string, dados: unknown): Promise<Resulta
     if (!formato) return erro(ERRO_FORMATO_FUTEBOL);
   }
 
-  const jogo = await prisma.jogo.update({
-    where: { id },
-    data: {
-      data: parsed.data.data,
-      adversario: parsed.data.adversario,
-      casaFora: parsed.data.casaFora,
-      tipo: parsed.data.tipo,
-      numeroPartes: parsed.data.numeroPartes,
-      escalaoId: parsed.data.escalaoId,
-      formato,
-      // `competicao` (texto livre) foi deprecado no formulário (P4.3): não é
-      // reescrito aqui, preservando eventuais valores legados existentes.
-      competicaoId: parsed.data.competicaoId ?? null,
-      local: parsed.data.local ?? null,
-      golosMarcados: parsed.data.golosMarcados ?? null,
-      golosSofridos: parsed.data.golosSofridos ?? null,
-      faltas1aParte: parsed.data.faltas1aParte ?? null,
-      faltas2aParte: parsed.data.faltas2aParte ?? null,
-      videoUrl: parsed.data.videoUrl ? parsed.data.videoUrl : null,
-    },
+  const [jogo, competicaoSincronizada] = await prisma.$transaction(async (tx) => {
+    const j = await tx.jogo.update({
+      where: { id },
+      data: {
+        data: parsed.data.data,
+        adversario: parsed.data.adversario,
+        casaFora: parsed.data.casaFora,
+        tipo: parsed.data.tipo,
+        numeroPartes: parsed.data.numeroPartes,
+        escalaoId: parsed.data.escalaoId,
+        formato,
+        // `competicao` (texto livre) foi deprecado no formulário (P4.3): não é
+        // reescrito aqui, preservando eventuais valores legados existentes.
+        competicaoId: parsed.data.competicaoId ?? null,
+        local: parsed.data.local ?? null,
+        golosMarcados: parsed.data.golosMarcados ?? null,
+        golosSofridos: parsed.data.golosSofridos ?? null,
+        faltas1aParte: parsed.data.faltas1aParte ?? null,
+        faltas2aParte: parsed.data.faltas2aParte ?? null,
+        videoUrl: parsed.data.videoUrl ? parsed.data.videoUrl : null,
+      },
+    });
+    // §23.6: jogo ligado a um confronto → reflete data/hora e resultado na competição.
+    return [j, await sincronizarConfrontoDoJogo(tx, id)] as const;
   });
   revalidatePath(PATH);
   revalidatePath(`${PATH}/${id}`);
+  if (competicaoSincronizada) revalidatePath(`${PATH}/competicoes/${competicaoSincronizada}`);
   return ok(jogo);
 }
 

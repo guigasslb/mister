@@ -19,6 +19,7 @@ import {
 } from "@/lib/schemas/competicao";
 import { calcularClassificacao, type LinhaClassificacao } from "@/lib/classificacao";
 import { gerarLiga, gerarBracket, type Equipa } from "@/lib/quadro";
+import { sincronizarJogoDoConfronto } from "@/lib/sincronizacao-jogo-confronto";
 import {
   Prisma,
   type Competicao,
@@ -32,6 +33,15 @@ import {
 export type { LinhaClassificacao } from "@/lib/classificacao";
 
 const PATH = "/jogos/competicoes";
+// §23.6: confrontos da equipa própria refletem-se no Jogo ligado (lista/agenda/detalhe).
+const PATH_JOGOS = "/jogos";
+
+/** Revalida /jogos e o detalhe do jogo sincronizado com um confronto (se houver). */
+function revalidarJogo(jogoId: string | null) {
+  if (!jogoId) return;
+  revalidatePath(PATH_JOGOS);
+  revalidatePath(`${PATH_JOGOS}/${jogoId}`);
+}
 
 // ─────────────────────────────────────────────
 // Tipos de leitura
@@ -439,15 +449,19 @@ export async function definirEstadoConfronto(
   const perm = await exigirCapacidade("COMPETICOES_GERIR", resultado.competicao.escalaoId);
   if (!perm.ok) return erro(perm.erro);
 
-  const atualizado = await prisma.resultadoCompeticao.update({
-    where: { id: resultadoId },
-    data: {
-      estado: parsed.data.estado,
-      walkoverVencedor:
-        parsed.data.estado === "WALKOVER" ? parsed.data.walkoverVencedor ?? null : null,
-    },
+  const [atualizado, jogoId] = await prisma.$transaction(async (tx) => {
+    const r = await tx.resultadoCompeticao.update({
+      where: { id: resultadoId },
+      data: {
+        estado: parsed.data.estado,
+        walkoverVencedor:
+          parsed.data.estado === "WALKOVER" ? parsed.data.walkoverVencedor ?? null : null,
+      },
+    });
+    return [r, await sincronizarJogoDoConfronto(tx, resultadoId, perm.ctx.utilizadorId)] as const;
   });
   revalidatePath(`${PATH}/${resultado.competicaoId}`);
+  revalidarJogo(jogoId);
   return ok(atualizado);
 }
 
@@ -475,11 +489,15 @@ export async function atualizarGolosConfronto(
   const perm = await exigirCapacidade("COMPETICOES_GERIR", resultado.competicao.escalaoId);
   if (!perm.ok) return erro(perm.erro);
 
-  const atualizado = await prisma.resultadoCompeticao.update({
-    where: { id: resultadoId },
-    data: { golosCasa: parsed.data.golosCasa, golosFora: parsed.data.golosFora },
+  const [atualizado, jogoId] = await prisma.$transaction(async (tx) => {
+    const r = await tx.resultadoCompeticao.update({
+      where: { id: resultadoId },
+      data: { golosCasa: parsed.data.golosCasa, golosFora: parsed.data.golosFora },
+    });
+    return [r, await sincronizarJogoDoConfronto(tx, resultadoId, perm.ctx.utilizadorId)] as const;
   });
   revalidatePath(`${PATH}/${resultado.competicaoId}`);
+  revalidarJogo(jogoId);
   return ok(atualizado);
 }
 
@@ -590,10 +608,13 @@ export async function obterClassificacao(
   });
   const nomeEquipaPropria = participanteProprio?.nome ?? competicao.escalao.nome;
 
-  // Jogos próprios com resultado final (ambos os golos preenchidos).
+  // Jogos próprios com resultado final (ambos os golos preenchidos). Os jogos
+  // ligados a um confronto ficam de fora: o resultado já conta via o confronto
+  // (fonte de verdade da classificação, §23.6) — evita contar o jogo duas vezes.
   const jogosBrutos = await prisma.jogo.findMany({
     where: {
       competicaoId,
+      resultadoCompeticaoId: null,
       golosMarcados: { not: null },
       golosSofridos: { not: null },
     },
@@ -990,7 +1011,18 @@ export async function criarCompeticaoCompleta(dados: unknown): Promise<Resultado
     return comp;
   });
 
+  // §23.6: os confrontos pré-agendados da equipa própria (com data) passam a
+  // existir como Jogo em /jogos. Fora da transação para não a prolongar.
+  const agendados = await prisma.resultadoCompeticao.findMany({
+    where: { competicaoId: competicao.id, dataHora: { not: null } },
+    select: { id: true },
+  });
+  for (const r of agendados) {
+    await sincronizarJogoDoConfronto(prisma, r.id, perm.ctx.utilizadorId);
+  }
+
   revalidatePath(PATH);
+  if (agendados.length > 0) revalidatePath(PATH_JOGOS);
   return ok(competicao);
 }
 
@@ -1021,10 +1053,14 @@ export async function atualizarAgendamentoJogo(
   const perm = await exigirCapacidade("COMPETICOES_GERIR", resultado.competicao.escalaoId);
   if (!perm.ok) return erro(perm.erro);
 
-  await prisma.resultadoCompeticao.update({
-    where: { id: resultadoId },
-    data: { dataHora: parsed.data.dataHora ?? null },
+  const jogoId = await prisma.$transaction(async (tx) => {
+    await tx.resultadoCompeticao.update({
+      where: { id: resultadoId },
+      data: { dataHora: parsed.data.dataHora ?? null },
+    });
+    return sincronizarJogoDoConfronto(tx, resultadoId, perm.ctx.utilizadorId);
   });
   revalidatePath(`${PATH}/${resultado.competicaoId}`);
+  revalidarJogo(jogoId);
   return ok(undefined);
 }

@@ -26,7 +26,7 @@ vi.mock("@/lib/permissoes", () => ({
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    jogo: { findFirst: vi.fn(), update: vi.fn() },
+    jogo: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     eventoJogo: {
       create: vi.fn(),
       delete: vi.fn(),
