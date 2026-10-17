@@ -175,7 +175,10 @@ export function QuadroAgendamento({
     });
   }
 
-  function MenuEstado({ r }: { r: ResultadoQuadro }) {
+  // Função de render (não componente): o DropdownMenu tem estado interno de
+  // aberto/fechado e o foco volta ao trigger ao fechar — como componente
+  // aninhado remontava a cada render (ex.: `pending` a mudar), fechando o menu.
+  function renderMenuEstado(r: ResultadoQuadro) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -223,11 +226,14 @@ export function QuadroAgendamento({
     );
   }
 
-  function LinhaAgendado({ r }: { r: ResultadoQuadro }) {
+  // Função de render (não componente): se fosse um componente declarado dentro
+  // do corpo, teria identidade nova a cada render e cada onChange da data/hora
+  // remontava a linha — o seletor nativo de data/hora fechava a meio da escolha.
+  function renderLinhaAgendado(r: ResultadoQuadro) {
     const emEdicao = editando === r.id;
     const ref = r.dataHora ?? r.data;
     return (
-      <li className="rounded-md border border-cinza-200 bg-white p-3 shadow-card">
+      <li key={r.id} className="rounded-md border border-cinza-200 bg-white p-3 shadow-card">
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-corpo text-cinza-900">
@@ -297,7 +303,7 @@ export function QuadroAgendamento({
                 <Pencil className="h-3.5 w-3.5" />
                 {ref ? "Editar" : "Agendar"}
               </Button>
-              <MenuEstado r={r} />
+              {renderMenuEstado(r)}
               <Button
                 type="button"
                 variant="ghost"
@@ -315,7 +321,9 @@ export function QuadroAgendamento({
     );
   }
 
-  function LinhaDecidido({ r }: { r: ResultadoQuadro }) {
+  // Função de render (não componente), pelo mesmo motivo de renderLinhaAgendado:
+  // como componente aninhado, cada tecla nos golos remontava o <input> (perda de foco).
+  function renderLinhaDecidido(r: ResultadoQuadro) {
     const ref = r.dataHora ?? r.data;
     const casaVenceWO = r.estado === "WALKOVER" && r.walkoverVencedor === "CASA";
     const foraVenceWO = r.estado === "WALKOVER" && r.walkoverVencedor === "FORA";
@@ -324,7 +332,10 @@ export function QuadroAgendamento({
     // regulamentar; cancelado não tem placar).
     const golosEditaveis = r.estado === "REALIZADO";
     return (
-      <li className="flex flex-wrap items-center gap-3 rounded-md border border-cinza-200 bg-white p-3 shadow-card">
+      <li
+        key={r.id}
+        className="flex flex-wrap items-center gap-3 rounded-md border border-cinza-200 bg-white p-3 shadow-card"
+      >
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-2 text-corpo text-cinza-900">
             <span className={cn("font-medium", casaVenceWO && "font-bold")}>{r.equipaCasa}</span>
@@ -402,7 +413,7 @@ export function QuadroAgendamento({
                   Golos
                 </Button>
               )}
-              <MenuEstado r={r} />
+              {renderMenuEstado(r)}
               <Button
                 type="button"
                 variant="ghost"
@@ -456,17 +467,13 @@ export function QuadroAgendamento({
                   {ronda === 0 ? "Sem ronda" : `Ronda ${ronda}`}
                 </p>
                 <ul className="space-y-2">
-                  {lista.map((r) => (
-                    <LinhaAgendado key={r.id} r={r} />
-                  ))}
+                  {lista.map(renderLinhaAgendado)}
                 </ul>
               </div>
             ))
           ) : (
             <ul className="space-y-2">
-              {porDisputar.map((r) => (
-                <LinhaAgendado key={r.id} r={r} />
-              ))}
+              {porDisputar.map(renderLinhaAgendado)}
             </ul>
           )}
         </section>
@@ -487,17 +494,13 @@ export function QuadroAgendamento({
                   {ronda === 0 ? "Sem ronda" : `Ronda ${ronda}`}
                 </p>
                 <ul className="space-y-2">
-                  {lista.map((r) => (
-                    <LinhaDecidido key={r.id} r={r} />
-                  ))}
+                  {lista.map(renderLinhaDecidido)}
                 </ul>
               </div>
             ))
           ) : (
             <ul className="space-y-2">
-              {decididos.map((r) => (
-                <LinhaDecidido key={r.id} r={r} />
-              ))}
+              {decididos.map(renderLinhaDecidido)}
             </ul>
           )}
         </section>
