@@ -29,7 +29,12 @@ export default async function EditarJogoPage({
   if (!resJogo.sucesso) notFound();
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
   const competicoes = resComp.sucesso
-    ? resComp.dados.map((c) => ({ id: c.id, nome: c.nome, escalaoId: c.escalaoId }))
+    ? resComp.dados.map((c) => ({
+        id: c.id,
+        nome: c.nome,
+        escalaoId: c.escalaoId,
+        equipas: c.equipas,
+      }))
     : [];
   const seccoes = resSeccoes.sucesso ? resSeccoes.dados : [];
   // §3.2: escalões enriquecidos com a modalidade da secção (seletor de formato).

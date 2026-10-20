@@ -245,6 +245,8 @@ async function nomeDoTreinador(utilizadorId: string): Promise<string> {
 
 const INCLUDE_JOGO_COMUNICACAO = {
   escalao: { select: { nome: true } },
+  // §23.11.3 regra 11: com subequipa, o texto usa o nome desta em vez do escalão.
+  equipaCompeticao: { select: { nome: true } },
   competicaoRef: { select: { nome: true } },
   convocatorias: {
     where: { convocado: true },
@@ -291,7 +293,7 @@ export async function obterContextoConvocatoria(
   const vespera = new Date(jogo.data.getTime() - 24 * 60 * 60 * 1000);
 
   return {
-    nomeEquipa: `${ctx.clube.nome} ${jogo.escalao.nome}`.trim(),
+    nomeEquipa: `${ctx.clube.nome} ${jogo.equipaCompeticao?.nome ?? jogo.escalao.nome}`.trim(),
     diaSemana: formatarDiaSemana(jogo.data),
     data: formatarData(jogo.data),
     hora: formatarHora(jogo.data),
@@ -308,7 +310,7 @@ export async function obterContextoResultado(
 ): Promise<Record<string, string>> {
   const { jogo, ctx } = await carregarJogoParaComunicacao(jogoId);
 
-  const nomeEquipa = `${ctx.clube.nome} ${jogo.escalao.nome}`.trim();
+  const nomeEquipa = `${ctx.clube.nome} ${jogo.equipaCompeticao?.nome ?? jogo.escalao.nome}`.trim();
   const emCasa = jogo.casaFora === "CASA";
 
   const golosEquipa = jogo.golosMarcados === null ? "?" : String(jogo.golosMarcados);

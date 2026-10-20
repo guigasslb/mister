@@ -50,7 +50,16 @@ const LABEL_FORMATO_FUTEBOL: Record<string, string> = {
   FUTEBOL_11: "Futebol 11",
 };
 
-type CompeticaoBasica = { id: string; nome: string; escalaoId: string };
+/**
+ * `equipas` = equipas próprias (subequipas) da competição — §23.11.3 regra 1: com
+ * ≥2 o jogo tem de indicar a equipa; com 0/1 o seletor não aparece.
+ */
+type CompeticaoBasica = {
+  id: string;
+  nome: string;
+  escalaoId: string;
+  equipas: { id: string; nome: string }[];
+};
 
 function paraInputDateTime(date: Date | null | undefined): string {
   if (!date) return "";
@@ -70,6 +79,7 @@ type JogoParaEdicao = Pick<
   | "numeroPartes"
   | "escalaoId"
   | "competicaoId"
+  | "equipaCompeticaoId"
   | "formato"
   | "local"
   | "golosMarcados"
@@ -100,6 +110,10 @@ export function JogoForm({
   const [numeroPartes, setNumeroPartes] = useState<number>(jogo?.numeroPartes ?? 2);
   const [competicaoId, setCompeticaoId] = useState<string>(
     jogo?.competicaoId ?? SEM_COMPETICAO,
+  );
+  // §23.11.3 regra 1: subequipa própria da competição ("" = por escolher).
+  const [equipaCompeticaoId, setEquipaCompeticaoId] = useState<string>(
+    jogo?.equipaCompeticaoId ?? "",
   );
   // 🔁 v7 (§3.7): formato de jogo. Só relevante/visível quando o escalão é de
   // futebol; em futsal é derivado (FUTSAL_5) pelo backend. "" = por escolher.
@@ -164,6 +178,17 @@ export function JogoForm({
 
   // Só as competições do escalão selecionado podem ser associadas ao jogo.
   const competicoesDoEscalao = competicoes.filter((c) => c.escalaoId === escalaoId);
+  // Equipas próprias da competição escolhida; o seletor «Equipa» só aparece com ≥2.
+  const equipasDaCompeticao =
+    competicoes.find((c) => c.id === competicaoId)?.equipas ?? [];
+  const mostrarEquipa = equipasDaCompeticao.length >= 2;
+
+  function mudarCompeticao(nova: string) {
+    setCompeticaoId(nova);
+    // A equipa indicada só se mantém se for uma equipa própria da nova competição.
+    const equipasNova = competicoes.find((c) => c.id === nova)?.equipas ?? [];
+    if (!equipasNova.some((e) => e.id === equipaCompeticaoId)) setEquipaCompeticaoId("");
+  }
 
   function mudarEscalao(novo: string) {
     setEscalaoId(novo);
@@ -173,6 +198,7 @@ export function JogoForm({
       !competicoes.some((c) => c.id === competicaoId && c.escalaoId === novo)
     ) {
       setCompeticaoId(SEM_COMPETICAO);
+      setEquipaCompeticaoId("");
     }
   }
 
@@ -195,6 +221,12 @@ export function JogoForm({
       return;
     }
 
+    // §23.11.3 regra 1: com ≥2 equipas próprias, a equipa é obrigatória.
+    if (mostrarEquipa && !equipaCompeticaoId) {
+      setErros({ equipaCompeticaoId: "Indica a equipa: esta competição tem várias equipas próprias" });
+      return;
+    }
+
     const dados = {
       data: fd.get("data")
         ? wallClockLisbonToInstant(String(fd.get("data"))).toISOString()
@@ -205,6 +237,13 @@ export function JogoForm({
       numeroPartes,
       escalaoId: escalaoId || undefined,
       competicaoId: competicaoId === SEM_COMPETICAO ? null : competicaoId,
+      // Preserva a equipa já gravada (mesmo com 0/1 equipa própria, o seletor
+      // não aparece mas o valor não se perde); sem equipa ⇒ null.
+      equipaCompeticaoId:
+        competicaoId !== SEM_COMPETICAO &&
+        equipasDaCompeticao.some((e) => e.id === equipaCompeticaoId)
+          ? equipaCompeticaoId
+          : null,
       // Só se envia o formato em futebol; em futsal o backend deriva FUTSAL_5.
       formato: eFutebol && formato ? formato : undefined,
       local: String(fd.get("local") ?? "").trim() || undefined,
@@ -232,6 +271,10 @@ export function JogoForm({
     <form onSubmit={handleSubmit} className="max-w-lg space-y-5">
       {erroGeral && !Object.keys(erros).length && (
         <p className="text-corpo-sec text-vermelho-600">{erroGeral}</p>
+      )}
+      {/* §23.11: erro da equipa quando o seletor não está visível (competição com 0/1). */}
+      {erros.equipaCompeticaoId && !mostrarEquipa && (
+        <p className="text-corpo-sec text-vermelho-600">{erros.equipaCompeticaoId}</p>
       )}
 
       {/* ─── Agendar ─────────────────────────────────────────────────────── */}
@@ -337,7 +380,7 @@ export function JogoForm({
           <Label htmlFor="competicaoId">Competição</Label>
           <Select
             value={competicaoId}
-            onValueChange={setCompeticaoId}
+            onValueChange={mudarCompeticao}
             disabled={!escalaoId}
           >
             <SelectTrigger id="competicaoId">
@@ -357,6 +400,37 @@ export function JogoForm({
           )}
         </div>
       </div>
+
+      {/* Equipa (subequipa) — só quando a competição tem ≥2 equipas próprias. §23.11 */}
+      {mostrarEquipa && (
+        <div className="space-y-1.5">
+          <Label htmlFor="equipaCompeticaoId">Equipa *</Label>
+          <Select
+            value={equipaCompeticaoId}
+            onValueChange={(v) => {
+              setEquipaCompeticaoId(v);
+              setErros((prev) => {
+                const { equipaCompeticaoId: _omit, ...resto } = prev;
+                return resto;
+              });
+            }}
+          >
+            <SelectTrigger id="equipaCompeticaoId">
+              <SelectValue placeholder="Escolhe a equipa" />
+            </SelectTrigger>
+            <SelectContent>
+              {equipasDaCompeticao.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {erros.equipaCompeticaoId && (
+            <p className="text-legenda text-vermelho-600">{erros.equipaCompeticaoId}</p>
+          )}
+        </div>
+      )}
 
       {/* Formato de jogo — só futebol (futsal usa FUTSAL_5 derivado). §3.7/§10.8 */}
       {eFutebol && (

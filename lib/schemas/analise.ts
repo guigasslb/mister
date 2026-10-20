@@ -20,6 +20,13 @@ export const analiticoEscalaoSchema = z.object({
   epocaId: z.string().cuid().optional(),
   // P2.5: separa campeonato / taça / particulares no mesmo escalão (bíblia §10.2).
   competicaoId: z.string().cuid().optional(),
+  // §23.11.3 regra 10: filtro opcional «Equipa» (subequipa PROPRIO da competição).
+  equipaCompeticaoId: z.string().cuid().optional(),
+});
+
+/** Relatório de equipa (§10.2): filtro opcional «Equipa» (§23.11.3 regra 10). */
+export const relatorioEquipaSchema = z.object({
+  equipaCompeticaoId: z.string().cuid().optional(),
 });
 
 /** Lista de competições com jogos de um escalão/época (para o filtro do painel). */
@@ -112,6 +119,7 @@ export type ObterAnaliticoTreinoAtletaInput = z.infer<typeof obterAnaliticoTrein
 export const exportarEscalaoCsvSchema = z.object({
   escalaoId: z.string().cuid(),
   competicaoId: z.string().cuid().optional(),
+  equipaCompeticaoId: z.string().cuid().optional(),
 });
 
 /** F1.2 — export CSV do analítico de atleta (num escalão de contexto). */

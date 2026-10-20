@@ -32,6 +32,7 @@ vi.mock("@/lib/db", () => ({
     presenca: { findMany: vi.fn(), count: vi.fn() },
     eventoJogo: { findMany: vi.fn() },
     jogo: { findMany: vi.fn() },
+    equipaCompeticao: { findFirst: vi.fn() },
     competicao: { findMany: vi.fn() },
     valorMetrica: { findMany: vi.fn() },
     valorMetricaSessao: { findMany: vi.fn() },
@@ -134,6 +135,23 @@ describe("exportarAnaliticoEscalaoCsv", () => {
     p.escalao.findFirst.mockResolvedValue(null);
     const r = await exportarAnaliticoEscalaoCsv({ escalaoId: ESCALAO });
     expect(r.sucesso).toBe(false);
+  });
+
+  it("aplica o filtro «Equipa» (§23.11.3 regra 10) aos jogos do analítico", async () => {
+    prepararEscalao();
+    const COMP = "ckv9v0z1w0007abcd1234efgh";
+    const EQUIPA = "ckv9v0z1w0008abcd1234efgh";
+    const r = await exportarAnaliticoEscalaoCsv({
+      escalaoId: ESCALAO,
+      competicaoId: COMP,
+      equipaCompeticaoId: EQUIPA,
+    });
+    expect(r.sucesso).toBe(true);
+    // Subequipa desconhecida (mock sem equipa) ⇒ só os jogos dessa equipa.
+    expect(p.jogo.findMany.mock.calls[0][0].where).toMatchObject({
+      competicaoId: COMP,
+      equipaCompeticaoId: EQUIPA,
+    });
   });
 
   it("rejeita input inválido (escalaoId não-cuid)", async () => {

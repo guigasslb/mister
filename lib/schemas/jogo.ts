@@ -36,6 +36,10 @@ export const jogoSchema = z.object({
   // faz-se por `competicaoId`. O campo legado mantém-se no modelo Prisma só para
   // leitura de jogos antigos.
   competicaoId: z.string().cuid().nullable().optional(),
+  // §23.11.3 regra 1: subequipa própria (EquipaCompeticao PROPRIO) da competição que
+  // disputa o jogo. Obrigatória se a competição tiver ≥2 equipas próprias; senão
+  // opcional (null = equipa implícita). Sem competição ⇒ null.
+  equipaCompeticaoId: z.string().cuid().nullable().optional(),
   // 🔁 v7 (§3.7/§10.8): formato de jogo (FUTSAL_5 | FUTEBOL_*). Opcional no input:
   // se ausente, é derivado da modalidade da secção do escalão (FUTSAL → FUTSAL_5;
   // FUTEBOL → obrigatório indicar, não há default entre os 5 formatos). Editável.

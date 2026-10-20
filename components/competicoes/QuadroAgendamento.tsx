@@ -3,7 +3,15 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarClock, Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
+import {
+  CalendarClock,
+  Check,
+  ChevronDown,
+  Pencil,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -37,7 +45,20 @@ export type ResultadoQuadro = {
   dataHora: Date | null;
   estado: EstadoResultado;
   walkoverVencedor: CasaFora | null;
+  /** §23.11.3 regra 6: confronto interno (A vs B) com placares divergentes. */
+  placarDivergente?: boolean;
 };
+
+/** Aviso de placares divergentes num confronto interno (prevalece o último gravado). */
+function AvisoDivergencia({ r }: { r: ResultadoQuadro }) {
+  if (!r.placarDivergente) return null;
+  return (
+    <p className="mt-1 flex items-center gap-1 text-legenda text-ambar-600">
+      <TriangleAlert className="h-3.5 w-3.5 flex-shrink-0" />
+      Os jogos das duas equipas têm resultados diferentes — prevalece o último gravado.
+    </p>
+  );
+}
 
 // P1.6 (§23.7): cor do selo de estado — agendado neutro, realizado verde,
 // cancelado vermelho, walkover âmbar.
@@ -251,6 +272,7 @@ export function QuadroAgendamento({
                     : "Por definir"}
               </p>
             )}
+            <AvisoDivergencia r={r} />
           </div>
 
           {emEdicao ? (
@@ -374,6 +396,7 @@ export function QuadroAgendamento({
             <SeloEstado estado={r.estado} />
           </p>
           {ref && <p className="text-legenda text-cinza-500">{formatarData(ref)}</p>}
+          <AvisoDivergencia r={r} />
         </div>
         <div className="flex items-center gap-2">
           {emEdicaoGolos ? (

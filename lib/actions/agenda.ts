@@ -33,6 +33,11 @@ export interface EventoAgenda {
   tipo: "TREINO" | "JOGO" | "REUNIAO";
   data: Date;
   escalaoNome: string;
+  /**
+   * Só JOGO de uma competição com subequipas: nome da subequipa (ex.: «Benjamins A»),
+   * mostrado em vez do / junto ao nome do escalão (§23.11.3 regra 11).
+   */
+  subequipaNome?: string;
   /** Título legível: objetivo/tipo do treino, "vs Adversário" no jogo, título da reunião. */
   titulo: string;
   local?: string | null;
@@ -206,6 +211,7 @@ export async function obterAgendaClube(
             tipo: true,
             casaFora: true,
             escalao: { select: { nome: true } },
+            equipaCompeticao: { select: { nome: true } },
           },
           orderBy: { data: "asc" },
         })
@@ -261,6 +267,7 @@ export async function obterAgendaClube(
       tipo: "JOGO",
       data: j.data,
       escalaoNome: j.escalao.nome,
+      ...(j.equipaCompeticao ? { subequipaNome: j.equipaCompeticao.nome } : {}),
       titulo: `vs ${j.adversario}`,
       local: j.local,
       tipoJogo: j.tipo,

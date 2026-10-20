@@ -89,6 +89,8 @@ function carregarJogo(clubeId: string, jogoId: string) {
       competicao: true,
       escalaoId: true,
       escalao: { select: { nome: true } },
+      // §23.11.3 regra 11: com subequipa, o card mostra o nome desta.
+      equipaCompeticao: { select: { nome: true } },
       epoca: {
         select: {
           clube: {
@@ -138,7 +140,7 @@ export async function obterCardResultado(
     ok: true,
     dados: {
       clube: mapClube(jogo.epoca.clube),
-      escalaoNome: jogo.escalao.nome,
+      escalaoNome: jogo.equipaCompeticao?.nome ?? jogo.escalao.nome,
       adversario: jogo.adversario,
       casaFora: jogo.casaFora,
       golosMarcados: jogo.golosMarcados,
@@ -195,7 +197,7 @@ export async function obterCardMvp(
     ok: true,
     dados: {
       clube: mapClube(jogo.epoca.clube),
-      escalaoNome: jogo.escalao.nome,
+      escalaoNome: jogo.equipaCompeticao?.nome ?? jogo.escalao.nome,
       adversario: jogo.adversario,
       data: jogo.data.toISOString(),
       atleta: melhor.atleta.nome,

@@ -3,6 +3,9 @@ import Link from "next/link";
 import { listarEscaloesLegiveis } from "@/lib/actions/escaloes";
 import { listarAtletas } from "@/lib/actions/atletas";
 import { obterRelatorioEquipa } from "@/lib/actions/relatorios";
+import { obterCompeticoesEscalao } from "@/lib/actions/analise";
+import { opcoesEquipaRelatorio } from "@/lib/subequipas-ui";
+import { FiltroEquipaRelatorio } from "@/components/relatorios/FiltroEquipaRelatorio";
 import { BotaoImprimir } from "@/components/relatorios/BotaoImprimir";
 import { EstadoErro } from "@/components/layout/EstadosUI";
 import { GraficoBarrasH } from "@/components/graficos/GraficoBarrasHLazy";
@@ -21,16 +24,27 @@ export const metadata: Metadata = { title: "Relatórios" };
 export default async function RelatoriosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ escalaoId?: string }>;
+  searchParams: Promise<{ escalaoId?: string; equipa?: string }>;
 }) {
-  const { escalaoId } = await searchParams;
+  const { escalaoId, equipa } = await searchParams;
   const resEsc = await listarEscaloesLegiveis();
   if (!resEsc.sucesso) return <EstadoErro mensagem={resEsc.erro} />;
   const escaloes = resEsc.dados;
   const selecionado = escalaoId ?? escaloes[0]?.id;
 
+  // §23.11.3 regra 10: filtro opcional «Equipa» — subequipas das competições do
+  // escalão com ≥2 (mesmas opções dos analíticos); `?equipa=` só é aplicado se
+  // for uma dessas opções. Sem subequipas o filtro não aparece.
+  const resComp = selecionado ? await obterCompeticoesEscalao(selecionado) : null;
+  const opcoesEquipa = resComp?.sucesso ? opcoesEquipaRelatorio(resComp.dados) : [];
+  const equipaCompeticaoId =
+    equipa && opcoesEquipa.some((o) => o.id === equipa) ? equipa : undefined;
+
   const [resRel, resAtletas] = selecionado
-    ? await Promise.all([obterRelatorioEquipa(selecionado), listarAtletas(selecionado)])
+    ? await Promise.all([
+        obterRelatorioEquipa(selecionado, equipaCompeticaoId),
+        listarAtletas(selecionado),
+      ])
     : [null, null];
 
   return (
@@ -66,6 +80,10 @@ export default async function RelatoriosPage({
             </h2>
             <p className="text-corpo-sec text-cinza-500">Relatório de equipa</p>
           </div>
+
+          {opcoesEquipa.length > 0 && (
+            <FiltroEquipaRelatorio opcoes={opcoesEquipa} equipaCompeticaoId={equipaCompeticaoId} />
+          )}
 
           {/* Result stats */}
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">

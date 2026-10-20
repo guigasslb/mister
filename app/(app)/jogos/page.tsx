@@ -346,7 +346,7 @@ export default async function JogosPage({
                         ))}
                     </div>
                     <p className="text-legenda text-cinza-500">
-                      {j.escalao.nome}
+                      {j.equipaCompeticao?.nome ?? j.escalao.nome}
                       {j.competicao ? ` · ${j.competicao}` : ""}
                     </p>
                     {j.criador && (

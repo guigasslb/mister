@@ -17,6 +17,8 @@ type EventoAgenda = {
   data: Date;
   titulo: string;
   escalaoNome: string;
+  /** Só JOGO com subequipa (§23.11.3 regra 11): mostrado em vez do escalão. */
+  subequipaNome?: string;
   local?: string | null;
   tipoSessao?: TipoSessao; // só para TREINO
   tipoJogo?: TipoJogo; // só para JOGO
@@ -193,8 +195,8 @@ export function CalendarioAgenda({ eventos, ano, mes, hrefBase }: Props) {
                     }`}
                     title={
                       ev.precisaAtencao
-                        ? `${ROTULO_TIPO[ev.tipo]} · ${ev.titulo} · ${ev.escalaoNome} · sessão sem exercícios`
-                        : `${ROTULO_TIPO[ev.tipo]} · ${ev.titulo} · ${ev.escalaoNome}`
+                        ? `${ROTULO_TIPO[ev.tipo]} · ${ev.titulo} · ${ev.subequipaNome ?? ev.escalaoNome} · sessão sem exercícios`
+                        : `${ROTULO_TIPO[ev.tipo]} · ${ev.titulo} · ${ev.subequipaNome ?? ev.escalaoNome}`
                     }
                   >
                     {ev.precisaAtencao && (

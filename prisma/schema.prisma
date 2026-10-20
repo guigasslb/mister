@@ -546,6 +546,8 @@ model Atleta {
   estatisticas          EstatisticaAtleta[]
   consentimentos        Consentimento[]
   participacoes         AtletaEscalao[]
+  // Subequipas (2026-10-17): plantéis de subequipas em competições.
+  equipasCompeticao     EquipaCompeticaoAtleta[]
   // P1.5: eventos de jogo (ao vivo) associados ao atleta.
   eventosJogo           EventoJogo[]
   // P4.8 (§8.20): RPE individual reportado pelo atleta por sessão.
@@ -1154,11 +1156,19 @@ model Jogo {
   competicao            String? // texto livre (legado); preferir competicaoId
   competicaoId          String?
   competicaoRef         Competicao?          @relation(fields: [competicaoId], references: [id])
-  // Gestão de Competições (P1.1): ligação 1:1 opcional ao resultado do quadro
+  // Gestão de Competições (P1.1): ligação opcional ao resultado do quadro
   // competitivo (jogo detalhado da própria equipa). SetNull preserva o jogo se o
-  // resultado for removido.
-  resultadoCompeticaoId String?              @unique
+  // resultado for removido. Subequipas (2026-10-17): único por
+  // (resultadoCompeticaoId, equipaCompeticaoId) — num confronto A vs B há dois Jogos,
+  // um por subequipa. Para equipaCompeticaoId NULL a unicidade de resultadoCompeticaoId
+  // é garantida por índice parcial em SQL (Jogo_resultadoCompeticaoId_sem_equipa_key).
+  resultadoCompeticaoId String?
   resultadoCompeticao   ResultadoCompeticao? @relation(fields: [resultadoCompeticaoId], references: [id], onDelete: SetNull)
+  // Subequipas (2026-10-17): subequipa própria (EquipaCompeticao tipo PROPRIO) a que o
+  // jogo pertence. null = equipa implícita (único PROPRIO ou o próprio escalão).
+  // SetNull: apagar a subequipa preserva o jogo.
+  equipaCompeticaoId    String?
+  equipaCompeticao      EquipaCompeticao?    @relation(fields: [equipaCompeticaoId], references: [id], onDelete: SetNull)
   golosMarcados         Int? // total da equipa (preenchido pós-jogo)
   golosSofridos         Int?
   faltas1aParte         Int? // faltas acumuladas da equipa por parte (futsal)
@@ -1193,10 +1203,12 @@ model Jogo {
 
   fechado Boolean @default(false) // false = aberto (por fechar); true = fechado pelo treinador
 
+  @@unique([resultadoCompeticaoId, equipaCompeticaoId])
   @@index([epocaId, escalaoId, data])
   @@index([competicaoId])
   @@index([escalaoId])
   @@index([data])
+  @@index([equipaCompeticaoId])
 }
 
 enum CasaFora {
@@ -1300,9 +1312,10 @@ model ResultadoCompeticao {
   equipaCasaRef    EquipaCompeticao? @relation("ResultadoCasa", fields: [equipaCasaId], references: [id], onDelete: SetNull)
   equipaForaRef    EquipaCompeticao? @relation("ResultadoFora", fields: [equipaForaId], references: [id], onDelete: SetNull)
 
-  // Gestão de Competições (P1.1): jogo detalhado da própria equipa ligado a este
-  // resultado (relação inversa de Jogo.resultadoCompeticao).
-  jogoDetalhado Jogo?
+  // Gestão de Competições (P1.1): jogo(s) detalhado(s) da própria equipa ligados a
+  // este resultado (relação inversa de Jogo.resultadoCompeticao). Subequipas
+  // (2026-10-17): N jogos — no máximo um por subequipa (A vs B gera dois Jogos).
+  jogosDetalhados Jogo[]
 
   @@index([competicaoId])
   @@index([equipaCasaId])
@@ -1357,8 +1370,28 @@ model EquipaCompeticao {
   resultadosCasa ResultadoCompeticao[] @relation("ResultadoCasa")
   resultadosFora ResultadoCompeticao[] @relation("ResultadoFora")
 
+  // Subequipas (2026-10-17): jogos desta subequipa e o seu plantel nesta competição.
+  jogos   Jogo[]
+  atletas EquipaCompeticaoAtleta[]
+
   @@unique([competicaoId, nome])
   @@index([competicaoId])
+}
+
+// Subequipas (2026-10-17): plantel de uma subequipa própria (EquipaCompeticao PROPRIO)
+// numa competição. Um atleta pode pertencer a várias subequipas da mesma competição
+// (a app avisa, não bloqueia). Cascade nos dois lados.
+model EquipaCompeticaoAtleta {
+  id                 String   @id @default(cuid())
+  equipaCompeticaoId String
+  atletaId           String
+  criadoEm           DateTime @default(now())
+
+  equipaCompeticao EquipaCompeticao @relation(fields: [equipaCompeticaoId], references: [id], onDelete: Cascade)
+  atleta           Atleta           @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+
+  @@unique([equipaCompeticaoId, atletaId])
+  @@index([atletaId])
 }
 
 // Registo ao vivo (beira-campo). Agrega para as estatísticas.

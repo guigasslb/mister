@@ -32,6 +32,11 @@ import { ResultadoExternoForm } from "@/components/competicoes/ResultadoExternoF
 import { TabelaClassificacao } from "@/components/competicoes/TabelaClassificacao";
 import { QuadroAgendamento } from "@/components/competicoes/QuadroAgendamento";
 import { GestaoEquipas } from "@/components/competicoes/GestaoEquipas";
+import type {
+  AtletaEscalaoPlantel,
+  PlantelAtual,
+} from "@/components/competicoes/PlanteisSubequipas";
+import { confrontoComPlacarDivergente } from "@/lib/subequipas-ui";
 
 type EscalaoBasico = { id: string; nome: string };
 type EpocaBasica = { id: string; nome: string; ativa: boolean };
@@ -41,11 +46,18 @@ export function CompeticaoDetalhe({
   classificacao,
   escaloes,
   epocas,
+  planteis,
+  atletasEscalao,
+  competicoesOrigem,
 }: {
   competicao: CompeticaoDetalheTipo;
   classificacao: LinhaClassificacao[];
   escaloes: EscalaoBasico[];
   epocas: EpocaBasica[];
+  /** §23.11: plantéis das subequipas (só com ≥2 equipas próprias). */
+  planteis?: PlantelAtual[];
+  atletasEscalao?: AtletaEscalaoPlantel[];
+  competicoesOrigem?: { id: string; nome: string }[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -166,6 +178,9 @@ export function CompeticaoDetalhe({
               estado: r.estado,
               walkoverVencedor: r.walkoverVencedor,
             }))}
+            planteis={planteis}
+            atletasEscalao={atletasEscalao}
+            competicoesOrigem={competicoesOrigem}
           />
         </TabsContent>
 
@@ -185,6 +200,7 @@ export function CompeticaoDetalhe({
               dataHora: r.dataHora,
               estado: r.estado,
               walkoverVencedor: r.walkoverVencedor,
+              placarDivergente: confrontoComPlacarDivergente(r.jogosDetalhados),
             }))}
             formato={competicao.formato}
           />
@@ -209,7 +225,10 @@ export function CompeticaoDetalhe({
                         <p className="text-corpo text-cinza-900">
                           {j.casaFora === "CASA" ? "vs" : "@"} {j.adversario}
                         </p>
-                        <p className="text-legenda text-cinza-500">{formatarDataCurta(j.data)}</p>
+                        <p className="text-legenda text-cinza-500">
+                          {formatarDataCurta(j.data)}
+                          {j.equipaCompeticao ? ` · ${j.equipaCompeticao.nome}` : ""}
+                        </p>
                       </div>
                       <span className="font-semibold tabular-nums text-cinza-900">
                         {temResultado ? `${j.golosMarcados} — ${j.golosSofridos}` : "—"}

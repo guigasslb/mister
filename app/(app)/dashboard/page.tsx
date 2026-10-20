@@ -185,7 +185,11 @@ export default async function DashboardPage() {
     // Próximos jogos futuros (até 3) ordenados por data asc — para o dashboard.
     prisma.jogo.findMany({
       where: { epocaId: epoca.id, escalao: { clubeId }, data: { gte: agora }, ...filtroEscalaoId },
-      include: { escalao: { select: { nome: true } } },
+      // §23.11.3 regra 11: subequipa da competição (nome em vez do do escalão).
+      include: {
+        escalao: { select: { nome: true } },
+        equipaCompeticao: { select: { nome: true } },
+      },
       orderBy: { data: "asc" },
       take: 3,
     }),
@@ -219,6 +223,7 @@ export default async function DashboardPage() {
         local: true,
         adversario: true,
         escalao: { select: { nome: true } },
+        equipaCompeticao: { select: { nome: true } },
       },
       orderBy: { data: "asc" },
     }),
@@ -278,7 +283,7 @@ export default async function DashboardPage() {
   const jogosHojeLite: EventoLite[] = jogosHoje.map((j) => ({
     id: j.id,
     data: j.data,
-    escalaoNome: j.escalao.nome,
+    escalaoNome: j.equipaCompeticao?.nome ?? j.escalao.nome,
     local: j.local,
     adversario: j.adversario,
   }));
@@ -397,7 +402,7 @@ export default async function DashboardPage() {
                 </p>
                 <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-corpo text-white/85">
                   <span className="capitalize">{dataLonga(proximoJogo.data)}</span>
-                  <span>{proximoJogo.escalao.nome}</span>
+                  <span>{proximoJogo.equipaCompeticao?.nome ?? proximoJogo.escalao.nome}</span>
                   <span>{proximoJogo.casaFora === "CASA" ? "Casa" : "Fora"}</span>
                   {proximoJogo.local && (
                     <span className="inline-flex items-center gap-1">
@@ -433,7 +438,7 @@ export default async function DashboardPage() {
                               {" · "}
                               <span className="capitalize">{dataCurta(j.data)}</span>
                               {" · "}
-                              {j.escalao.nome}
+                              {j.equipaCompeticao?.nome ?? j.escalao.nome}
                             </span>
                           </span>
                           <ChevronRight className="ml-auto h-3.5 w-3.5 flex-shrink-0 text-white/50 transition-transform group-hover:translate-x-0.5" />
@@ -767,6 +772,7 @@ function ProximosJogosSecundario({
     adversario: string;
     casaFora: CasaFora;
     escalao: { nome: string };
+    equipaCompeticao: { nome: string } | null;
   }[];
   clubeNome: string | null | undefined;
 }) {
@@ -798,7 +804,7 @@ function ProximosJogosSecundario({
         </p>
         <p className="text-legenda text-cinza-500">
           <span className="capitalize">{dataCurta(primeiro.data)}</span> ·{" "}
-          {primeiro.escalao.nome}
+          {primeiro.equipaCompeticao?.nome ?? primeiro.escalao.nome}
         </p>
       </Link>
 
@@ -820,7 +826,7 @@ function ProximosJogosSecundario({
                     {" · "}
                     <span className="capitalize">{dataCurta(j.data)}</span>
                     {" · "}
-                    {j.escalao.nome}
+                    {j.equipaCompeticao?.nome ?? j.escalao.nome}
                   </span>
                 </span>
                 <ChevronRight className="ml-auto h-3.5 w-3.5 flex-shrink-0 text-cinza-300 transition-transform group-hover:translate-x-0.5" />

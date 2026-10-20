@@ -119,6 +119,9 @@ export const equipaCompeticaoSchema = z.object({
     .default(TipoParticipanteCompeticao.EXTERNO),
   escalaoVinculadoId: z.string().cuid().optional(),
   clubeVinculadoId: z.string().cuid().optional(),
+  // §23.11.3 regra 9 (wizard): marcada como «Equipa própria» (subequipa do escalão
+  // da competição — ex.: «Benjamins A»). Várias permitidas. Default false.
+  propria: z.boolean().default(false),
 });
 
 /**
@@ -158,6 +161,27 @@ export const atualizarGolosConfrontoSchema = z.object({
   golosCasa: z.number().int().min(0).max(99),
   golosFora: z.number().int().min(0).max(99),
 });
+
+// ─────────────────────────────────────────────
+// §23.11 — Plantéis das subequipas por competição
+// ─────────────────────────────────────────────
+
+/** Plantel de uma subequipa própria nesta competição (substitui o conjunto). */
+export const definirPlantelEquipaCompeticaoSchema = z.object({
+  equipaCompeticaoId: z.string().cuid(),
+  atletaIds: z.array(z.string().cuid()).max(200),
+});
+
+/** «Copiar plantéis da competição X» (correspondência por nome de subequipa). */
+export const copiarPlanteisCompeticaoSchema = z
+  .object({
+    competicaoDestinoId: z.string().cuid(),
+    competicaoOrigemId: z.string().cuid(),
+  })
+  .refine((d) => d.competicaoDestinoId !== d.competicaoOrigemId, {
+    message: "Escolhe outra competição",
+    path: ["competicaoOrigemId"],
+  });
 
 export const LABEL_FORMATO_COMPETICAO: Record<FormatoCompeticao, string> = {
   LIGA: "Liga",

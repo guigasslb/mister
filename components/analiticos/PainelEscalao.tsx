@@ -67,12 +67,15 @@ export function PainelEscalao({
   dados,
   competicoes,
   competicaoId,
+  equipaCompeticaoId,
 }: {
   dados: AnaliticoEscalao;
   /** Competições com jogos no escalão/época; quando presentes, mostra o filtro (P2.5). */
   competicoes?: CompeticaoOpcao[];
   /** Competição atualmente selecionada (undefined = «Todas»). */
   competicaoId?: string;
+  /** Subequipa selecionada no filtro «Equipa» (§23.11.3 regra 10). */
+  equipaCompeticaoId?: string;
 }) {
   const pontosMarcadores = dados.marcadores.map((m) => ({
     label: m.nome,
@@ -111,6 +114,11 @@ export function PainelEscalao({
 
   const semJogos = dados.jogos === 0;
 
+  // §23.11.3 regra 10: jogos internos (A vs B) não contam para os totais de equipa
+  // — listados à parte. Snapshots antigos não têm o campo (= não interno).
+  const resultadosEquipa = dados.resultados.filter((r) => !r.interno);
+  const resultadosInternos = dados.resultados.filter((r) => r.interno);
+
   // Análise por período (M6, §8.15): só há dados quando o treinador usa o registo
   // ao vivo (EventoJogo). Jogos sem registo — ou snapshots antigos — têm as partes
   // vazias, pelo que a secção fica oculta. A condição usa a 2ª parte como sinal de
@@ -145,7 +153,11 @@ export function PainelEscalao({
     <div className="space-y-10">
       {/* Filtro por competição (P2.5) — só quando há competições com jogos. */}
       {competicoes && competicoes.length > 0 && (
-        <FiltroCompeticao competicoes={competicoes} competicaoId={competicaoId} />
+        <FiltroCompeticao
+          competicoes={competicoes}
+          competicaoId={competicaoId}
+          equipaCompeticaoId={equipaCompeticaoId}
+        />
       )}
 
       {/* Balanço da época — KPIs de resultados */}
@@ -421,11 +433,11 @@ export function PainelEscalao({
       {/* Resultados jogo a jogo */}
       <SecaoAnalitico titulo="Resultados">
         <div className="rounded-lg border border-cinza-200 bg-white p-5">
-          {semJogos ? (
+          {semJogos && resultadosInternos.length === 0 ? (
             <p className="text-corpo-sec text-cinza-500">Sem jogos registados.</p>
           ) : (
             <ul className="divide-y divide-cinza-100">
-              {dados.resultados.map((r) => (
+              {resultadosEquipa.map((r) => (
                 <li
                   key={r.jogoId}
                   className="flex items-center justify-between gap-3 py-2.5"
@@ -446,6 +458,34 @@ export function PainelEscalao({
                 </li>
               ))}
             </ul>
+          )}
+          {resultadosInternos.length > 0 && (
+            <div className="mt-4 border-t border-cinza-100 pt-4">
+              <p className="text-legenda font-medium uppercase tracking-wide text-cinza-400">
+                Jogos internos
+                <span className="ml-1.5 normal-case tracking-normal text-cinza-500">
+                  · não contam para os totais da equipa
+                </span>
+              </p>
+              <ul className="divide-y divide-cinza-100">
+                {resultadosInternos.map((r) => (
+                  <li key={r.jogoId} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-corpo text-cinza-900">{r.adversario}</p>
+                        <span className="inline-flex shrink-0 items-center rounded-full border border-cinza-200 bg-cinza-50 px-2 py-0.5 text-legenda font-medium text-cinza-600">
+                          Jogo interno
+                        </span>
+                      </div>
+                      <p className="text-legenda text-cinza-500">{formatarData(r.data)}</p>
+                    </div>
+                    <span className="text-corpo font-semibold tabular-nums text-cinza-900">
+                      {r.golosMarcados ?? "—"}–{r.golosSofridos ?? "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       </SecaoAnalitico>

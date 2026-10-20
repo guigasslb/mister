@@ -36,6 +36,8 @@ import {
   type ResumoAusencias,
 } from "@/lib/estatisticas";
 import { filtroModalidadeJogo } from "@/lib/modalidade-escalao";
+import { SELECT_JOGO_INTERNO, ehJogoInterno, ORDEM_EQUIPAS_PROPRIAS } from "@/lib/subequipas";
+import { filtroJogosDaSubequipa } from "@/lib/subequipas-filtro";
 import {
   analiticoAtletaSchema,
   analiticoEscalaoSchema,
@@ -981,6 +983,11 @@ export interface ResultadoJogoResumo {
    * apenas em snapshots de relatórios antigos (pré-adição do campo).
    */
   casaFora: CasaFora | null;
+  /**
+   * Jogo interno (confronto A vs B entre subequipas — §23.11.3 regra 10): listado
+   * mas excluído dos totais de equipa. Ausente em snapshots antigos (= `false`).
+   */
+  interno?: boolean;
 }
 
 /** Balanço V/E/D por local do jogo (casa/fora — §10.2). */
@@ -1169,8 +1176,14 @@ export async function obterAnaliticoEscalao(
   escalaoId: string,
   epocaId?: string,
   competicaoId?: string,
+  equipaCompeticaoId?: string,
 ): Promise<Resultado<AnaliticoEscalao>> {
-  const parsed = analiticoEscalaoSchema.safeParse({ escalaoId, epocaId, competicaoId });
+  const parsed = analiticoEscalaoSchema.safeParse({
+    escalaoId,
+    epocaId,
+    competicaoId,
+    equipaCompeticaoId,
+  });
   if (!parsed.success) return erroDeValidacao(parsed.error);
 
   const perm = await exigirRelatorios();
@@ -1191,6 +1204,11 @@ export async function obterAnaliticoEscalao(
   // Só afeta jogos e o que deles deriva (estatísticas, eventos, métricas);
   // treinos e presenças são transversais à competição, logo mantêm-se globais.
   const filtroCompeticao = competicaoId ? { competicaoId } : {};
+  // §23.11.3 regra 10: filtro opcional «Equipa» — só os jogos dessa subequipa
+  // (mais os sem subequipa, se ela for a equipa própria implícita).
+  const filtroEquipa = equipaCompeticaoId
+    ? await filtroJogosDaSubequipa(prisma, clubeId, equipaCompeticaoId, competicaoId)
+    : {};
   // §10.2: só jogos JÁ REALIZADOS (data <= agora) entram no balanço da época e em
   // tudo o que dele deriva (jogos, V/E/D, golos, rankings, eventos, métricas).
   // Jogos futuros estão agendados mas por disputar, pelo que não devem contar
@@ -1199,6 +1217,7 @@ export async function obterAnaliticoEscalao(
     epocaId: epoca.id,
     escalaoId,
     ...filtroCompeticao,
+    ...filtroEquipa,
     data: { lte: new Date() },
   };
 
@@ -1223,6 +1242,8 @@ export async function obterAnaliticoEscalao(
         golosSofridos: true,
         // §10.2: local do jogo (casa/fora) para o balanço por local.
         casaFora: true,
+        // §23.11.3 regra 10: identifica os jogos internos (A vs B).
+        ...SELECT_JOGO_INTERNO,
       },
       orderBy: { data: "asc" },
     }),
@@ -1327,20 +1348,27 @@ export async function obterAnaliticoEscalao(
   const recordCasa: RecordCasaFora = { vitorias: 0, empates: 0, derrotas: 0, jogos: 0 };
   const recordFora: RecordCasaFora = { vitorias: 0, empates: 0, derrotas: 0, jogos: 0 };
   const resultados: ResultadoJogoResumo[] = [];
+  // §23.11.3 regra 10: os jogos internos (A vs B) ficam na lista assinalados, mas
+  // fora dos totais de equipa (jogos, V/E/D, golos, casa/fora). Para os atletas
+  // (estatísticas, convocatórias, eventos, métricas) contam normalmente.
+  const jogosEquipa = jogos.filter((j) => !ehJogoInterno(j));
   for (const j of jogos) {
     const r = resultadoJogo(j.golosMarcados, j.golosSofridos);
-    if (r === "V") vitorias++;
-    else if (r === "E") empates++;
-    else if (r === "D") derrotas++;
-    if (r) {
-      const rec = j.casaFora === "FORA" ? recordFora : recordCasa;
-      rec.jogos++;
-      if (r === "V") rec.vitorias++;
-      else if (r === "E") rec.empates++;
-      else rec.derrotas++;
+    const interno = ehJogoInterno(j);
+    if (!interno) {
+      if (r === "V") vitorias++;
+      else if (r === "E") empates++;
+      else if (r === "D") derrotas++;
+      if (r) {
+        const rec = j.casaFora === "FORA" ? recordFora : recordCasa;
+        rec.jogos++;
+        if (r === "V") rec.vitorias++;
+        else if (r === "E") rec.empates++;
+        else rec.derrotas++;
+      }
+      if (j.golosMarcados != null) golosMarcados += j.golosMarcados;
+      if (j.golosSofridos != null) golosSofridos += j.golosSofridos;
     }
-    if (j.golosMarcados != null) golosMarcados += j.golosMarcados;
-    if (j.golosSofridos != null) golosSofridos += j.golosSofridos;
     resultados.push({
       jogoId: j.id,
       data: j.data.toISOString().slice(0, 10),
@@ -1349,9 +1377,10 @@ export async function obterAnaliticoEscalao(
       golosSofridos: j.golosSofridos,
       resultado: r,
       casaFora: j.casaFora ?? null,
+      interno,
     });
   }
-  const jogosComResultado = jogos.filter(
+  const jogosComResultado = jogosEquipa.filter(
     (j) => j.golosMarcados != null && j.golosSofridos != null,
   ).length;
 
@@ -1552,7 +1581,7 @@ export async function obterAnaliticoEscalao(
   return ok({
     escalao,
     epoca,
-    jogos: jogos.length,
+    jogos: jogosEquipa.length,
     vitorias,
     empates,
     derrotas,
@@ -1594,6 +1623,11 @@ export interface CompeticaoOpcao {
   id: string;
   nome: string;
   tipo: TipoJogo;
+  /**
+   * Opções do filtro «Equipa» (§23.11.3 regra 10): as subequipas próprias da
+   * competição quando há ≥2; vazio caso contrário (filtro não se mostra).
+   */
+  equipas: { id: string; nome: string }[];
 }
 
 /**
@@ -1629,11 +1663,22 @@ export async function obterCompeticoesEscalao(
       epocaId: epoca.id,
       jogos: { some: { epocaId: epoca.id, escalaoId } },
     },
-    select: { id: true, nome: true, tipo: true },
+    select: {
+      id: true,
+      nome: true,
+      tipo: true,
+      equipas: {
+        where: { tipo: "PROPRIO" },
+        select: { id: true, nome: true },
+        orderBy: ORDEM_EQUIPAS_PROPRIAS,
+      },
+    },
     orderBy: [{ tipo: "asc" }, { nome: "asc" }],
   });
 
-  return ok(competicoes);
+  return ok(
+    competicoes.map((c) => ({ ...c, equipas: c.equipas.length >= 2 ? c.equipas : [] })),
+  );
 }
 
 // Valores dos enums (Prisma gera os enums como objetos runtime).
@@ -1770,7 +1815,13 @@ export async function obterAnaliticoClubeEpoca(
     // `data < agora`), que já filtrava — aqui corrige-se a mesma assimetria nos jogos.
     prisma.jogo.findMany({
       where: { ...filtroEpocaEscaloes, data: { lte: new Date() } },
-      select: { escalaoId: true, golosMarcados: true, golosSofridos: true },
+      // §23.11.3 regra 10: identifica os jogos internos (A vs B), fora dos totais.
+      select: {
+        escalaoId: true,
+        golosMarcados: true,
+        golosSofridos: true,
+        ...SELECT_JOGO_INTERNO,
+      },
     }),
     prisma.sessao.groupBy({
       by: ["escalaoId"],
@@ -1827,6 +1878,7 @@ export async function obterAnaliticoClubeEpoca(
   }
   const jogosPorEscalao = new Map<string, Acc>();
   for (const j of jogos) {
+    if (ehJogoInterno(j)) continue;
     const a =
       jogosPorEscalao.get(j.escalaoId) ??
       { jogos: 0, vitorias: 0, empates: 0, derrotas: 0, golosMarcados: 0, golosSofridos: 0 };
@@ -2155,7 +2207,7 @@ function slugificar(texto: string): string {
  * (não existe por atleta), pelo que aparece no resumo, não na tabela.
  */
 export async function exportarAnaliticoEscalaoCsv(
-  input: { escalaoId: string; competicaoId?: string },
+  input: { escalaoId: string; competicaoId?: string; equipaCompeticaoId?: string },
 ): Promise<Resultado<ExportacaoCsv>> {
   const parsed = exportarEscalaoCsvSchema.safeParse(input);
   if (!parsed.success) return erroDeValidacao(parsed.error);
@@ -2165,6 +2217,7 @@ export async function exportarAnaliticoEscalaoCsv(
     parsed.data.escalaoId,
     undefined,
     parsed.data.competicaoId,
+    parsed.data.equipaCompeticaoId,
   );
   if (!analitico.sucesso) return erro(analitico.erro, analitico.camposInvalidos);
   const a = analitico.dados;

@@ -20,6 +20,8 @@ const querySchema = z.discriminatedUnion("tipo", [
     tipo: z.literal("escalao"),
     escalaoId: z.string().cuid(),
     competicao: z.string().cuid().optional(),
+    // §23.11.3 regra 10: filtro opcional «Equipa» (subequipa da competição).
+    equipa: z.string().cuid().optional(),
   }),
   z.object({ tipo: z.literal("clube") }),
 ]);
@@ -30,6 +32,7 @@ export async function GET(req: NextRequest) {
     tipo: sp.get("tipo") ?? undefined,
     escalaoId: sp.get("escalaoId") ?? undefined,
     competicao: sp.get("competicao") ?? undefined,
+    equipa: sp.get("equipa") ?? undefined,
   });
   if (!parsed.success) {
     return NextResponse.json({ erro: "Parâmetros inválidos" }, { status: 400 });
@@ -41,6 +44,7 @@ export async function GET(req: NextRequest) {
           tipo: "escalao",
           escalaoId: parsed.data.escalaoId,
           competicaoId: parsed.data.competicao,
+          equipaCompeticaoId: parsed.data.equipa,
         }
       : { tipo: "clube" };
 

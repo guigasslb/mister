@@ -28,7 +28,13 @@ import {
 import type { MarcaClube } from "@/components/pdf/comum";
 
 export type ParamsPdf =
-  | { tipo: "escalao"; escalaoId: string; competicaoId?: string }
+  | {
+      tipo: "escalao";
+      escalaoId: string;
+      competicaoId?: string;
+      // §23.11.3 regra 10: filtro opcional «Equipa» (subequipa da competição).
+      equipaCompeticaoId?: string;
+    }
   | { tipo: "clube" };
 
 export type ResultadoPdf =
@@ -151,6 +157,7 @@ export async function gerarPdfAnalitico(params: ParamsPdf): Promise<ResultadoPdf
       params.escalaoId,
       undefined,
       params.competicaoId,
+      params.equipaCompeticaoId,
     );
     if (!res.sucesso) return { ok: false, status: estadoDoErro(res.erro), erro: res.erro };
 

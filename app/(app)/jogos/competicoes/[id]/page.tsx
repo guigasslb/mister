@@ -3,15 +3,64 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import {
+  listarCompeticoes,
   obterCompeticao,
   obterClassificacao,
+  obterPlantelEquipaCompeticao,
+  type CompeticaoDetalhe as CompeticaoDetalheTipo,
   type LinhaClassificacao,
 } from "@/lib/actions/competicoes";
+import { listarAtletas } from "@/lib/actions/atletas";
+import type {
+  AtletaEscalaoPlantel,
+  PlantelAtual,
+} from "@/components/competicoes/PlanteisSubequipas";
 import { listarEscaloes } from "@/lib/actions/escaloes";
 import { listarEpocas } from "@/lib/actions/epocas";
 import { CompeticaoDetalhe } from "@/components/competicoes/CompeticaoDetalhe";
 
 export const metadata: Metadata = { title: "Detalhe da competição" };
+
+/**
+ * §23.11: dados da gestão de plantéis — só com ≥2 equipas próprias (com 0/1 a
+ * tab «Equipas» mantém-se como antes e não há leituras adicionais).
+ */
+async function carregarPlanteis(competicao: CompeticaoDetalheTipo): Promise<{
+  planteis: PlantelAtual[];
+  atletasEscalao: AtletaEscalaoPlantel[];
+  competicoesOrigem: { id: string; nome: string }[];
+}> {
+  const proprias = competicao.equipas.filter((e) => e.tipo === "PROPRIO");
+  if (proprias.length < 2) return { planteis: [], atletasEscalao: [], competicoesOrigem: [] };
+
+  const [resPlanteis, resAtletas, resComps] = await Promise.all([
+    Promise.all(proprias.map((e) => obterPlantelEquipaCompeticao(e.id))),
+    listarAtletas(competicao.escalaoId, competicao.epocaId),
+    listarCompeticoes(competicao.escalaoId),
+  ]);
+  return {
+    planteis: proprias.map((e, i) => {
+      const r = resPlanteis[i];
+      return {
+        id: e.id,
+        nome: e.nome,
+        atletas: r.sucesso ? r.dados.map((a) => ({ atletaId: a.atletaId, nome: a.nome })) : [],
+      };
+    }),
+    atletasEscalao: resAtletas.sucesso
+      ? resAtletas.dados.map((a) => ({
+          id: a.id,
+          nome: a.nome,
+          numero: a.participacaoContexto?.numero ?? null,
+        }))
+      : [],
+    competicoesOrigem: resComps.sucesso
+      ? resComps.dados
+          .filter((c) => c.id !== competicao.id && c.equipas.length > 0)
+          .map((c) => ({ id: c.id, nome: c.nome }))
+      : [],
+  };
+}
 
 export default async function CompeticaoDetalhePage({
   params,
@@ -28,6 +77,7 @@ export default async function CompeticaoDetalhePage({
   ]);
 
   if (!resComp.sucesso) notFound();
+  const { planteis, atletasEscalao, competicoesOrigem } = await carregarPlanteis(resComp.dados);
 
   const classificacao: LinhaClassificacao[] = resClass.sucesso ? resClass.dados : [];
   const escaloes = resEsc.sucesso
@@ -52,6 +102,9 @@ export default async function CompeticaoDetalhePage({
         classificacao={classificacao}
         escaloes={escaloes}
         epocas={epocas}
+        planteis={planteis}
+        atletasEscalao={atletasEscalao}
+        competicoesOrigem={competicoesOrigem}
       />
     </div>
   );
