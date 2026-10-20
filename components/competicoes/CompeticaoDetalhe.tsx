@@ -1,28 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { Pencil, Trash2, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
-  apagarCompeticao,
-  type CompeticaoDetalhe as CompeticaoDetalheTipo,
-  type LinhaClassificacao,
+import type {
+  CompeticaoDetalhe as CompeticaoDetalheTipo,
+  LinhaClassificacao,
 } from "@/lib/actions/competicoes";
 import { LABEL_FORMATO_COMPETICAO, LABEL_AMBITO_COMPETICAO } from "@/lib/schemas/competicao";
 import { LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
@@ -31,6 +17,7 @@ import { CompeticaoForm } from "@/components/competicoes/CompeticaoForm";
 import { ResultadoExternoForm } from "@/components/competicoes/ResultadoExternoForm";
 import { TabelaClassificacao } from "@/components/competicoes/TabelaClassificacao";
 import { QuadroAgendamento } from "@/components/competicoes/QuadroAgendamento";
+import { ApagarCompeticaoDialog } from "@/components/competicoes/ApagarCompeticaoDialog";
 import { GestaoEquipas } from "@/components/competicoes/GestaoEquipas";
 import type {
   AtletaEscalaoPlantel,
@@ -60,20 +47,6 @@ export function CompeticaoDetalhe({
   competicoesOrigem?: { id: string; nome: string }[];
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
-
-  function apagar() {
-    startTransition(async () => {
-      const res = await apagarCompeticao(competicao.id);
-      if (res.sucesso) {
-        toast.success("Competição apagada");
-        router.push("/jogos/competicoes");
-        router.refresh();
-      } else {
-        toast.error(res.erro);
-      }
-    });
-  }
 
   return (
     <div className="space-y-6">
@@ -112,32 +85,19 @@ export function CompeticaoDetalhe({
               </Button>
             }
           />
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" disabled={pending}>
+          <ApagarCompeticaoDialog
+            competicao={{ id: competicao.id, nome: competicao.nome }}
+            onApagada={() => {
+              router.push("/jogos/competicoes");
+              router.refresh();
+            }}
+            trigger={
+              <Button variant="outline">
                 <Trash2 className="h-4 w-4 text-vermelho-600" />
                 Apagar
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Apagar «{competicao.nome}»?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Os jogos mantêm-se, apenas deixam de estar ligados a esta competição. Os
-                  resultados externos são apagados.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={apagar}
-                  className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
-                >
-                  Apagar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            }
+          />
         </div>
       </div>
 
@@ -186,13 +146,22 @@ export function CompeticaoDetalhe({
 
         <TabsContent value="resultados" className="space-y-4">
           <div className="flex justify-end">
-            <ResultadoExternoForm competicaoId={competicao.id} />
+            <ResultadoExternoForm
+              competicaoId={competicao.id}
+              formato={competicao.formato}
+              rondaMaxima={competicao.resultados.reduce((max, r) => Math.max(max, r.ronda ?? 0), 0)}
+            />
           </div>
           <QuadroAgendamento
+            competicaoId={competicao.id}
+            competicaoNome={competicao.nome}
+            equipas={competicao.equipas.map((e) => ({ id: e.id, nome: e.nome }))}
             resultados={competicao.resultados.map((r) => ({
               id: r.id,
               equipaCasa: r.equipaCasa,
               equipaFora: r.equipaFora,
+              equipaCasaId: r.equipaCasaId,
+              equipaForaId: r.equipaForaId,
               golosCasa: r.golosCasa,
               golosFora: r.golosFora,
               ronda: r.ronda,

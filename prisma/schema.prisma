@@ -1317,6 +1317,12 @@ model ResultadoCompeticao {
   // (2026-10-17): N jogos — no máximo um por subequipa (A vs B gera dois Jogos).
   jogosDetalhados Jogo[]
 
+  // R6 (2026-10-20): ordem de apresentação dentro da competição (ordinal global; a
+  // ordem dentro de uma jornada é a subsequência ordenada por `ordem`). Nullable: os
+  // caminhos legados que não a preenchem (registarResultadoExterno) aparecem no fim.
+  // Sem índice nem unique (consultas sempre por competicaoId; tolera null).
+  ordem Int?
+
   @@index([competicaoId])
   @@index([equipaCasaId])
   @@index([equipaForaId])

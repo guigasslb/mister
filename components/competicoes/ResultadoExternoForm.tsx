@@ -23,11 +23,23 @@ import {
 } from "@/components/ui/dialog";
 import { registarConfronto } from "@/lib/actions/competicoes";
 import { LABEL_ESTADO_RESULTADO } from "@/lib/schemas/competicao";
-import type { CasaFora, EstadoResultado } from "@prisma/client";
+import { combinarDataHora } from "@/lib/calendario-wizard";
+import { opcoesRonda } from "@/lib/confronto-dialogos-ui";
+import type { CasaFora, EstadoResultado, FormatoCompeticao } from "@prisma/client";
 
 const ESTADOS: EstadoResultado[] = ["REALIZADO", "AGENDADO", "CANCELADO", "WALKOVER"];
+const SEM_RONDA = "__sem__";
 
-export function ResultadoExternoForm({ competicaoId }: { competicaoId: string }) {
+export function ResultadoExternoForm({
+  competicaoId,
+  formato,
+  rondaMaxima,
+}: {
+  competicaoId: string;
+  formato: FormatoCompeticao;
+  /** Maior jornada/ronda em uso (0 sem confrontos) — opções 1…máx+1. */
+  rondaMaxima: number;
+}) {
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -35,11 +47,18 @@ export function ResultadoExternoForm({ competicaoId }: { competicaoId: string })
   // P1.6 (§23.7): o estado do confronto controla que campos são pedidos.
   const [estado, setEstado] = useState<EstadoResultado>("REALIZADO");
   const [walkoverVencedor, setWalkoverVencedor] = useState<CasaFora>("CASA");
+  const [ronda, setRonda] = useState<number | null>(null);
+  const [data, setData] = useState("");
+  const [hora, setHora] = useState("");
+  const rotuloRonda = formato === "LIGA" ? "Jornada" : "Ronda";
 
   function reiniciar() {
     setErro(null);
     setEstado("REALIZADO");
     setWalkoverVencedor("CASA");
+    setRonda(null);
+    setData("");
+    setHora("");
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -49,6 +68,7 @@ export function ResultadoExternoForm({ competicaoId }: { competicaoId: string })
 
     const equipaCasaNome = String(fd.get("equipaCasa") ?? "").trim();
     const equipaForaNome = String(fd.get("equipaFora") ?? "").trim();
+    const dataHora = combinarDataHora(data, hora);
 
     const dados = {
       equipaCasaNome,
@@ -63,6 +83,9 @@ export function ResultadoExternoForm({ competicaoId }: { competicaoId: string })
         : {}),
       // Vencedor obrigatório num walkover (§23.7).
       ...(estado === "WALKOVER" ? { walkoverVencedor } : {}),
+      // Jornada e data/hora só seguem quando preenchidas (sem elas: igual a antes).
+      ...(ronda !== null ? { ronda } : {}),
+      ...(dataHora ? { dataHora } : {}),
     };
 
     startTransition(async () => {
@@ -92,7 +115,7 @@ export function ResultadoExternoForm({ competicaoId }: { competicaoId: string })
           Adicionar confronto
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Adicionar confronto</DialogTitle>
         </DialogHeader>
@@ -169,6 +192,56 @@ export function ResultadoExternoForm({ competicaoId }: { competicaoId: string })
               <div className="space-y-1.5" />
             )}
             <div className="space-y-1.5" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ronda">{rotuloRonda}</Label>
+            <Select
+              value={ronda === null ? SEM_RONDA : String(ronda)}
+              onValueChange={(v) => setRonda(v === SEM_RONDA ? null : Number(v))}
+            >
+              <SelectTrigger id="ronda">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SEM_RONDA}>Sem {rotuloRonda.toLowerCase()}</SelectItem>
+                {opcoesRonda(rondaMaxima).map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {rotuloRonda} {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="data-confronto">Data</Label>
+                <Input
+                  id="data-confronto"
+                  type="date"
+                  value={data}
+                  onChange={(e) => {
+                    setData(e.target.value);
+                    if (e.target.value === "") setHora("");
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="hora-confronto">Hora</Label>
+                <Input
+                  id="hora-confronto"
+                  type="time"
+                  value={hora}
+                  onChange={(e) => setHora(e.target.value)}
+                  disabled={data === ""}
+                />
+              </div>
+            </div>
+            <p className="text-legenda text-cinza-500">
+              Se o confronto for da tua equipa e tiver data, aparece em /jogos.
+            </p>
           </div>
 
           {estado === "WALKOVER" && (

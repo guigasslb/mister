@@ -863,6 +863,7 @@ describe("removerEquipaCompeticao — equipas próprias não removíveis", () =>
 describe("apagarCompeticao — desliga confronto e subequipa dos jogos", () => {
   it("o updateMany limpa competicaoId, resultadoCompeticaoId e equipaCompeticaoId", async () => {
     p.competicao.findFirst.mockResolvedValue({ id: COMP, escalaoId: ESC });
+    p.jogo.updateMany.mockResolvedValue({ count: 0 });
     expect((await apagarCompeticao(COMP)).sucesso).toBe(true);
     expect(p.jogo.updateMany).toHaveBeenCalledWith({
       where: { competicaoId: COMP },

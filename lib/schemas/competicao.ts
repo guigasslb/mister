@@ -77,10 +77,73 @@ export const registarConfrontoSchema = z
     walkoverVencedor: z.nativeEnum(CasaFora).optional(),
     golosCasa: z.number().int().min(0).max(99).optional(),
     golosFora: z.number().int().min(0).max(99).optional(),
+    // Calendário editável (2026-10-20): jornada/ronda e data/hora opcionais.
+    ronda: z.number().int().min(1, "A jornada tem de ser ≥ 1").max(999).optional(),
+    dataHora: z.coerce.date().nullable().optional(),
   })
   .refine((d) => d.estado !== EstadoResultado.WALKOVER || d.walkoverVencedor != null, {
     message: "Indica o vencedor do walkover",
     path: ["walkoverVencedor"],
+  });
+
+// ─────────────────────────────────────────────
+// Calendário editável (2026-10-20) — editar/apagar/reordenar confrontos e apagar
+// competição com os jogos (§23.6 regra R3, decisões D1–D3)
+// ─────────────────────────────────────────────
+
+/** Jogo do confronto que só tem convocatória: apagar ou manter (sem default). */
+export const decisaoConvocatoriaSchema = z.enum(["APAGAR", "MANTER"]);
+
+/**
+ * D1: jogo que sobra (com dados, ou com convocatória «MANTER») — mantém-se na
+ * competição (só deixa de estar ligado ao confronto) ou é retirado da competição
+ * (solto em /jogos). Sem default: obrigatório só quando há jogos que sobram.
+ */
+export const decisaoJogosComDadosSchema = z.enum(["MANTER", "DESASSOCIAR"]);
+
+export const editarConfrontoSchema = z
+  .object({
+    resultadoId: z.string().cuid(),
+    equipaCasaId: z.string().cuid("Escolhe a equipa da casa"),
+    equipaForaId: z.string().cuid("Escolhe a equipa visitante"),
+    ronda: z.number().int().min(1, "A jornada tem de ser ≥ 1").max(999).nullable(),
+    jogosComConvocatoria: decisaoConvocatoriaSchema.optional(),
+    // Aplica-se aos jogos com dados E aos com convocatória «MANTER» (ambos sobram).
+    jogosComDados: decisaoJogosComDadosSchema.optional(),
+    // D3: mudar as equipas de um confronto REALIZADO/WALKOVER exige true.
+    confirmarAlteracaoResultado: z.boolean().default(false),
+  })
+  .refine((d) => d.equipaCasaId !== d.equipaForaId, {
+    message: "A equipa da casa e a visitante têm de ser diferentes",
+    path: ["equipaForaId"],
+  });
+
+export const apagarConfrontoSchema = z.object({
+  resultadoId: z.string().cuid(),
+  jogosComConvocatoria: decisaoConvocatoriaSchema.optional(),
+  jogosComDados: decisaoJogosComDadosSchema.optional(),
+});
+
+/**
+ * D2: `apagarJogos` default false = comportamento anterior (só desliga os jogos).
+ * Sem `jogosComDados`: com a competição apagada os jogos que sobram ficam sempre
+ * desassociados.
+ */
+export const apagarCompeticaoSchema = z.object({
+  apagarJogos: z.boolean().default(false),
+  jogosComConvocatoria: decisaoConvocatoriaSchema.optional(),
+});
+
+/** R6: ordem final COMPLETA dos confrontos de uma jornada (`null` = «Sem jornada»). */
+export const reordenarConfrontosSchema = z
+  .object({
+    competicaoId: z.string().cuid(),
+    ronda: z.number().int().min(1).max(999).nullable(),
+    ids: z.array(z.string().cuid()).min(1).max(200),
+  })
+  .refine((d) => new Set(d.ids).size === d.ids.length, {
+    message: "Confronto repetido na lista",
+    path: ["ids"],
   });
 
 /**
@@ -227,6 +290,8 @@ export type AtualizarGolosConfrontoInput = z.infer<typeof atualizarGolosConfront
 export type RegistarConfrontoInput = z.infer<typeof registarConfrontoSchema>;
 export type DefinirEstadoConfrontoInput = z.infer<typeof definirEstadoConfrontoSchema>;
 export type LigarJogoAConfrontoInput = z.infer<typeof ligarJogoAConfrontoSchema>;
+export type DecisaoConvocatoria = z.infer<typeof decisaoConvocatoriaSchema>;
+export type DecisaoJogosComDados = z.infer<typeof decisaoJogosComDadosSchema>;
 /** Alias retrocompatível do tipo de input de competição. */
 export type CompeticaoInput = CriarCompeticaoInput;
 

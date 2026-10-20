@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -13,9 +13,13 @@ import {
   Plus,
   ArrowUp,
   ArrowDown,
+  ArrowLeftRight,
   X,
   Globe,
   Building2,
+  TriangleAlert,
+  Sparkles,
+  PencilLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +33,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import {
   LABEL_FORMATO_COMPETICAO,
@@ -36,6 +50,22 @@ import {
 } from "@/lib/schemas/competicao";
 import { LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
 import { gerarLiga, gerarBracket, type EquipaQuadro } from "@/lib/quadro-cliente";
+import {
+  adicionarConfronto,
+  adicionarRonda,
+  agruparPorRonda,
+  atualizarConfronto,
+  deGerados,
+  moverNaJornada,
+  mudarRonda,
+  paraPayload,
+  removerConfronto,
+  rondaMaxima,
+  trocar,
+  validarCalendario,
+  type JogoCalendario,
+} from "@/lib/calendario-wizard";
+import { opcoesRonda, vezesNaJornada } from "@/lib/confronto-dialogos-ui";
 import { participantesWizard, type EquipaWizard } from "@/lib/subequipas-ui";
 import { criarCompeticaoCompleta } from "@/lib/actions/competicoes";
 import type {
@@ -79,14 +109,8 @@ const FORMATOS_JOGO: FormatoJogo[] = [
 
 const FORMATO_JOGO_AUTO = "__auto__";
 
-/** Jogo do quadro com data/hora em campos de texto editáveis (inputs nativos). */
-type JogoEditavel = {
-  equipaCasa: string;
-  equipaFora: string;
-  ronda: number;
-  data: string; // "YYYY-MM-DD" | ""
-  hora: string; // "HH:MM" | ""
-};
+/** Passo 3: calendário gerado pelo formato ou introduzido à mão (ex.: copiar da FPF). */
+type ModoCalendario = "GERADO" | "MANUAL";
 
 const PASSOS = [
   { chave: "base", titulo: "Informação base" },
@@ -165,8 +189,14 @@ export function WizardCompeticao({
   const [duasMaos, setDuasMaos] = useState(false);
 
   // ── Passo 3 — quadro ───────────────────────────────────────────────────────
-  const [jogos, setJogos] = useState<JogoEditavel[]>([]);
+  const [jogos, setJogos] = useState<JogoCalendario[]>([]);
   const [chaveGerada, setChaveGerada] = useState<string>("");
+  const [modo, setModo] = useState<ModoCalendario>("GERADO");
+  // Alguma mutação manual do calendário — a partir daí nunca se regenera por cima.
+  const [editado, setEditado] = useState(false);
+  const [confirmar, setConfirmar] = useState<"MANUAL" | "GERAR" | null>(null);
+  const [foco, setFoco] = useState<{ chave: string; direcao: -1 | 1 } | null>(null);
+  const [anuncio, setAnuncio] = useState("");
 
   const eLiga = formato === "LIGA";
 
@@ -236,26 +266,65 @@ export function WizardCompeticao({
   }
 
   // ── Geração do quadro ──────────────────────────────────────────────────────
-  function gerarQuadro(): JogoEditavel[] {
+  function gerarQuadro(): JogoCalendario[] {
     const comPosicao: EquipaQuadro[] = participantes.map((e, i) => ({
       nome: e.nome,
       posicao: i + 1,
     }));
-    const gerados = eLiga
-      ? gerarLiga(comPosicao, duasMaos)
-      : gerarBracket(comPosicao);
-    return gerados.map((j) => ({
-      equipaCasa: j.equipaCasa,
-      equipaFora: j.equipaFora,
-      ronda: j.ronda,
-      data: "",
-      hora: "",
-    }));
+    return deGerados(eLiga ? gerarLiga(comPosicao, duasMaos) : gerarBracket(comPosicao));
   }
 
-  function atualizarJogo(indice: number, patch: Partial<Pick<JogoEditavel, "data" | "hora">>) {
-    setJogos((atual) => atual.map((j, i) => (i === indice ? { ...j, ...patch } : j)));
+  function gerarDeNovo() {
+    setJogos(gerarQuadro());
+    setChaveGerada(chaveConfig);
+    setModo("GERADO");
+    setEditado(false);
   }
+
+  function comecarVazio() {
+    setJogos([]);
+    setModo("MANUAL");
+    setEditado(false);
+  }
+
+  function escolherModo(novo: ModoCalendario) {
+    if (novo === modo) return;
+    if (novo === "MANUAL") {
+      if (jogos.length > 0) setConfirmar("MANUAL");
+      else comecarVazio();
+    } else if (editado) {
+      setConfirmar("GERAR");
+    } else {
+      gerarDeNovo();
+    }
+  }
+
+  // ── Edição do calendário (lib/calendario-wizard — funções puras) ───────────
+  function mutar(fn: (atual: JogoCalendario[]) => JogoCalendario[]) {
+    setJogos(fn);
+    setEditado(true);
+  }
+
+  function mover(jogo: JogoCalendario, direcao: -1 | 1) {
+    const daJornada = jogos.filter((j) => j.ronda === jogo.ronda);
+    const destino = daJornada.findIndex((j) => j.chave === jogo.chave) + direcao;
+    if (destino < 0 || destino >= daJornada.length) return;
+    mutar((atual) => moverNaJornada(atual, jogo.chave, direcao));
+    setFoco({ chave: jogo.chave, direcao });
+    setAnuncio(
+      `Confronto na posição ${destino + 1} de ${daJornada.length} da ${rotuloRonda.toLowerCase()} ${jogo.ronda}.`,
+    );
+  }
+
+  // O foco fica no mesmo botão da linha movida (ou no oposto, se esse ficou no limite).
+  useEffect(() => {
+    if (!foco) return;
+    const seletor = (d: number) => `[data-mover="${foco.chave}:${d}"]`;
+    const alvo = document.querySelector<HTMLButtonElement>(seletor(foco.direcao));
+    const oposto = document.querySelector<HTMLButtonElement>(seletor(-foco.direcao));
+    (alvo && !alvo.disabled ? alvo : oposto)?.focus();
+    setFoco(null);
+  }, [foco, jogos]);
 
   // ── Navegação com validação por passo ──────────────────────────────────────
   function validarBase(): boolean {
@@ -275,8 +344,9 @@ export function WizardCompeticao({
         toast.error("Adiciona pelo menos 2 equipas para gerar o quadro.");
         return;
       }
-      // Ao entrar no passo do quadro, (re)gera se a configuração mudou.
-      if (chaveConfig !== chaveGerada) {
+      // Ao entrar no passo do quadro, (re)gera se a configuração mudou — nunca por
+      // cima de edições manuais nem no modo manual (aí aparece «Gerar de novo»).
+      if (modo === "GERADO" && !editado && chaveConfig !== chaveGerada) {
         setJogos(gerarQuadro());
         setChaveGerada(chaveConfig);
       }
@@ -289,12 +359,6 @@ export function WizardCompeticao({
   }
 
   // ── Submissão ──────────────────────────────────────────────────────────────
-  function combinarDataHora(data: string, hora: string): Date | null {
-    if (data === "") return null;
-    const d = new Date(`${data}T${hora || "00:00"}`);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-
   function submeter() {
     if (!validarBase()) {
       setPassoIndex(0);
@@ -303,6 +367,11 @@ export function WizardCompeticao({
     if (participantes.length < 2) {
       setPassoIndex(1);
       toast.error("Adiciona pelo menos 2 equipas.");
+      return;
+    }
+    if (validacao.erros.size > 0) {
+      setPassoIndex(2);
+      toast.error("Corrige os confrontos assinalados antes de criar a competição.");
       return;
     }
 
@@ -327,12 +396,8 @@ export function WizardCompeticao({
         ...(p.ehPropria ? { escalaoVinculadoId: escalaoId } : {}),
         ...(p.ehPropria && !p.automatica ? { propria: true } : {}),
       })),
-      jogos: jogos.map((j) => ({
-        equipaCasa: j.equipaCasa,
-        equipaFora: j.equipaFora,
-        ronda: j.ronda,
-        dataHora: combinarDataHora(j.data, j.hora),
-      })),
+      // Ordenado por jornada e, dentro de cada uma, pela ordem do ecrã (R6).
+      jogos: paraPayload(jogos),
       duasMaos: eLiga ? duasMaos : false,
     };
 
@@ -349,16 +414,149 @@ export function WizardCompeticao({
     });
   }
 
-  // Jogos agrupados por ronda para a tabela do passo 3.
-  const jogosPorRonda = useMemo(() => {
-    const mapa = new Map<number, { indice: number; jogo: JogoEditavel }[]>();
-    jogos.forEach((jogo, indice) => {
-      const lista = mapa.get(jogo.ronda) ?? [];
-      lista.push({ indice, jogo });
-      mapa.set(jogo.ronda, lista);
-    });
-    return [...mapa.entries()].sort((a, b) => a[0] - b[0]);
-  }, [jogos]);
+  const rotuloRonda = eLiga ? "Jornada" : "Ronda";
+  const jogosPorRonda = useMemo(() => agruparPorRonda(jogos), [jogos]);
+  const validacao = useMemo(
+    () =>
+      validarCalendario(
+        jogos,
+        participantes.map((p) => p.nome),
+      ),
+    [jogos, participantes],
+  );
+  const maxRonda = rondaMaxima(jogos);
+  const equipasMudaram = modo === "GERADO" && editado && chaveConfig !== chaveGerada;
+
+  // Função de render (não componente): os Selects e os inputs nativos de data/hora
+  // não podem viver num componente aninhado — remontavam a cada render (§23.7).
+  function renderConfronto(jogo: JogoCalendario, posicao: number, total: number) {
+    const nome = `${jogo.equipaCasa || "…"} vs ${jogo.equipaFora || "…"}`;
+    const erro = validacao.erros.get(jogo.chave);
+    return (
+      <li
+        key={jogo.chave}
+        className={cn(
+          "space-y-2 rounded-md border bg-white p-3",
+          erro ? "border-vermelho-600" : "border-cinza-200",
+        )}
+      >
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <Select
+            value={jogo.equipaCasa}
+            onValueChange={(v) => mutar((a) => atualizarConfronto(a, jogo.chave, { equipaCasa: v }))}
+          >
+            <SelectTrigger aria-label={`Equipa da casa de ${nome}`} aria-invalid={Boolean(erro)}>
+              <SelectValue placeholder="Casa" />
+            </SelectTrigger>
+            <SelectContent>
+              {participantes.map((p) => (
+                <SelectItem key={p.nome} value={p.nome}>
+                  {p.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => mutar((a) => trocar(a, jogo.chave))}
+            aria-label="Trocar casa e visitante"
+          >
+            <ArrowLeftRight className="h-4 w-4" />
+          </Button>
+          <Select
+            value={jogo.equipaFora}
+            onValueChange={(v) => mutar((a) => atualizarConfronto(a, jogo.chave, { equipaFora: v }))}
+          >
+            <SelectTrigger aria-label={`Equipa visitante de ${nome}`} aria-invalid={Boolean(erro)}>
+              <SelectValue placeholder="Visitante" />
+            </SelectTrigger>
+            <SelectContent>
+              {participantes.map((p) => (
+                <SelectItem key={p.nome} value={p.nome}>
+                  {p.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={String(jogo.ronda)}
+            onValueChange={(v) => mutar((a) => mudarRonda(a, jogo.chave, Number(v)))}
+          >
+            <SelectTrigger className="w-36" aria-label={`${rotuloRonda} de ${nome}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {opcoesRonda(maxRonda, jogo.ronda).map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {rotuloRonda} {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            type="date"
+            value={jogo.data}
+            onChange={(e) =>
+              mutar((a) =>
+                atualizarConfronto(a, jogo.chave, {
+                  data: e.target.value,
+                  ...(e.target.value === "" ? { hora: "" } : {}),
+                }),
+              )
+            }
+            className="h-11 w-40"
+            aria-label={`Data de ${nome}`}
+          />
+          <Input
+            type="time"
+            value={jogo.hora}
+            onChange={(e) => mutar((a) => atualizarConfronto(a, jogo.chave, { hora: e.target.value }))}
+            disabled={jogo.data === ""}
+            className="h-11 w-28"
+            aria-label={`Hora de ${nome}`}
+          />
+          <div className="ml-auto flex items-center">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              data-mover={`${jogo.chave}:-1`}
+              onClick={() => mover(jogo, -1)}
+              disabled={posicao === 0}
+              aria-label={`Subir ${nome}`}
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              data-mover={`${jogo.chave}:1`}
+              onClick={() => mover(jogo, 1)}
+              disabled={posicao === total - 1}
+              aria-label={`Descer ${nome}`}
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => mutar((a) => removerConfronto(a, jogo.chave))}
+              aria-label="Remover confronto"
+            >
+              <X className="h-4 w-4 text-vermelho-600" />
+            </Button>
+          </div>
+        </div>
+        {erro && <p className="text-legenda text-vermelho-600">{erro}</p>}
+      </li>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -705,73 +903,154 @@ export function WizardCompeticao({
               <h2 className="text-titulo-seccao">Quadro e agendamento</h2>
             </div>
 
+            <div
+              className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+              role="radiogroup"
+              aria-label="Como criar o calendário"
+            >
+              {(["GERADO", "MANUAL"] as const).map((m) => {
+                const ativo = modo === m;
+                const Icone = m === "GERADO" ? Sparkles : PencilLine;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={ativo}
+                    onClick={() => escolherModo(m)}
+                    className={cn(
+                      "flex min-h-[44px] flex-col gap-1 rounded-md border p-3 text-left transition-colors",
+                      ativo ? "border-primary bg-primary/5" : "border-cinza-200 hover:bg-cinza-50",
+                    )}
+                  >
+                    <span className="flex items-center gap-2 text-corpo font-medium text-cinza-900">
+                      <Icone className="h-4 w-4 text-primary" />
+                      {m === "GERADO" ? "Gerar automaticamente" : "Introduzir calendário manualmente"}
+                    </span>
+                    <span className="text-legenda text-cinza-500">
+                      {m === "MANUAL"
+                        ? "Começa vazio. Ideal para copiar o calendário oficial (ex.: FPF)."
+                        : eLiga
+                          ? "Todos-contra-todos pelo número de equipas. Podes ajustar tudo a seguir."
+                          : "Emparelhamentos da 1.ª ronda. Podes ajustar tudo a seguir."}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {equipasMudaram && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-ambar-500 bg-ambar-500/10 px-3 py-2">
+                <p className="flex items-center gap-2 text-corpo-sec text-ambar-600">
+                  <TriangleAlert className="h-4 w-4 flex-shrink-0" />
+                  As equipas mudaram desde que criaste este calendário.
+                </p>
+                <Button type="button" variant="outline" size="sm" onClick={() => setConfirmar("GERAR")}>
+                  Gerar de novo
+                </Button>
+              </div>
+            )}
+
             {jogos.length === 0 ? (
-              <p className="rounded-md border border-dashed border-cinza-300 p-6 text-center text-corpo-sec text-cinza-500">
-                Não foi possível gerar jogos. Volta atrás e confirma as equipas.
-              </p>
+              <div className="space-y-3 rounded-md border border-dashed border-cinza-300 p-6 text-center">
+                <p className="text-corpo-sec text-cinza-500">
+                  Ainda sem confrontos. Adiciona a 1.ª {rotuloRonda.toLowerCase()} ou cria a
+                  competição e acrescenta-os depois no separador Confrontos.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => mutar(adicionarRonda)}
+                  className="gap-1.5"
+                >
+                  <Plus className="h-4 w-4" />
+                  Adicionar {rotuloRonda.toLowerCase()}
+                </Button>
+              </div>
             ) : (
               <div className="space-y-5">
                 <p className="text-legenda text-cinza-500">
-                  {eLiga
-                    ? `${jogos.length} jogo(s) gerados${duasMaos ? " (ida e volta)" : ""}. Define a data/hora ou deixa por definir.`
-                    : `${jogos.length} confronto(s) da primeira ronda. As rondas seguintes abrem com os resultados.`}
+                  {jogos.length} confronto(s) em {jogosPorRonda.length}{" "}
+                  {rotuloRonda.toLowerCase()}(s). Define a data/hora ou deixa por definir.
                 </p>
 
                 {jogosPorRonda.map(([ronda, lista]) => (
                   <div key={ronda} className="space-y-2">
                     <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
-                      {eLiga ? `Ronda ${ronda}` : `Ronda ${ronda} · Eliminatória`}
+                      {eLiga ? `Jornada ${ronda}` : `Ronda ${ronda} · Eliminatória`}
                     </p>
-                    <div className="overflow-hidden rounded-md border border-cinza-200">
-                      <table className="w-full text-corpo-sec">
-                        <thead className="bg-cinza-50 text-legenda uppercase tracking-wide text-cinza-500">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-medium">Casa</th>
-                            <th className="px-3 py-2 text-left font-medium">Visitante</th>
-                            <th className="px-3 py-2 text-left font-medium">Data</th>
-                            <th className="px-3 py-2 text-left font-medium">Hora</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {lista.map(({ indice, jogo }) => (
-                            <tr
-                              key={indice}
-                              className="border-t border-cinza-100 align-middle"
-                            >
-                              <td className="px-3 py-2 font-medium text-cinza-900">
-                                {jogo.equipaCasa}
-                              </td>
-                              <td className="px-3 py-2 font-medium text-cinza-900">
-                                {jogo.equipaFora}
-                              </td>
-                              <td className="px-3 py-2">
-                                <Input
-                                  type="date"
-                                  value={jogo.data}
-                                  onChange={(e) => atualizarJogo(indice, { data: e.target.value })}
-                                  className="h-10 w-40"
-                                  aria-label={`Data de ${jogo.equipaCasa} vs ${jogo.equipaFora}`}
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <Input
-                                  type="time"
-                                  value={jogo.hora}
-                                  onChange={(e) => atualizarJogo(indice, { hora: e.target.value })}
-                                  disabled={jogo.data === ""}
-                                  className="h-10 w-28"
-                                  aria-label={`Hora de ${jogo.equipaCasa} vs ${jogo.equipaFora}`}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    {validacao.avisos
+                      .filter((a) => a.ronda === ronda)
+                      .map((a) => (
+                        <p
+                          key={a.equipa}
+                          className="flex items-center gap-1 text-legenda text-ambar-600"
+                        >
+                          <TriangleAlert className="h-3.5 w-3.5 flex-shrink-0" />
+                          Atenção: {a.equipa} joga {vezesNaJornada(jogos, ronda, a.equipa)} vezes na{" "}
+                          {rotuloRonda.toLowerCase()} {ronda}.
+                        </p>
+                      ))}
+                    <ul className="space-y-2">
+                      {lista.map((jogo, i) => renderConfronto(jogo, i, lista.length))}
+                    </ul>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => mutar((a) => adicionarConfronto(a, ronda))}
+                      className="gap-1.5"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Adicionar confronto
+                    </Button>
                   </div>
                 ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => mutar(adicionarRonda)}
+                  className="gap-1.5"
+                >
+                  <Plus className="h-4 w-4" />
+                  Adicionar {rotuloRonda.toLowerCase()}
+                </Button>
               </div>
             )}
+
+            <p className="sr-only" aria-live="polite">
+              {anuncio}
+            </p>
+
+            <AlertDialog open={confirmar !== null} onOpenChange={(v) => !v && setConfirmar(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {confirmar === "MANUAL"
+                      ? "Começar com o calendário vazio?"
+                      : "Gerar de novo o calendário?"}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {confirmar === "MANUAL"
+                      ? `Os ${jogos.length} confrontos atuais são descartados.`
+                      : "As alterações que fizeste perdem-se."}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      if (confirmar === "MANUAL") comecarVazio();
+                      else gerarDeNovo();
+                      setConfirmar(null);
+                    }}
+                  >
+                    {confirmar === "MANUAL" ? "Começar vazio" : "Gerar de novo"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </CartaoPasso>
       )}
@@ -792,7 +1071,7 @@ export function WizardCompeticao({
           <Button
             type="button"
             onClick={submeter}
-            disabled={pending || jogos.length === 0}
+            disabled={pending}
             className="gap-1.5"
           >
             {pending ? (

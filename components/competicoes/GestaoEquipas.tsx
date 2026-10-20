@@ -234,9 +234,11 @@ export function GestaoEquipas({
                         <AlertDialogHeader>
                           <AlertDialogTitle>Remover «{e.nome}»?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Esta equipa tem confrontos no quadro. Se já tiver jogos realizados a
-                            remoção é bloqueada; caso contrário os confrontos agendados associados
-                            são também removidos.
+                            Esta equipa tem confrontos no quadro. Se algum já tiver resultado
+                            (realizado ou walkover), não é possível removê-la. Caso contrário, a
+                            equipa sai da lista, mas os confrontos agendados ou cancelados
+                            mantêm-se no quadro com o nome dela — edita-os ou apaga-os no separador
+                            Confrontos.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

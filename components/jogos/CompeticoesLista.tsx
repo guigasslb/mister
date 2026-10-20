@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { ChevronRight, Plus, Trash2, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,18 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { apagarCompeticao, type CompeticaoComRelacoes } from "@/lib/actions/competicoes";
+import type { CompeticaoComRelacoes } from "@/lib/actions/competicoes";
+import { ApagarCompeticaoDialog } from "@/components/competicoes/ApagarCompeticaoDialog";
 import { LABEL_FORMATO_COMPETICAO } from "@/lib/schemas/competicao";
 import { LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
 
@@ -44,7 +33,6 @@ export function CompeticoesLista({
   epocas: EpocaBasica[];
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
   const [filtroEscalao, setFiltroEscalao] = useState<string>(TODOS);
 
   const nomeEpoca = useMemo(() => {
@@ -59,18 +47,6 @@ export function CompeticoesLista({
         : competicoes.filter((c) => c.escalaoId === filtroEscalao),
     [competicoes, filtroEscalao],
   );
-
-  function apagar(id: string) {
-    startTransition(async () => {
-      const res = await apagarCompeticao(id);
-      if (res.sucesso) {
-        toast.success("Competição apagada");
-        router.refresh();
-      } else {
-        toast.error(res.erro);
-      }
-    });
-  }
 
   return (
     <div className="space-y-6">
@@ -139,30 +115,15 @@ export function CompeticoesLista({
                 </div>
                 <ChevronRight className="h-5 w-5 flex-shrink-0 text-cinza-400" />
               </Link>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Apagar" disabled={pending}>
+              <ApagarCompeticaoDialog
+                competicao={{ id: c.id, nome: c.nome }}
+                onApagada={() => router.refresh()}
+                trigger={
+                  <Button variant="ghost" size="icon" aria-label="Apagar">
                     <Trash2 className="h-4 w-4 text-vermelho-600" />
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Apagar «{c.nome}»?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Os jogos mantêm-se, apenas deixam de estar ligados a esta competição.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => apagar(c.id)}
-                      className="bg-vermelho-600 hover:bg-vermelho-600/90 text-white"
-                    >
-                      Apagar
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                }
+              />
             </li>
           ))}
         </ul>

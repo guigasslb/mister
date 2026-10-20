@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+  ArrowDown,
+  ArrowUp,
   CalendarClock,
   Check,
   ChevronDown,
@@ -24,11 +26,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  apagarResultadoExterno,
   atualizarAgendamentoJogo,
   atualizarGolosConfronto,
   definirEstadoConfronto,
+  reordenarConfrontos,
 } from "@/lib/actions/competicoes";
+import { EditarConfrontoDialog } from "@/components/competicoes/EditarConfrontoDialog";
+import { ApagarConfrontoDialog } from "@/components/competicoes/ApagarConfrontoDialog";
+import { avisosJornada, novaOrdemJornada } from "@/lib/calendario-wizard";
+import {
+  agruparPorJornada,
+  aplicarOrdemJornada,
+  ordenarPorIds,
+  vezesNaJornada,
+  type EquipaOpcao,
+} from "@/lib/confronto-dialogos-ui";
 import { LABEL_ESTADO_RESULTADO } from "@/lib/schemas/competicao";
 import { formatarData, formatarHora } from "@/lib/comunicacao-utils";
 import { cn } from "@/lib/utils";
@@ -38,6 +50,8 @@ export type ResultadoQuadro = {
   id: string;
   equipaCasa: string;
   equipaFora: string;
+  equipaCasaId: string | null;
+  equipaForaId: string | null;
   golosCasa: number | null;
   golosFora: number | null;
   ronda: number | null;
@@ -98,11 +112,18 @@ function combinarDataHora(data: string, hora: string): Date | null {
 }
 
 export function QuadroAgendamento({
+  competicaoId,
+  competicaoNome,
   resultados,
   formato,
+  equipas,
 }: {
+  competicaoId: string;
+  competicaoNome: string;
+  /** Pela ordem persistida (`ordem` — R6); o cliente não reordena por data. */
   resultados: ResultadoQuadro[];
   formato: FormatoCompeticao;
+  equipas: EquipaOpcao[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -114,17 +135,124 @@ export function QuadroAgendamento({
   const [golosCasaEdit, setGolosCasaEdit] = useState("");
   const [golosForaEdit, setGolosForaEdit] = useState("");
 
-  const agruparPorRonda = formato !== "LIGA";
+  // Diálogos de editar/apagar (componentes de módulo, uma instância cada).
+  const [aEditar, setAEditar] = useState<ResultadoQuadro | null>(null);
+  const [aApagar, setAApagar] = useState<string | null>(null);
+  // R6: ordem otimista (ids globais) enquanto `resultados` for o mesmo array;
+  // com o refresh chega um array novo e a ordem do servidor volta a mandar.
+  const [otimista, setOtimista] = useState<{ base: ResultadoQuadro[]; ids: string[] } | null>(
+    null,
+  );
+  const [foco, setFoco] = useState<{ id: string; direcao: -1 | 1 } | null>(null);
+  const [anuncio, setAnuncio] = useState("");
+
+  const rotuloRonda = formato === "LIGA" ? "Jornada" : "Ronda";
+
+  const ordenados = useMemo(
+    () =>
+      otimista && otimista.base === resultados
+        ? ordenarPorIds(resultados, otimista.ids)
+        : resultados,
+    [otimista, resultados],
+  );
 
   // AGENDADO = por disputar; tudo o resto (REALIZADO/WALKOVER/CANCELADO) = decidido.
   const porDisputar = useMemo(
-    () => resultados.filter((r) => r.estado === "AGENDADO"),
-    [resultados],
+    () => ordenados.filter((r) => r.estado === "AGENDADO"),
+    [ordenados],
   );
   const decididos = useMemo(
-    () => resultados.filter((r) => r.estado !== "AGENDADO"),
+    () => ordenados.filter((r) => r.estado !== "AGENDADO"),
+    [ordenados],
+  );
+
+  const rondaMaxima = useMemo(
+    () => resultados.reduce((max, r) => Math.max(max, r.ronda ?? 0), 0),
     [resultados],
   );
+
+  // Aviso âmbar por jornada; mostrado no 1.º grupo dessa jornada (Por disputar, se existir).
+  const avisos = useMemo(() => avisosJornada(resultados), [resultados]);
+
+  // O foco fica no mesmo botão da linha movida (ou no oposto, se esse ficou no limite).
+  useEffect(() => {
+    if (!foco) return;
+    const seletor = (d: number) => `[data-mover="${foco.id}:${d}"]`;
+    const alvo = document.querySelector<HTMLButtonElement>(seletor(foco.direcao));
+    const oposto = document.querySelector<HTMLButtonElement>(seletor(-foco.direcao));
+    (alvo && !alvo.disabled ? alvo : oposto)?.focus();
+    setFoco(null);
+  }, [foco, ordenados]);
+
+  function mover(r: ResultadoQuadro, secao: ResultadoQuadro[], direcao: -1 | 1) {
+    if (pending) return;
+    const idsJornada = ordenados.filter((x) => x.ronda === r.ronda).map((x) => x.id);
+    const idsVisiveis = secao.filter((x) => x.ronda === r.ronda).map((x) => x.id);
+    const nova = novaOrdemJornada(idsJornada, idsVisiveis, r.id, direcao);
+    if (!nova) return;
+    setOtimista({
+      base: resultados,
+      ids: aplicarOrdemJornada(
+        ordenados.map((x) => x.id),
+        nova,
+      ),
+    });
+    setFoco({ id: r.id, direcao });
+    const posicao = idsVisiveis.indexOf(r.id) + direcao + 1;
+    setAnuncio(
+      `Confronto na posição ${posicao} de ${idsVisiveis.length} ${
+        r.ronda === null
+          ? `sem ${rotuloRonda.toLowerCase()}`
+          : `da ${rotuloRonda.toLowerCase()} ${r.ronda}`
+      }.`,
+    );
+    startTransition(async () => {
+      const res = await reordenarConfrontos({ competicaoId, ronda: r.ronda, ids: nova });
+      if (res.sucesso) {
+        router.refresh();
+      } else {
+        setOtimista(null);
+        toast.error(res.erro);
+      }
+    });
+  }
+
+  // Função de render (não componente) — botões ↑/↓ da linha (R6).
+  function renderMover(r: ResultadoQuadro, secao: ResultadoQuadro[]) {
+    const visiveis = secao.filter((x) => x.ronda === r.ronda);
+    const pos = visiveis.findIndex((x) => x.id === r.id);
+    const nome = `${r.equipaCasa} vs ${r.equipaFora}`;
+    return (
+      <div className="flex items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          data-mover={`${r.id}:-1`}
+          onClick={() => mover(r, secao, -1)}
+          disabled={pos <= 0}
+          aria-disabled={pending || pos <= 0}
+          className={cn(pending && "opacity-50")}
+          aria-label={`Subir ${nome}`}
+        >
+          <ArrowUp className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          data-mover={`${r.id}:1`}
+          onClick={() => mover(r, secao, 1)}
+          disabled={pos === visiveis.length - 1}
+          aria-disabled={pending || pos === visiveis.length - 1}
+          className={cn(pending && "opacity-50")}
+          aria-label={`Descer ${nome}`}
+        >
+          <ArrowDown className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
 
   function iniciarEdicao(r: ResultadoQuadro) {
     const ref = r.dataHora ?? r.data;
@@ -177,18 +305,6 @@ export function QuadroAgendamento({
       const res = await definirEstadoConfronto(id, estado, vencedor);
       if (res.sucesso) {
         toast.success("Estado atualizado");
-        router.refresh();
-      } else {
-        toast.error(res.erro);
-      }
-    });
-  }
-
-  function remover(id: string) {
-    startTransition(async () => {
-      const res = await apagarResultadoExterno(id);
-      if (res.sucesso) {
-        toast.success("Jogo removido");
         router.refresh();
       } else {
         toast.error(res.erro);
@@ -256,6 +372,7 @@ export function QuadroAgendamento({
     return (
       <li key={r.id} className="rounded-md border border-cinza-200 bg-white p-3 shadow-card">
         <div className="flex flex-wrap items-center gap-3">
+          {renderMover(r, porDisputar)}
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-corpo text-cinza-900">
               <span className="font-medium">{r.equipaCasa}</span>
@@ -318,21 +435,32 @@ export function QuadroAgendamento({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => iniciarEdicao(r)}
+                onClick={() => setAEditar(r)}
                 disabled={pending}
                 className="gap-1.5"
               >
                 <Pencil className="h-3.5 w-3.5" />
-                {ref ? "Editar" : "Agendar"}
+                Editar
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => iniciarEdicao(r)}
+                disabled={pending}
+                className="gap-1.5"
+              >
+                <CalendarClock className="h-3.5 w-3.5" />
+                Data e hora
               </Button>
               {renderMenuEstado(r)}
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={() => remover(r.id)}
+                onClick={() => setAApagar(r.id)}
                 disabled={pending}
-                aria-label="Remover jogo"
+                aria-label={`Apagar ${r.equipaCasa} vs ${r.equipaFora}`}
               >
                 <Trash2 className="h-4 w-4 text-vermelho-600" />
               </Button>
@@ -358,6 +486,7 @@ export function QuadroAgendamento({
         key={r.id}
         className="flex flex-wrap items-center gap-3 rounded-md border border-cinza-200 bg-white p-3 shadow-card"
       >
+        {renderMover(r, decididos)}
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-2 text-corpo text-cinza-900">
             <span className={cn("font-medium", casaVenceWO && "font-bold")}>{r.equipaCasa}</span>
@@ -423,6 +552,17 @@ export function QuadroAgendamento({
             </>
           ) : (
             <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAEditar(r)}
+                disabled={pending}
+                className="gap-1.5"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Editar
+              </Button>
               {golosEditaveis && (
                 <Button
                   type="button"
@@ -441,9 +581,9 @@ export function QuadroAgendamento({
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={() => remover(r.id)}
+                onClick={() => setAApagar(r.id)}
                 disabled={pending}
-                aria-label="Remover resultado"
+                aria-label={`Apagar ${r.equipaCasa} vs ${r.equipaFora}`}
               >
                 <Trash2 className="h-4 w-4 text-vermelho-600" />
               </Button>
@@ -454,16 +594,57 @@ export function QuadroAgendamento({
     );
   }
 
-  function agruparRondas(lista: ResultadoQuadro[]) {
-    const mapa = new Map<number, ResultadoQuadro[]>();
-    for (const r of lista) {
-      const chave = r.ronda ?? 0;
-      const g = mapa.get(chave) ?? [];
-      g.push(r);
-      mapa.set(chave, g);
-    }
-    return [...mapa.entries()].sort((a, b) => a[0] - b[0]);
+  // Função de render (não componente): grupos por jornada de uma secção.
+  function renderGrupos(
+    secao: ResultadoQuadro[],
+    renderLinha: (r: ResultadoQuadro) => React.ReactNode,
+    mostraAvisos: (ronda: number) => boolean,
+  ) {
+    return agruparPorJornada(secao).map(([ronda, lista]) => (
+      <div key={ronda ?? "sem"} className="space-y-2">
+        <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+          {ronda === null ? `Sem ${rotuloRonda.toLowerCase()}` : `${rotuloRonda} ${ronda}`}
+        </p>
+        {ronda !== null &&
+          mostraAvisos(ronda) &&
+          avisos
+            .filter((a) => a.ronda === ronda)
+            .map((a) => (
+              <p
+                key={a.equipa}
+                className="flex items-center gap-1 text-legenda text-ambar-600"
+              >
+                <TriangleAlert className="h-3.5 w-3.5 flex-shrink-0" />
+                Atenção: {a.equipa} joga {vezesNaJornada(resultados, ronda, a.equipa)} vezes na{" "}
+                {rotuloRonda.toLowerCase()} {ronda}.
+              </p>
+            ))}
+        <ul className="space-y-2">{lista.map((r) => renderLinha(r))}</ul>
+      </div>
+    ));
   }
+
+  const dialogos = (
+    <>
+      {aEditar && (
+        <EditarConfrontoDialog
+          key={aEditar.id}
+          confronto={aEditar}
+          equipas={equipas}
+          rondaMaxima={rondaMaxima}
+          rotuloRonda={rotuloRonda}
+          competicaoNome={competicaoNome}
+          onFechar={() => setAEditar(null)}
+        />
+      )}
+      <ApagarConfrontoDialog
+        resultadoId={aApagar}
+        onFechar={() => setAApagar(null)}
+        competicaoNome={competicaoNome}
+        rotuloRonda={rotuloRonda}
+      />
+    </>
+  );
 
   if (resultados.length === 0) {
     return (
@@ -472,6 +653,8 @@ export function QuadroAgendamento({
       </p>
     );
   }
+
+  const rondasPorDisputar = new Set(porDisputar.map((r) => r.ronda));
 
   return (
     <div className="space-y-6">
@@ -483,22 +666,7 @@ export function QuadroAgendamento({
             <h3 className="text-corpo font-semibold">Por disputar</h3>
             <Badge variant="secondary">{porDisputar.length}</Badge>
           </div>
-          {agruparPorRonda ? (
-            agruparRondas(porDisputar).map(([ronda, lista]) => (
-              <div key={ronda} className="space-y-2">
-                <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
-                  {ronda === 0 ? "Sem ronda" : `Ronda ${ronda}`}
-                </p>
-                <ul className="space-y-2">
-                  {lista.map(renderLinhaAgendado)}
-                </ul>
-              </div>
-            ))
-          ) : (
-            <ul className="space-y-2">
-              {porDisputar.map(renderLinhaAgendado)}
-            </ul>
-          )}
+          {renderGrupos(porDisputar, renderLinhaAgendado, () => true)}
         </section>
       )}
 
@@ -510,24 +678,14 @@ export function QuadroAgendamento({
             <h3 className="text-corpo font-semibold">Resultados</h3>
             <Badge variant="secondary">{decididos.length}</Badge>
           </div>
-          {agruparPorRonda ? (
-            agruparRondas(decididos).map(([ronda, lista]) => (
-              <div key={ronda} className="space-y-2">
-                <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
-                  {ronda === 0 ? "Sem ronda" : `Ronda ${ronda}`}
-                </p>
-                <ul className="space-y-2">
-                  {lista.map(renderLinhaDecidido)}
-                </ul>
-              </div>
-            ))
-          ) : (
-            <ul className="space-y-2">
-              {decididos.map(renderLinhaDecidido)}
-            </ul>
-          )}
+          {renderGrupos(decididos, renderLinhaDecidido, (ronda) => !rondasPorDisputar.has(ronda))}
         </section>
       )}
+
+      <p className="sr-only" aria-live="polite">
+        {anuncio}
+      </p>
+      {dialogos}
     </div>
   );
 }

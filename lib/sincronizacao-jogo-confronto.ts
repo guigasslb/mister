@@ -62,6 +62,93 @@ export function ladosProprios(c: ConfrontoEquipas, proprias: EquipaPropria[]): L
   return lados;
 }
 
+/**
+ * Jogos ligados ao confronto depois de uma edição das equipas (`ladosDepois` =
+ * lados próprios do confronto já editado), com o mesmo critério de escolha de
+ * `sincronizarJogoDoConfronto`: `saem` deixam o confronto; `ficam` levam o lado
+ * próprio que passam a representar.
+ * - 0/1 equipa própria: ficam (no lado próprio) enquanto o confronto tiver lado
+ *   próprio; senão saem.
+ * - ≥2 (subequipas): fica o jogo cuja subequipa esteja em `ladosDepois`. Um jogo
+ *   legado sem subequipa é adotado pelo único lado próprio (como na sincronização)
+ *   ou, num confronto interno, pela 1.ª equipa própria (§23.11.3 regra 7) — só se
+ *   esse lado ainda não tiver jogo; senão sai.
+ */
+export function jogosQueSaemDoConfronto(
+  jogos: { id: string; equipaCompeticaoId: string | null }[],
+  ladosDepois: LadoProprio[],
+  proprias: EquipaPropria[],
+): { saem: string[]; ficam: { id: string; lado: LadoProprio }[] } {
+  if (proprias.length < 2) {
+    const lado = ladosDepois[0];
+    return lado
+      ? { saem: [], ficam: jogos.map((j) => ({ id: j.id, lado })) }
+      : { saem: jogos.map((j) => j.id), ficam: [] };
+  }
+  const saem: string[] = [];
+  const ficam: { id: string; lado: LadoProprio }[] = [];
+  const ocupados = new Set<string | null>(
+    jogos.flatMap((j) =>
+      j.equipaCompeticaoId !== null && ladosDepois.some((l) => l.equipaId === j.equipaCompeticaoId)
+        ? [j.equipaCompeticaoId]
+        : [],
+    ),
+  );
+  for (const j of jogos) {
+    if (j.equipaCompeticaoId !== null) {
+      const lado = ladosDepois.find((l) => l.equipaId === j.equipaCompeticaoId);
+      if (lado) ficam.push({ id: j.id, lado });
+      else saem.push(j.id);
+      continue;
+    }
+    const lado =
+      ladosDepois.length === 1
+        ? ladosDepois[0]
+        : ladosDepois.find((l) => l.equipaId === proprias[0].id);
+    if (lado && !ocupados.has(lado.equipaId)) {
+      ocupados.add(lado.equipaId);
+      ficam.push({ id: j.id, lado });
+    } else saem.push(j.id);
+  }
+  return { saem, ficam };
+}
+
+/** Lado de um confronto: equipa (FK, ou `null` se desconhecida). */
+type EquipasConfronto = { casa: string | null; fora: string | null };
+
+/**
+ * Uma equipa atual passa para o outro lado (troca ⇄ total ou parcial): o resultado
+ * inverte-se primeiro, para que cada equipa mantenha os seus golos/vitória (D3).
+ */
+export function ladosInvertidos(atual: EquipasConfronto, nova: { casa: string; fora: string }): boolean {
+  return (atual.fora !== null && nova.casa === atual.fora) || (atual.casa !== null && nova.fora === atual.casa);
+}
+
+/**
+ * Placar do confronto depois da edição das equipas: com `inverte` trocam golos e
+ * vencedor de walkover; senão mantêm-se pela posição. `null` se o confronto não
+ * tem resultado (só REALIZADO/WALKOVER contam).
+ */
+export function resultadoAposEdicao(
+  c: {
+    estado: EstadoResultado;
+    golosCasa: number | null;
+    golosFora: number | null;
+    walkoverVencedor: CasaFora | null;
+  },
+  inverte: boolean,
+): { golosCasa: number | null; golosFora: number | null; walkoverVencedor: CasaFora | null } | null {
+  if (c.estado !== "REALIZADO" && c.estado !== "WALKOVER") return null;
+  if (!inverte)
+    return { golosCasa: c.golosCasa, golosFora: c.golosFora, walkoverVencedor: c.walkoverVencedor };
+  return {
+    golosCasa: c.golosFora,
+    golosFora: c.golosCasa,
+    walkoverVencedor:
+      c.walkoverVencedor === "CASA" ? "FORA" : c.walkoverVencedor === "FORA" ? "CASA" : null,
+  };
+}
+
 /** Campos do `Jogo` derivados do confronto (competição → /jogos). */
 export function camposJogoDoConfronto(
   c: ConfrontoEquipas & {
@@ -120,7 +207,7 @@ export function camposConfrontoDoJogo(
  * `ORDEM_EQUIPAS_PROPRIAS` (a primeira é a implícita dos jogos sem subequipa).
  * Sem nenhuma, a equipa própria é o escalão (por nome — comportamento de §10.9).
  */
-async function obterEquipasProprias(
+export async function obterEquipasProprias(
   db: ClienteDb,
   competicaoId: string,
   nomeEscalao: string,

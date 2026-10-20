@@ -18,13 +18,35 @@ import {
   atualizarGolosConfrontoSchema,
   definirPlantelEquipaCompeticaoSchema,
   copiarPlanteisCompeticaoSchema,
+  editarConfrontoSchema,
+  apagarConfrontoSchema,
+  apagarCompeticaoSchema,
+  reordenarConfrontosSchema,
+  type DecisaoConvocatoria,
+  type DecisaoJogosComDados,
 } from "@/lib/schemas/competicao";
 import { calcularClassificacao, type LinhaClassificacao } from "@/lib/classificacao";
 import { gerarLiga, gerarBracket, type Equipa } from "@/lib/quadro";
+import { ORDER_RESULTADOS } from "@/lib/ordem-confrontos";
+import { ERRO_IMPACTO_COMPETICAO, ERRO_IMPACTO_CONFRONTO } from "@/lib/erros-impacto-confronto";
 import {
   sincronizarJogoDoConfronto,
   validarLigacaoJogoConfronto,
+  obterEquipasProprias,
+  ladosProprios,
+  jogosQueSaemDoConfronto,
+  ladosInvertidos,
+  resultadoAposEdicao,
+  type LadoProprio,
 } from "@/lib/sincronizacao-jogo-confronto";
+import {
+  SELECT_REMOCAO_JOGO,
+  agruparImpacto,
+  motivosDados,
+  wherePodeApagar,
+  type ImpactoRemocaoJogos,
+  type JogoParaRemocao,
+} from "@/lib/remocao-jogos-competicao";
 import {
   ORDEM_EQUIPAS_PROPRIAS,
   corresponderSubequipas,
@@ -72,10 +94,18 @@ const INCLUDE_RESUMO = {
   },
 } as const;
 
-const ORDER_RESULTADOS: Prisma.ResultadoCompeticaoOrderByWithRelationInput[] = [
-  { data: "asc" },
-  { criadoEm: "asc" },
-];
+
+/** Próxima `ordem` livre da competição (fim da lista; 1 sem confrontos com ordem). */
+async function proximaOrdem(
+  db: Prisma.TransactionClient | typeof prisma,
+  competicaoId: string,
+): Promise<number> {
+  const agg = await db.resultadoCompeticao.aggregate({
+    where: { competicaoId },
+    _max: { ordem: true },
+  });
+  return (agg._max.ordem ?? 0) + 1;
+}
 
 // Equipas ordenadas por posição (seed) ascendente, com os sem seed no fim, e o
 // nome como desempate. O Postgres ordena NULLS LAST por defeito em ASC.
@@ -252,9 +282,22 @@ export async function atualizarCompeticao(
   return ok(competicao);
 }
 
-export async function apagarCompeticao(id: string): Promise<Resultado<void>> {
+/**
+ * Apaga a competição (confrontos, equipas e plantéis em cascata). D2: com
+ * `apagarJogos = false` (default) os jogos ficam em /jogos, desligados — o
+ * comportamento anterior. Com `apagarJogos = true` apaga também os jogos sem
+ * convocatória nem dados (e os só com convocatória, se `jogosComConvocatoria =
+ * "APAGAR"`, com JOGOS_GERIR); os restantes ficam desligados (regra R3).
+ */
+export async function apagarCompeticao(
+  id: string,
+  opcoes: unknown = {},
+): Promise<Resultado<{ jogosApagados: number; jogosMantidos: number }>> {
   const clubeId = await obterClubeIdAtual();
   if (!clubeId) return erro("Não autenticado");
+
+  const parsed = apagarCompeticaoSchema.safeParse(opcoes);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
 
   const existe = await prisma.competicao.findFirst({ where: { id, clubeId } });
   if (!existe) return erro("Competição não encontrada");
@@ -262,19 +305,44 @@ export async function apagarCompeticao(id: string): Promise<Resultado<void>> {
   const perm = await exigirCapacidade("COMPETICOES_GERIR", existe.escalaoId);
   if (!perm.ok) return erro(perm.erro);
 
-  // Desliga os jogos da competição (não os apaga). Os resultados externos são
-  // apagados em cascata (FK onDelete: Cascade).
-  await prisma.$transaction([
-    // Também desliga confronto e subequipa (apagados em cascata), sem depender da
-    // ordem de aplicação das FKs SET NULL.
+  // Desliga os jogos da competição. Também desliga confronto e subequipa (apagados
+  // em cascata), sem depender da ordem de aplicação das FKs SET NULL.
+  const desligar = () =>
     prisma.jogo.updateMany({
       where: { competicaoId: id },
       data: { competicaoId: null, resultadoCompeticaoId: null, equipaCompeticaoId: null },
+    });
+
+  if (!parsed.data.apagarJogos) {
+    const [desligados] = await prisma.$transaction([
+      desligar(),
+      prisma.competicao.delete({ where: { id } }),
+    ]);
+    revalidatePath(PATH);
+    revalidatePath(PATH_JOGOS);
+    return ok({ jogosApagados: 0, jogosMantidos: desligados.count });
+  }
+
+  const whereJogos = whereJogosDaCompeticao(id, clubeId);
+  const jogos = await prisma.jogo.findMany({ where: whereJogos, select: SELECT_REMOCAO_JOGO });
+  const impacto = agruparImpacto(jogos);
+  const decisao = await validarDecisaoConvocatoria(
+    impacto,
+    parsed.data.jogosComConvocatoria,
+    existe.escalaoId,
+  );
+  if (!decisao.ok) return decisao.resultado;
+
+  const [apagados, desligados] = await prisma.$transaction([
+    prisma.jogo.deleteMany({
+      where: { AND: [whereJogos, wherePodeApagar(decisao.apagarConvocatoria)] },
     }),
+    desligar(),
     prisma.competicao.delete({ where: { id } }),
   ]);
   revalidatePath(PATH);
-  return ok(undefined);
+  revalidatePath(PATH_JOGOS);
+  return ok({ jogosApagados: apagados.count, jogosMantidos: desligados.count });
 }
 
 // ─────────────────────────────────────────────
@@ -443,23 +511,585 @@ export async function registarConfronto(
   const golosCasa = walkover ? null : parsed.data.golosCasa ?? null;
   const golosFora = walkover ? null : parsed.data.golosFora ?? null;
 
-  const resultado = await prisma.resultadoCompeticao.create({
-    data: {
-      competicaoId,
-      equipaCasaId: casa.id,
-      equipaForaId: fora.id,
-      // Texto legado + fallback de apresentação (§23.3 notas de integridade).
-      equipaCasa: casa.nome,
-      equipaFora: fora.nome,
-      golosCasa,
-      golosFora,
-      estado: parsed.data.estado,
-      walkoverVencedor: walkover ? parsed.data.walkoverVencedor ?? null : null,
-    },
+  // §23.6: o confronto da equipa própria com data/hora passa a existir como Jogo em
+  // /jogos (na mesma transação). Sem data ou entre terceiros a sincronização não faz
+  // nada. R6: vai para o fim da lista (fim da sua jornada).
+  const [resultado, jogoIds] = await prisma.$transaction(async (tx) => {
+    const r = await tx.resultadoCompeticao.create({
+      data: {
+        competicaoId,
+        equipaCasaId: casa.id,
+        equipaForaId: fora.id,
+        // Texto legado + fallback de apresentação (§23.3 notas de integridade).
+        equipaCasa: casa.nome,
+        equipaFora: fora.nome,
+        golosCasa,
+        golosFora,
+        estado: parsed.data.estado,
+        walkoverVencedor: walkover ? parsed.data.walkoverVencedor ?? null : null,
+        ronda: parsed.data.ronda ?? null,
+        dataHora: parsed.data.dataHora ?? null,
+        ordem: await proximaOrdem(tx, competicaoId),
+      },
+    });
+    return [r, await sincronizarJogoDoConfronto(tx, r.id, perm.ctx.utilizadorId)] as const;
   });
   revalidatePath(`${PATH}/${competicaoId}`);
+  revalidarJogos(jogoIds);
   return ok(resultado);
 }
+
+// ─────────────────────────────────────────────
+// Calendário editável (2026-10-20) — editar/apagar/reordenar confrontos (§23.6
+// regra R3, decisões D1 e D3) e impacto em /jogos
+// ─────────────────────────────────────────────
+
+const ERRO_SEM_PERMISSAO_CONVOCATORIA =
+  "Não tens permissão para apagar jogos com convocatória neste escalão.";
+const ERRO_ALTERAR_RESULTADO =
+  "Este confronto já tem resultado: mudar as equipas altera a classificação. Confirma a alteração para continuar.";
+
+const norm = (s: string) => s.trim().toLowerCase();
+
+/** Corrida na gravação: um jogo que devia ficar ligado já não está (reverte a transação). */
+class ImpactoDesatualizado extends Error {}
+
+/** Jogos do clube associados à competição (diretamente ou por um confronto dela). */
+function whereJogosDaCompeticao(competicaoId: string, clubeId: string): Prisma.JogoWhereInput {
+  return {
+    escalao: { clubeId },
+    OR: [{ competicaoId }, { resultadoCompeticao: { is: { competicaoId } } }],
+  };
+}
+
+/** D1: o que acontece a um jogo que sobra ao sair de um confronto. */
+function dadosDesligarJogo(
+  decisao: DecisaoJogosComDados | undefined,
+): Prisma.JogoUncheckedUpdateManyInput {
+  return decisao === "DESASSOCIAR"
+    ? { resultadoCompeticaoId: null, competicaoId: null, equipaCompeticaoId: null }
+    : { resultadoCompeticaoId: null };
+}
+
+type Recusa = { ok: false; resultado: Resultado<never> };
+
+/**
+ * Jogos só com convocatória: a decisão é obrigatória (indefinida ⇒ o impacto mudou
+ * desde a pré-visualização); APAGAR exige também JOGOS_GERIR no escalão. Devolve se
+ * o `deleteMany` pode incluir jogos com convocatória.
+ */
+async function validarDecisaoConvocatoria(
+  impacto: ImpactoRemocaoJogos,
+  decisao: DecisaoConvocatoria | undefined,
+  escalaoId: string,
+  erroCorrida: string = ERRO_IMPACTO_COMPETICAO,
+): Promise<{ ok: true; apagarConvocatoria: boolean } | Recusa> {
+  const comConvocatoria = impacto.comConvocatoria.length > 0;
+  if (comConvocatoria && !decisao)
+    return { ok: false, resultado: erro(erroCorrida, { jogosComConvocatoria: erroCorrida }) };
+  const apagarConvocatoria = comConvocatoria && decisao === "APAGAR";
+  if (apagarConvocatoria) {
+    const permJogos = await exigirCapacidade("JOGOS_GERIR", escalaoId);
+    if (!permJogos.ok) return { ok: false, resultado: erro(ERRO_SEM_PERMISSAO_CONVOCATORIA) };
+  }
+  return { ok: true, apagarConvocatoria };
+}
+
+/**
+ * Regra R3 para os jogos que deixam um confronto (editado ou apagado): VAZIO
+ * apagados; só convocatória conforme `jogosComConvocatoria`; os que sobram (com
+ * dados, ou convocatória «MANTER») conforme `jogosComDados` (D1) — obrigatório só
+ * se houver sobras. Devolve o predicado de remoção e os dados para desligar.
+ */
+async function validarDecisoesConfronto(
+  impacto: ImpactoRemocaoJogos,
+  decisoes: { jogosComConvocatoria?: DecisaoConvocatoria; jogosComDados?: DecisaoJogosComDados },
+  escalaoId: string,
+): Promise<
+  | { ok: true; apagarConvocatoria: boolean; desligar: Prisma.JogoUncheckedUpdateManyInput }
+  | Recusa
+> {
+  const comConvocatoria = impacto.comConvocatoria.length > 0;
+  if (comConvocatoria && !decisoes.jogosComConvocatoria)
+    return {
+      ok: false,
+      resultado: erro(ERRO_IMPACTO_CONFRONTO, { jogosComConvocatoria: ERRO_IMPACTO_CONFRONTO }),
+    };
+  const sobram =
+    impacto.comDados.length > 0 || (comConvocatoria && decisoes.jogosComConvocatoria === "MANTER");
+  if (sobram && !decisoes.jogosComDados)
+    return {
+      ok: false,
+      resultado: erro(ERRO_IMPACTO_CONFRONTO, { jogosComDados: ERRO_IMPACTO_CONFRONTO }),
+    };
+  const convocatoria = await validarDecisaoConvocatoria(
+    impacto,
+    decisoes.jogosComConvocatoria,
+    escalaoId,
+    ERRO_IMPACTO_CONFRONTO,
+  );
+  if (!convocatoria.ok) return convocatoria;
+  // Sem sobras `jogosComDados` é ignorado; um jogo que ganhe dados entre a leitura e
+  // o deleteMany (não apagado pelo predicado) é só desligado do confronto.
+  return {
+    ok: true,
+    apagarConvocatoria: convocatoria.apagarConvocatoria,
+    desligar: dadosDesligarJogo(sobram ? decisoes.jogosComDados : undefined),
+  };
+}
+
+/** Pré-visualização do impacto de `editarConfronto` em /jogos (§23.6). */
+export type ImpactoEdicaoConfronto = {
+  /** Mensagem se a edição for recusada (D3: mudar equipas com resultado sem confirmação). */
+  bloqueio: string | null;
+  /** Só inversão casa ↔ visitante. */
+  troca: boolean;
+  /** Placar após a edição (golos/vencedor de WO por posição); null sem resultado. */
+  resultadoFinal: {
+    golosCasa: number | null;
+    golosFora: number | null;
+    walkoverVencedor: CasaFora | null;
+  } | null;
+  /** Jogos das equipas próprias que deixam o confronto. */
+  saem: ImpactoRemocaoJogos;
+  /** Jogos que ficam, com os valores NOVOS. */
+  atualizados: {
+    id: string;
+    equipa: string | null;
+    adversario: string;
+    casaFora: CasaFora;
+    temDados: boolean;
+  }[];
+  /** Nomes das equipas próprias que entram (jogo criado/adotado se houver dataHora). */
+  criaJogos: string[];
+};
+
+type JogoDoConfronto = JogoParaRemocao & { equipaCompeticaoId: string | null };
+
+type AnaliseEdicao = {
+  impacto: ImpactoEdicaoConfronto;
+  competicaoId: string;
+  escalaoId: string;
+  utilizadorId: string;
+  /** Dados do `resultadoCompeticao.update` (sem a `ordem`, calculada na transação). */
+  dadosConfronto: Prisma.ResultadoCompeticaoUncheckedUpdateInput;
+  rondaMuda: boolean;
+  saem: string[];
+  /** Jogos que ficam ligados, com o adversário/lado (e subequipa) novos. */
+  jogosFicam: { id: string; data: Prisma.JogoUncheckedUpdateManyInput }[];
+};
+
+/**
+ * Passos 1–5 de `editarConfronto` (partilhados com a pré-visualização): lê o
+ * confronto do clube, verifica COMPETICOES_GERIR, valida as equipas na competição,
+ * deteta troca/mudança de equipas (D3) e calcula os jogos que saem/ficam/entram.
+ */
+async function analisarEdicaoConfronto(
+  clubeId: string,
+  dados: {
+    resultadoId: string;
+    equipaCasaId: string;
+    equipaForaId: string;
+    ronda: number | null;
+    confirmarAlteracaoResultado: boolean;
+  },
+): Promise<{ ok: true; analise: AnaliseEdicao } | Recusa> {
+  const c = await prisma.resultadoCompeticao.findFirst({
+    where: { id: dados.resultadoId, competicao: { clubeId } },
+    select: {
+      id: true,
+      competicaoId: true,
+      estado: true,
+      golosCasa: true,
+      golosFora: true,
+      walkoverVencedor: true,
+      equipaCasa: true,
+      equipaFora: true,
+      equipaCasaId: true,
+      equipaForaId: true,
+      ronda: true,
+      competicao: { select: { escalaoId: true, escalao: { select: { nome: true } } } },
+      jogosDetalhados: {
+        select: { ...SELECT_REMOCAO_JOGO, equipaCompeticaoId: true },
+        orderBy: [{ criadoEm: "asc" }, { id: "asc" }],
+      },
+    },
+  });
+  if (!c) return { ok: false, resultado: erro("Confronto não encontrado") };
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", c.competicao.escalaoId);
+  if (!perm.ok) return { ok: false, resultado: erro(perm.erro) };
+
+  const equipas = await prisma.equipaCompeticao.findMany({
+    where: { competicaoId: c.competicaoId },
+    select: { id: true, nome: true },
+  });
+  const casa = equipas.find((e) => e.id === dados.equipaCasaId);
+  const fora = equipas.find((e) => e.id === dados.equipaForaId);
+  if (!casa || !fora)
+    return { ok: false, resultado: erro("A equipa indicada não pertence a esta competição") };
+
+  // Identidade atual de cada lado: FK; senão a equipa com o mesmo nome; senão
+  // desconhecida (equipa removida).
+  const identidade = (id: string | null, nome: string) =>
+    id ?? equipas.find((e) => norm(e.nome) === norm(nome))?.id ?? null;
+  const casaAtual = identidade(c.equipaCasaId, c.equipaCasa);
+  const foraAtual = identidade(c.equipaForaId, c.equipaFora);
+  const troca = foraAtual !== null && casaAtual !== null && casa.id === foraAtual && fora.id === casaAtual;
+  const mantem = casa.id === casaAtual && fora.id === foraAtual;
+  const mudaEquipas = !mantem && !troca;
+  const inverte = ladosInvertidos(
+    { casa: casaAtual, fora: foraAtual },
+    { casa: casa.id, fora: fora.id },
+  );
+  const resultadoFinal = resultadoAposEdicao(c, inverte);
+  const bloqueio =
+    resultadoFinal && mudaEquipas && !dados.confirmarAlteracaoResultado
+      ? ERRO_ALTERAR_RESULTADO
+      : null;
+
+  const proprias = await obterEquipasProprias(prisma, c.competicaoId, c.competicao.escalao.nome);
+  const ladosDepois = ladosProprios(
+    { equipaCasa: casa.nome, equipaFora: fora.nome, equipaCasaId: casa.id, equipaForaId: fora.id },
+    proprias,
+  );
+  const { saem, ficam } = jogosQueSaemDoConfronto(c.jogosDetalhados, ladosDepois, proprias);
+  const jogosSaem: JogoDoConfronto[] = c.jogosDetalhados.filter((j) => saem.includes(j.id));
+  const comSubequipas = proprias.length >= 2;
+  const nomeDoLado = (l: LadoProprio) => (l.lado === "CASA" ? casa.nome : fora.nome);
+
+  // Valores NOVOS dos jogos que ficam — os mesmos que são gravados (com ou sem
+  // dataHora); com subequipas o jogo fica com a subequipa do seu lado.
+  const jogosFicam = ficam.map(({ id, lado }) => ({
+    id,
+    data: {
+      adversario: lado.lado === "CASA" ? fora.nome : casa.nome,
+      casaFora: lado.lado,
+      ...(comSubequipas ? { equipaCompeticaoId: lado.equipaId } : {}),
+    },
+  }));
+  const atualizados = jogosFicam.flatMap(({ id, data }) => {
+    const j = c.jogosDetalhados.find((x) => x.id === id);
+    if (!j) return [];
+    return [
+      {
+        id,
+        equipa: j.equipaCompeticao?.nome ?? null,
+        adversario: data.adversario,
+        casaFora: data.casaFora,
+        temDados: motivosDados(j).length > 0,
+      },
+    ];
+  });
+  const criaJogos = ladosDepois
+    .filter((l) => !ficam.some((f) => f.lado.lado === l.lado))
+    .map(nomeDoLado);
+
+  return {
+    ok: true,
+    analise: {
+      impacto: {
+        bloqueio,
+        troca,
+        resultadoFinal,
+        saem: agruparImpacto(jogosSaem),
+        atualizados,
+        criaJogos,
+      },
+      competicaoId: c.competicaoId,
+      escalaoId: c.competicao.escalaoId,
+      utilizadorId: perm.ctx.utilizadorId,
+      dadosConfronto: {
+        equipaCasaId: casa.id,
+        equipaForaId: fora.id,
+        // Texto legado = nomes das equipas (mantém o fallback de apresentação).
+        equipaCasa: casa.nome,
+        equipaFora: fora.nome,
+        ronda: dados.ronda,
+        ...(inverte && resultadoFinal ? resultadoFinal : {}),
+      },
+      rondaMuda: dados.ronda !== c.ronda,
+      saem,
+      jogosFicam,
+    },
+  };
+}
+
+/** Pré-visualização (só leitura) do impacto de `editarConfronto` em /jogos. */
+export async function obterImpactoEditarConfronto(
+  dados: unknown,
+): Promise<Resultado<ImpactoEdicaoConfronto>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const parsed = editarConfrontoSchema.safeParse(dados);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const r = await analisarEdicaoConfronto(clubeId, parsed.data);
+  if (!r.ok) return r.resultado;
+  return ok(r.analise.impacto);
+}
+
+/**
+ * Edita casa/visitante e jornada de um confronto (§23.6/§23.7). A troca ⇄ é sempre
+ * permitida e inverte golos/walkover (classificação inalterada); mudar as equipas
+ * de um confronto REALIZADO/WALKOVER exige `confirmarAlteracaoResultado` (D3) e o
+ * resultado passa às equipas novas pela posição. Os jogos das equipas próprias que
+ * saem seguem a regra R3 (+ D1); os que ficam/entram são sincronizados. Mudar de
+ * jornada envia o confronto para o fim da jornada de destino (R6).
+ */
+export async function editarConfronto(
+  dados: unknown,
+): Promise<
+  Resultado<{ confronto: ResultadoCompeticao; jogosApagados: number; jogosDesligados: number }>
+> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const parsed = editarConfrontoSchema.safeParse(dados);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const r = await analisarEdicaoConfronto(clubeId, parsed.data);
+  if (!r.ok) return r.resultado;
+  const a = r.analise;
+  if (a.impacto.bloqueio)
+    return erro(a.impacto.bloqueio, { confirmarAlteracaoResultado: a.impacto.bloqueio });
+
+  const decisao = await validarDecisoesConfronto(a.impacto.saem, parsed.data, a.escalaoId);
+  if (!decisao.ok) return decisao.resultado;
+
+  const resultadoId = parsed.data.resultadoId;
+  let gravado;
+  try {
+    gravado = await prisma.$transaction(async (tx) => {
+      const confronto = await tx.resultadoCompeticao.update({
+        where: { id: resultadoId },
+        data: {
+          ...a.dadosConfronto,
+          ...(a.rondaMuda ? { ordem: await proximaOrdem(tx, a.competicaoId) } : {}),
+        },
+      });
+      let apagados = 0;
+      let desligados = 0;
+      if (a.saem.length > 0) {
+        apagados = (
+          await tx.jogo.deleteMany({
+            where: { id: { in: a.saem }, ...wherePodeApagar(decisao.apagarConvocatoria) },
+          })
+        ).count;
+        desligados = (
+          await tx.jogo.updateMany({
+            where: { id: { in: a.saem }, resultadoCompeticaoId: resultadoId },
+            data: decisao.desligar,
+          })
+        ).count;
+      }
+      // Também sem dataHora (a sincronização só atua com data): os jogos que ficam
+      // passam a ter o adversário/lado do confronto editado — só se continuarem
+      // ligados a ele; senão o impacto mudou entretanto (reverte a transação).
+      for (const j of a.jogosFicam) {
+        const { count } = await tx.jogo.updateMany({
+          where: { id: j.id, resultadoCompeticaoId: resultadoId },
+          data: j.data,
+        });
+        if (count === 0) throw new ImpactoDesatualizado();
+      }
+      const sincronizados = await sincronizarJogoDoConfronto(tx, resultadoId, a.utilizadorId);
+      return { confronto, apagados, desligados, sincronizados };
+    });
+  } catch (e) {
+    if (e instanceof ImpactoDesatualizado) return erro(ERRO_IMPACTO_CONFRONTO);
+    throw e;
+  }
+  const { confronto, apagados, desligados, sincronizados } = gravado;
+
+  revalidatePath(`${PATH}/${a.competicaoId}`);
+  revalidarJogos([...a.saem, ...a.jogosFicam.map((j) => j.id), ...sincronizados]);
+  return ok({ confronto, jogosApagados: apagados, jogosDesligados: desligados });
+}
+
+/** Pré-visualização (só leitura) do impacto de `apagarConfronto` em /jogos. */
+export async function obterImpactoApagarConfronto(resultadoId: string): Promise<
+  Resultado<{
+    confronto: {
+      equipaCasa: string;
+      equipaFora: string;
+      ronda: number | null;
+      dataHora: Date | null;
+      estado: EstadoResultado;
+    };
+    jogos: ImpactoRemocaoJogos;
+  }>
+> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const c = await prisma.resultadoCompeticao.findFirst({
+    where: { id: resultadoId, competicao: { clubeId } },
+    select: {
+      equipaCasa: true,
+      equipaFora: true,
+      ronda: true,
+      dataHora: true,
+      estado: true,
+      competicao: { select: { escalaoId: true } },
+      jogosDetalhados: { select: SELECT_REMOCAO_JOGO, orderBy: [{ criadoEm: "asc" }, { id: "asc" }] },
+    },
+  });
+  if (!c) return erro("Confronto não encontrado");
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", c.competicao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  return ok({
+    confronto: {
+      equipaCasa: c.equipaCasa,
+      equipaFora: c.equipaFora,
+      ronda: c.ronda,
+      dataHora: c.dataHora,
+      estado: c.estado,
+    },
+    jogos: agruparImpacto(c.jogosDetalhados),
+  });
+}
+
+/**
+ * Apaga um confronto (substitui `apagarResultadoExterno` na UI) aplicando a regra R3
+ * a todos os jogos ligados: VAZIO apagados (basta COMPETICOES_GERIR); só com
+ * convocatória conforme `jogosComConvocatoria` (APAGAR exige JOGOS_GERIR); os que
+ * sobram conforme `jogosComDados` (D1). Tudo numa transação.
+ */
+export async function apagarConfronto(
+  dados: unknown,
+): Promise<Resultado<{ jogosApagados: number; jogosMantidos: number }>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const parsed = apagarConfrontoSchema.safeParse(dados);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const c = await prisma.resultadoCompeticao.findFirst({
+    where: { id: parsed.data.resultadoId, competicao: { clubeId } },
+    select: {
+      id: true,
+      competicaoId: true,
+      competicao: { select: { escalaoId: true } },
+      jogosDetalhados: { select: SELECT_REMOCAO_JOGO },
+    },
+  });
+  if (!c) return erro("Confronto não encontrado");
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", c.competicao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const decisao = await validarDecisoesConfronto(
+    agruparImpacto(c.jogosDetalhados),
+    parsed.data,
+    c.competicao.escalaoId,
+  );
+  if (!decisao.ok) return decisao.resultado;
+
+  const ids = c.jogosDetalhados.map((j) => j.id);
+  const { apagados, mantidos } = await prisma.$transaction(async (tx) => {
+    let apagados = 0;
+    let mantidos = 0;
+    if (ids.length > 0) {
+      apagados = (
+        await tx.jogo.deleteMany({
+          where: { id: { in: ids }, ...wherePodeApagar(decisao.apagarConvocatoria) },
+        })
+      ).count;
+      mantidos = (
+        await tx.jogo.updateMany({
+          where: { id: { in: ids }, resultadoCompeticaoId: c.id },
+          data: decisao.desligar,
+        })
+      ).count;
+    }
+    await tx.resultadoCompeticao.delete({ where: { id: c.id } });
+    return { apagados, mantidos };
+  });
+
+  revalidatePath(`${PATH}/${c.competicaoId}`);
+  revalidarJogos(ids);
+  return ok({ jogosApagados: apagados, jogosMantidos: mantidos });
+}
+
+/**
+ * Pré-visualização (só leitura) do impacto de `apagarCompeticao({ apagarJogos })`:
+ * jogos do clube com `competicaoId = id` OU ligados a um confronto da competição.
+ */
+export async function obterImpactoApagarCompeticao(
+  competicaoId: string,
+): Promise<Resultado<ImpactoRemocaoJogos & { total: number }>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const competicao = await prisma.competicao.findFirst({
+    where: { id: competicaoId, clubeId },
+    select: { id: true, escalaoId: true },
+  });
+  if (!competicao) return erro("Competição não encontrada");
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", competicao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const jogos = await prisma.jogo.findMany({
+    where: whereJogosDaCompeticao(competicaoId, clubeId),
+    select: SELECT_REMOCAO_JOGO,
+    orderBy: [{ data: "asc" }, { id: "asc" }],
+  });
+  return ok({ ...agruparImpacto(jogos), total: jogos.length });
+}
+
+/**
+ * R6: grava a ordem final COMPLETA dos confrontos de uma jornada (`ronda = null` =
+ * «Sem jornada»). Renumera a competição 1..N (normaliza `ordem = null`) e só atualiza
+ * as linhas cuja ordem muda. Sem efeito em /jogos (ordenada por data).
+ */
+export async function reordenarConfrontos(dados: unknown): Promise<Resultado<void>> {
+  const clubeId = await obterClubeIdAtual();
+  if (!clubeId) return erro("Não autenticado");
+
+  const parsed = reordenarConfrontosSchema.safeParse(dados);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+  const { competicaoId, ronda, ids } = parsed.data;
+
+  const competicao = await prisma.competicao.findFirst({
+    where: { id: competicaoId, clubeId },
+    select: { id: true, escalaoId: true },
+  });
+  if (!competicao) return erro("Competição não encontrada");
+
+  const perm = await exigirCapacidade("COMPETICOES_GERIR", competicao.escalaoId);
+  if (!perm.ok) return erro(perm.erro);
+
+  const todos = await prisma.resultadoCompeticao.findMany({
+    where: { competicaoId },
+    orderBy: ORDER_RESULTADOS,
+    select: { id: true, ronda: true, ordem: true },
+  });
+  const daJornada = new Set(todos.filter((r) => r.ronda === ronda).map((r) => r.id));
+  if (daJornada.size !== ids.length || !ids.every((id) => daJornada.has(id)))
+    return erro(
+      "A lista de confrontos desta jornada está desatualizada. Atualiza a página e tenta de novo.",
+    );
+
+  // Lista global atual com a subsequência da jornada substituída por `ids`.
+  let proximo = 0;
+  const novaLista = todos.map((r) => (daJornada.has(r.id) ? ids[proximo++] : r.id));
+  const ordemAtual = new Map(todos.map((r) => [r.id, r.ordem]));
+  const alteracoes = novaLista.flatMap((id, i) =>
+    ordemAtual.get(id) === i + 1
+      ? []
+      : [prisma.resultadoCompeticao.update({ where: { id }, data: { ordem: i + 1 } })],
+  );
+  if (alteracoes.length > 0) await prisma.$transaction(alteracoes);
+
+  revalidatePath(`${PATH}/${competicaoId}`);
+  return ok(undefined);
+}
+
 
 /**
  * Define o estado de um confronto (AGENDADO | REALIZADO | CANCELADO | WALKOVER).
@@ -938,8 +1568,10 @@ export async function gerarQuadroCompeticao(
 
   if (jogos.length === 0) return erro("Não foi possível gerar jogos para este quadro");
 
+  // R6: a seguir aos confrontos existentes, pela ordem do gerador.
+  const ordemInicial = await proximaOrdem(prisma, competicaoId);
   await prisma.resultadoCompeticao.createMany({
-    data: jogos.map((j) => ({
+    data: jogos.map((j, i) => ({
       competicaoId,
       equipaCasa: j.equipaCasa,
       equipaFora: j.equipaFora,
@@ -947,13 +1579,14 @@ export async function gerarQuadroCompeticao(
       golosCasa: null,
       golosFora: null,
       estado: "AGENDADO" as const,
+      ordem: ordemInicial + i,
     })),
   });
 
   // createMany não devolve os registos: relê o quadro gerado para retornar.
   const criados = await prisma.resultadoCompeticao.findMany({
     where: { competicaoId, estado: "AGENDADO" },
-    orderBy: [{ ronda: "asc" }, { criadoEm: "asc" }],
+    orderBy: ORDER_RESULTADOS,
   });
   revalidatePath(`${PATH}/${competicaoId}`);
   return ok(criados);
@@ -1086,7 +1719,9 @@ export async function criarCompeticaoCompleta(dados: unknown): Promise<Resultado
 
     if (parsed.data.jogos.length > 0) {
       await tx.resultadoCompeticao.createMany({
-        data: parsed.data.jogos.map((j) => ({
+        // R6: ordem = posição no array (o wizard envia-o por jornada e, dentro de
+        // cada uma, pela ordem do ecrã — `paraPayload` de lib/calendario-wizard).
+        data: parsed.data.jogos.map((j, i) => ({
           competicaoId: comp.id,
           equipaCasa: j.equipaCasa.trim(),
           equipaFora: j.equipaFora.trim(),
@@ -1095,6 +1730,7 @@ export async function criarCompeticaoCompleta(dados: unknown): Promise<Resultado
           golosCasa: null,
           golosFora: null,
           estado: "AGENDADO" as const,
+          ordem: i + 1,
         })),
       });
     }
