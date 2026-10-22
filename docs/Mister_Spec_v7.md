@@ -62,6 +62,7 @@ A **v7** expande o Mister de plataforma dedicada ao **futsal** para plataforma *
 21. [Backoffice Interno (Admin)](#21-backoffice-interno-admin)
 22. [Mano-a-Mano (duelos 1×1)](#22-mano-a-mano-duelos-11)
 23. [Competições — âmbito externo e competições próprias](#23-competições--âmbito-externo-e-competições-próprias)
+24. [Situações de jogo (biblioteca do Modelo de jogo)](#24-situações-de-jogo-biblioteca-do-modelo-de-jogo--novo-2026-10-22)
 - [Apêndice A — Configuração de Futsal](#apêndice-a--configuração-de-futsal)
 - [Apêndice B — Configuração de Futebol (todos os formatos)](#apêndice-b--configuração-de-futebol-todos-os-formatos)
 - [Apêndice C — Matriz de migração v6→v7](#apêndice-c--matriz-de-migração-v6v7)
@@ -975,12 +976,20 @@ model QuadroTatico {
   tipo     TipoQuadroTatico @default(GERAL) // GERAL | BOLA_PARADA
   diagrama Json?
   notas    String?
+  // 🔁 2026-10-22 (§24): situação da biblioteca de onde este quadro foi copiado (ou
+  // a que foi guardada a partir dele). Só informativo — NUNCA sincroniza. Apagar a
+  // situação não afeta o quadro (SetNull). null no quadro "Plano de jogo".
+  situacaoOrigemId String?
+  situacaoOrigem   SituacaoJogo? @relation(fields: [situacaoOrigemId], references: [id], onDelete: SetNull)
 
   @@index([jogoId])
+  @@index([situacaoOrigemId])
 }
 
 enum TipoQuadroTatico { GERAL BOLA_PARADA }
 ```
+
+> **🔁 2026-10-22 — Situações de jogo:** biblioteca de diagramas táticos reutilizáveis **por escalão** (`SituacaoJogo` + `CategoriaSituacaoJogo`), importados para os jogos como **cópias** em `QuadroTatico` (N quadros de situação por jogo, além do quadro «Plano de jogo»). Modelo, regras, actions e UI na **secção 24**.
 
 ### 3.7 Competições, jogos, estatísticas, classificação e scouting (🏛️ clube)
 
@@ -1418,6 +1427,7 @@ A coluna **«Porta com o treinador?»** indica se o treinador **retém uma cópi
 | Estatísticas individuais de atletas (golos, cartões, RPE, remates, desarmes…) | 🏛️ CLUBE | ❌ Não |
 | Exercícios criados pelo treinador (futsal **e** futebol) | 🎒 TREINADOR (toggle) | ✅ Sim (se `proprietario = TREINADOR`) |
 | Modelos táticos criados pelo treinador | 🎒 TREINADOR (toggle) | ✅ Sim (se `proprietario = TREINADOR`) |
+| Situações de jogo (biblioteca do escalão — §24) e quadros táticos dos jogos | 🏛️ CLUBE (escalão) | ❌ Não |
 | Planeamentos / semanas criadas pelo treinador | 🎒 TREINADOR | ✅ Sim — como templates (semana-tipo) |
 | Planeamentos definidos pelo clube/DT | 🏛️ CLUBE | ❌ Não |
 | **Secção** (modalidade) | 🏛️ CLUBE | ❌ Não |
@@ -1703,6 +1713,13 @@ atualizarSessao(id, dados, { alcance? }) // alcance: SO_ESTA (default) | ESTA_E_
 criarModeloJogo({ ..., modalidade? })/atualizarModeloJogo/apagarModeloJogo/obterModeloJogo
 listarModelosJogo(escalaoId?, momento?, modalidade?) // portáteis (escalaoId=null) sempre incluídos
 criarQuadroTatico(jogoId, dados)/atualizarQuadroTatico/apagarQuadroTatico/listarQuadrosTaticos(jogoId, tipo?)
+// 🔁 2026-10-22 — Situações de jogo (situacoesJogo.ts) — MODELO_JOGO_GERIR; regras completas em §24.5
+listarCategoriasSituacao(escalaoId)/criarCategoriaSituacao(dados)/atualizarCategoriaSituacao(id, dados)/apagarCategoriaSituacao(id)
+listarEscaloesSituacoes()/listarSituacoesJogo(filtro?)/obterSituacaoJogo(id)/criarSituacaoJogo(dados)/atualizarSituacaoJogo(id, dados)/apagarSituacaoJogo(id)
+importarSituacaoParaJogo({ jogoId, situacaoId })            // cópia (snapshot) para um QuadroTatico do jogo
+atualizarQuadroSituacao(quadroId, dados)                    // «Só neste jogo»
+guardarQuadroComoNovaSituacao(quadroId, dados)              // «Guardar como nova situação» (escalão do jogo)
+duplicarQuadroSituacao(quadroId, { nome })                  // variante no mesmo jogo (mantém situacaoOrigemId)
 ```
 
 **Jogos, competições, estatísticas, scouting** (`jogos.ts`, `competicoes.ts`, `scouting.ts`)
@@ -1740,7 +1757,7 @@ gerarPDF / criarRelatorioPartilhado / obterRelatorioPartilhado / listarRegistoCa
 
 ## 8. Módulos funcionais
 
-Cada módulo define **conteúdo**, **ações**, **estado vazio** e **regras**. Estados loading/erro seguem a secção 13. Navegação: barra de topo (logótipo do clube + **seletor de secção quando >1** + seletor de época + menu do utilizador) + sidebar (PC) / bottom-nav (móvel). **A sidebar tem dois estados — expandida (ícone + rótulo, 224px) e colapsada (só ícones, 64px)** com um botão de alternância no topo; a preferência do utilizador é persistida (`localStorage`). **Por defeito arranca colapsada em tablet (md–xl, ~768–1279px, incl. iPad em paisagem) e expandida em desktop (≥xl, ≥1280px)**; em móvel (<md) usa-se a bottom-nav. **A bottom-nav (móvel) expõe os itens primários — Início · Plantel · Agenda · Jogos — sendo os restantes acedidos pelo menu "Mais"** (🔁 2026-08-26b — a **Agenda substitui** o antigo item separado de **Treinos** no menu, redundante com a vista central de eventos; **Treinos deixa de figurar como item de navegação** — a rota `/treinos` mantém-se como **vista de gestão**, acessível a partir da própria Agenda, §8.13.1. **🔁 2026-09-13 — «Jogos» (`/jogos`) volta a ser item de navegação**, a seguir à Agenda e antes de Exercícios, com ícone `Shield`; passa também a integrar os 4 primários da bottom-nav móvel, remetendo **Exercícios** para o menu «Mais». O item «Jogos» **não** fica ativo em `/jogos/competicoes` (item próprio «Competições», via `excluir`).). **No modo Individual (clube técnico, `clube.clubeTecnico === true`), as entradas de gestão de clube — Clube/Branding, Secções, Equipa técnica e Perfis — são ocultadas na *página de Definições* (via flag `ocultarIndividual`, derivada de `clubeTecnico`); são sub-entradas de Definições (§8.4), não itens da navegação de topo, que se mantém inalterada.**
+Cada módulo define **conteúdo**, **ações**, **estado vazio** e **regras**. Estados loading/erro seguem a secção 13. Navegação: barra de topo (logótipo do clube + **seletor de secção quando >1** + seletor de época + menu do utilizador) + sidebar (PC) / bottom-nav (móvel). **A sidebar tem dois estados — expandida (ícone + rótulo, 224px) e colapsada (só ícones, 64px)** com um botão de alternância no topo; a preferência do utilizador é persistida (`localStorage`). **Por defeito arranca colapsada em tablet (md–xl, ~768–1279px, incl. iPad em paisagem) e expandida em desktop (≥xl, ≥1280px)**; em móvel (<md) usa-se a bottom-nav. **A bottom-nav (móvel) expõe os itens primários — Início · Plantel · Agenda · Jogos — sendo os restantes acedidos pelo menu "Mais"** (🔁 2026-08-26b — a **Agenda substitui** o antigo item separado de **Treinos** no menu, redundante com a vista central de eventos; **Treinos deixa de figurar como item de navegação** — a rota `/treinos` mantém-se como **vista de gestão**, acessível a partir da própria Agenda, §8.13.1. **🔁 2026-09-13 — «Jogos» (`/jogos`) volta a ser item de navegação**, a seguir à Agenda e antes de Exercícios, com ícone `Shield`; passa também a integrar os 4 primários da bottom-nav móvel, remetendo **Exercícios** para o menu «Mais». O item «Jogos» **não** fica ativo em `/jogos/competicoes` (item próprio «Competições», via `excluir`). **🔁 2026-10-22 — «Modelo de jogo» (`/modelo-jogo`, ícone `ClipboardList`) passa a item de navegação**, logo **a seguir a Exercícios** (no menu «Mais» em móvel), separado de Treinos e de Exercícios — §24.6.). **No modo Individual (clube técnico, `clube.clubeTecnico === true`), as entradas de gestão de clube — Clube/Branding, Secções, Equipa técnica e Perfis — são ocultadas na *página de Definições* (via flag `ocultarIndividual`, derivada de `clubeTecnico`); são sub-entradas de Definições (§8.4), não itens da navegação de topo, que se mantém inalterada.**
 
 ### 8.1 Onboarding e contas
 > **Princípio (decisão 2026-08-05; 🔁 revisto Fase 3, 2026-09-11):** o **registo consolidou-se num passo único** que recolhe o essencial **mais a escolha de plano e modalidade** — **sem processar pagamento** (este continua à parte, no paywall). O **setup fino do clube** (branding, escalões) mantém-se para o **onboarding guiado pós-primeiro-login**, que só desbloqueia com licença **ATIVA**.
@@ -1930,6 +1947,7 @@ No cabeçalho, ao lado de **"Editar"**, existe o botão **"Exportar PDF"** (íco
 Conforme v6 §8.9 (sem alteração funcional na v7): grelha anual + planos semanais/mensais; UI usa **«Semana»** (nunca «Microciclo»); agrupamento automático por data; formalizar é opcional (nome livre + modo Estruturado MD-X / Texto livre); **Mesociclo** opcional, visível no formulário de planeamento. Propriedade: instância concreta 🏛️ do clube; metodologia (semana-tipo) 🎒 portátil.
 
 ### 8.10 Modelo de jogo e quadro tático (`MODELO_JOGO_GERIR`)
+- **🔁 2026-10-22 — Página `/modelo-jogo` com dois separadores:** **«Princípios»** (o modelo de jogo descrito nos pontos abaixo — conteúdo inalterado) e **«Situações de jogo»** (biblioteca de situações do escalão, importáveis para os jogos). Item próprio **«Modelo de jogo»** na navegação. Especificação completa em **§24**.
 - **Modelo de jogo (documento vivo):** por clube/escalão/época, por **momento**, com princípios/subprincípios + diagrama. **🔁 v7:** o editor usa o campo da modalidade do escalão (ou da `modalidade` do modelo portátil). Metodologia genérica portátil = sem escalão/época.
 - **Bolas paradas:** cantos/livres/lançamentos no editor — vivem na biblioteca, no modelo de jogo e nos quadros táticos.
 - **Quadro tático por jogo (🏛️):** esquemas específicos ligados a um jogo (campo da modalidade do jogo). Persistidos em `QuadroTatico.diagrama` (Json), geridos pelas Server Actions de quadros (`criarQuadroTatico`/`atualizarQuadroTatico`/`listarQuadrosTaticos`).
@@ -1940,7 +1958,7 @@ Conforme v6 §8.9 (sem alteração funcional na v7): grelha anual + planos seman
 - **Vista de dia de jogo:** convocados + posições previstas (**posições da modalidade** 🔁), notas de scouting, esquemas de bola parada, hora e local.
 - **🔁 Modalidade da actividade (v7):** ao criar/editar um jogo, o campo "Modalidade da actividade" é **opcional** e por defeito herda da secção do escalão. O treinador pode alterá-lo para actividades pontuais (ex: escalão de futebol que participa num torneio de futsal). Quando diferente da modalidade mãe, o jogo é sinalizado com badge de modalidade nos painéis de jogo.
 - **Detalhe do jogo:** cabeçalho + resultado + **campo «Formato»** 🔁 (pré-preenchido pela secção, editável); **faltas acumuladas por parte só em FUTSAL** 🔁 (ocultas em futebol) + **4 separadores** (UX-P3-04 — os mais usados primeiro; sub-separadores agrupam o dia de jogo e a análise):
-  - **Convocatória** — sub-separadores: **Convocados** (`CONVOCATORIA_GERIR`; toggle por atleta) e **Plano de jogo** (posição prevista da modalidade + titular) — este último inclui um **quadro tático interativo** (arrastar titulares, desenhar setas/jogadas e adicionar adversários), semeado pela formação e persistido em `QuadroTatico.diagrama` sob `MODELO_JOGO_GERIR` (só-de-leitura sem a capacidade); ver §8.10. **Aviso de suspensões (BUG-P1-04):** quando o jogo aberto é o **próximo jogo** do escalão, os convocados que estão **suspensos** são sinalizados — alerta no topo dos *Convocados* + badge 🚫 por atleta —, calculados a partir dos cartões registados na época: **cartão vermelho no último jogo jogado** (motivo `CARTAO_VERMELHO`) ou **acumulação de ≥ `LIMITE_AMARELOS_SUSPENSAO` (3) amarelos na época** (motivo `ACUMULACAO_AMARELOS`; simplificação: contam-se todos os amarelos da época, sem purga por jornada). O vermelho tem prioridade sobre os amarelos. Fonte: `obterSuspensoesPendentes(escalaoId)` (§7.3).
+  - **Convocatória** — sub-separadores: **Convocados** (`CONVOCATORIA_GERIR`; toggle por atleta) e **Plano de jogo** (posição prevista da modalidade + titular) — este último inclui um **quadro tático interativo** (arrastar titulares, desenhar setas/jogadas e adicionar adversários), semeado pela formação e persistido em `QuadroTatico.diagrama` sob `MODELO_JOGO_GERIR` (só-de-leitura sem a capacidade); ver §8.10. **🔁 2026-10-22:** abaixo do quadro do plano, o sub-separador tem a secção **«Situações de jogo»** — N quadros copiados da biblioteca do Modelo de jogo (§24.7); o quadro «Plano de jogo» mantém-se inalterado. **Aviso de suspensões (BUG-P1-04):** quando o jogo aberto é o **próximo jogo** do escalão, os convocados que estão **suspensos** são sinalizados — alerta no topo dos *Convocados* + badge 🚫 por atleta —, calculados a partir dos cartões registados na época: **cartão vermelho no último jogo jogado** (motivo `CARTAO_VERMELHO`) ou **acumulação de ≥ `LIMITE_AMARELOS_SUSPENSAO` (3) amarelos na época** (motivo `ACUMULACAO_AMARELOS`; simplificação: contam-se todos os amarelos da época, sem purga por jornada). O vermelho tem prioridade sobre os amarelos. Fonte: `obterSuspensoesPendentes(escalaoId)` (§7.3).
   - **Estatísticas** (`ESTATISTICAS_GERIR`): por atleta — utilização, tempo de jogo, **núcleo por modalidade** 🔁 (futsal: golos, assistências, e se GR defesas/sofridos/faltas; futebol: golos, assistências, **remates, cantos, foras-de-jogo, desarmes**, e se GR defesas/sofridos), **cartões (🟨 amarelo 0–5, 🟥 vermelho 0–2 — comuns às duas modalidades, a seguir às faltas; editáveis em **todos os escalões, incluindo a formação jovem**, e também para o **GR** — 🔁 2026-10-05)** + **métricas configuráveis de jogo**. Aviso se soma de golos ≠ resultado. Ver 10.8.
     - **🔁 2026-10-04 — Grelha única consolidada (UI):** a aba apresenta **uma só tabela com uma linha por atleta** (`JogoDetalhe`), fundindo os dois quadros anteriores — o editor de **«Tempo de jogo»** (minutos por parte) e os **cards individuais** de estatísticas. Cada linha tem, na mesma linha: **Atleta · Estado** (utilização) **· Parte 1…N · Total** (soma automática das partes, só-de-leitura) **· Golos · Assistências ·** (colunas de GR **Defesas/Sofridos** só quando há ≥1 guarda-redes convocado) **· Faltas** (futsal) **ou Remates/Cantos/Foras/Desarmes** (futebol) **· 🟨/🟥** (sempre visíveis e editáveis — ver nota abaixo) **· métricas de jogo**. Colunas não aplicáveis a um atleta (ex.: golos/assistências num GR) mostram «—». A lógica de gravação (`guardarEstatisticas`, *last-write-wins*) e o payload (incl. `minutosPorParte`) **mantêm-se inalterados** — só mudou o layout. As **métricas** passam a ser filtradas por **contexto `JOGO`** (`listarMetricas(true, "JOGO")`): as de **contexto `TREINO`** (ex.: dedicação na sessão) **deixam de aparecer** na grelha do jogo (§8.20); os dados das métricas não são alterados.
     - **🔁 2026-09-20 — Vista consolidada única (Fase C):** as **Estatísticas** são a **vista única e a verdade final** do registo do jogo. Ao **carregar** a vista (loader server-side), a grelha vem **já preenchida com os valores derivados dos eventos** (motor único `derivarEstatisticas` — minutos/utilização, golos, assistências, cartões e **secundários por atleta**: remates, cantos, faltas, desarmes, defesas, foras-de-jogo — §10.4), sem necessidade de qualquer ação manual. Onde existe **edição manual persistida** em `EstatisticaAtleta`, essa prevalece **por atleta** sobre o derivado (*last-write-wins*, §13.4); a combinação faz-se em `combinarEstatisticasIniciais` (`lib/derivar-estatisticas.ts`, função pura). Isto **substitui o antigo botão «Preencher do registo ao vivo»** (que passava a ação a manual) — a derivação é agora **automática**. `guardarEstatisticas` mantém-se como o ponto de gravação da edição manual (a verdade final persistida). O **registo clássico deixa de ser uma superfície própria** de captura de secundários: estes são registados como `EventoJogo` (registo ao vivo/Modo Jogo ao Vivo) e **editáveis na grelha por atleta**. O **timeout** (`TIMEOUT`) **não tem campo individual por atleta** — mantém-se como `EventoJogo` ao **nível do jogo/equipa** (visível na **cronologia do jogo**, §10.4), pelo que **não se perde**; simplesmente não é agregado numa coluna por atleta.
@@ -2941,6 +2959,19 @@ Resumo: **1** Esqueleto · **2** Reconversão de módulos · **3** Periodizaçã
 6. Ajuda do campo «Idade mínima» em Definições → Escalões.
 **Pronto quando:** testes de `eEscalaoFormacao` (null, 17, 18, 35); clube novo/existente → autorização `true` e cards `mvp`/`ranking` na formação; formação com autorização desativada → sem botões `mvp`/`ranking` e rota `403`, `resultado` continua disponível; desativar → link `mvp`/`ranking` antigo passa a `403`; `Em`/`PorId` só com a última alteração; sem `SOCIAL_CARD_SECRET` em produção → páginas renderizam sem botões e rota `503`; não-admin recusado na action; `typecheck`/`lint`/`test` limpos + bíblia atualizada (§3.1, §3.16.1, §5.5, §7.3, §8.4). **Não toca em auth.**
 
+#### Fase 38 — Situações de jogo no Modelo de jogo (§24) (2026-10-22) — implementada (2026-10-22)
+
+**Ficheiros (implementação):** novos — `prisma/migrations/20261022120000_situacoes_jogo/`, `lib/schemas/situacaoJogo.ts`, `lib/actions/situacoesJogo.ts`, `app/(app)/modelo-jogo/situacoes/nova/page.tsx`, `app/(app)/modelo-jogo/situacoes/[id]/page.tsx`, `app/(app)/modelo-jogo/situacoes/[id]/editar/page.tsx`, `components/modelo-jogo/{BibliotecaSituacoes,SituacaoJogoForm,GerirCategoriasSituacaoDialog,ApagarSituacaoButton}.tsx`, `components/jogos/{SituacoesJogo,ImportarSituacaoDialog}.tsx`, `tests/situacoes-jogo.test.ts`; alterados — `prisma/schema.prisma`, `components/layout/Navegacao.tsx`, `app/(app)/modelo-jogo/page.tsx`, `app/(app)/jogos/[id]/page.tsx`, `components/jogos/JogoDetalhe.tsx` (prop `situacoesJogo`). **Não alterados:** `components/jogos/PlanoTatico.tsx`, `components/jogos/QuadroTaticoJogo.tsx`, `lib/actions/modeloJogo.ts`.
+
+**Dependências:** Modelo de jogo + quadro tático (Fases 4/14, §3.6, §8.10), editor de campo v2 (§11), permissões por âmbito (§6.7).
+**Schema:** novas `CategoriaSituacaoJogo` e `SituacaoJogo`; `QuadroTatico.situacaoOrigemId String?` (FK `SetNull`) + índice; relações inversas em `Clube` (`situacoesJogo`) e `Escalao` (`situacoesJogo`, `categoriasSituacao`). Migração aditiva `20261022120000_situacoes_jogo` (Apêndice C.8), sem backfill.
+**Entregas (cada uma funcional/testada antes da seguinte):**
+1. **38.1** Schema Prisma + migração.
+2. **38.2** `lib/schemas/situacaoJogo.ts` + `lib/actions/situacoesJogo.ts` (§24.5) + testes de schemas, acesso e snapshot (§24.9).
+3. **38.3** Navegação («Modelo de jogo» após «Exercícios»), separadores «Princípios»/«Situações de jogo» em `/modelo-jogo`, rotas `/modelo-jogo/situacoes/nova`, `/modelo-jogo/situacoes/[id]`, `/modelo-jogo/situacoes/[id]/editar` + gestão de categorias por escalão no separador (§24.6).
+4. **38.4** Secção «Situações de jogo» no sub-separador *Plano de jogo* do detalhe do jogo: importar, editar («Só neste jogo» / «Guardar como nova situação»), duplicar (variante), remover (§24.7), com o quadro «Plano de jogo» inalterado.
+**Pronto quando:** §24.9 cumprido. **Não toca em auth.**
+
 ---
 
 ## 17. Modelo de negócio e licenciamento
@@ -3018,6 +3049,8 @@ Decidida pelo treinador na criação (toggle pessoal vs clube). O pagamento não
 - **🔁 Novos desportos** além de futsal e futebol (a arquitetura de secção/registry `ConfigModalidade` — secção 20 — está preparada; nenhum entra na versão atual).
 
 ## 19. Changelog da documentação
+
+- **2026-10-22** — **§24 (nova) + §3.6 / §4.4 / §7.3 / §8 / §8.4 / §8.10 / §8.11 / §16 (Fase 38) / Apêndice C.8 / Índice — Especificação: Situações de jogo no Modelo de jogo** (decisões do utilizador). Biblioteca de diagramas táticos reutilizáveis (estáticos ou animados — `DiagramaCampo` v2) por **escalão** e da sua **equipa técnica** (acesso = `exigirCapacidade("MODELO_JOGO_GERIR", escalaoId)`, também para leitura; `visivelOutrosTreinadores` não concede), sem época. Novas entidades `SituacaoJogo` e `CategoriaSituacaoJogo` (categorias sem seed); `QuadroTatico.situacaoOrigemId` (FK `SetNull`). Importar para um jogo = **cópia** num `QuadroTatico` (N por jogo, além do «Plano de jogo», que fica intacto e reservado por nome); no jogo grava-se «Só neste jogo» ou «Guardar como nova situação» (no escalão do jogo); sem «atualizar a original» nem sincronização; apagar a original não afeta cópias. Sem restrição de formato entre situação e jogo — o quadro desenha sempre o campo da situação. Novo item de navegação «Modelo de jogo» após «Exercícios»; `/modelo-jogo` com separadores «Princípios»/«Situações de jogo»; rotas `/modelo-jogo/situacoes/{nova,[id],[id]/editar}`. Actions em `lib/actions/situacoesJogo.ts`, schemas em `lib/schemas/situacaoJogo.ts`. Só documentação; sem código nem migração aplicada. **Não toca em auth.** **Ajuste (mesmo dia — §7.3, §16 Fase 38, §24.4/§24.5/§24.7/§24.9):** gestão das situações dentro do jogo só pelos treinadores do escalão do jogo (`AtribuicaoEscalao`) + admin, com gating de UI por âmbito (RN-SJ-12; leitura inalterada); nomes únicos entre quadros de situação do jogo em importar/editar/duplicar/guardar como nova (RN-SJ-13, confirmado pelo utilizador); nova action `duplicarQuadroSituacao(quadroId, { nome })` + `duplicarQuadroSituacaoSchema` + botão «Duplicar» — variante no mesmo jogo que mantém `situacaoOrigemId` (RN-SJ-14); a regra de não importar duas vezes mantém-se. **Decisões finais (mesmo dia — §3.6 nota, §7.3, §8.4, §16 Fase 38, §24.2–§24.9, Apêndice C.8):** (1) Coordenador de Secção e Diretor Técnico têm acesso às situações pelo modelo existente (`exigirCapacidade` com âmbito de escalão) — RN-SJ-1/RN-SJ-12 sem pendentes; (2) **categorias passam a ser do escalão**: `CategoriaSituacaoJogo.escalaoId` obrigatório (`Cascade`, sem `clubeId`), `@@unique([escalaoId, nome])`, gestão pela regra RN-SJ-1 no escalão; uma situação só usa categoria do seu escalão e «Guardar como nova» só categorias do escalão do jogo; `listarCategoriasSituacao(escalaoId)`; FK `SituacaoJogo.categoriaId` passa a `NoAction` (para o cascade de apagar escalão não falhar; o bloqueio de apagar em uso fica na action); removida a rota/cartão `/definicoes/categorias-situacoes` — gestão no diálogo «Gerir categorias» do separador «Situações de jogo». Spec fechada para implementação. **Alinhamento com a implementação (mesmo dia — §16 Fase 38, §24.4–§24.7):** criar/atualizar situação devolvem `SituacaoJogoResumo` (tipo exportado) e as actions de categorias `CategoriaSituacaoJogo`; em `guardarQuadroComoNovaSituacao` o diagrama completado com `campo = jogo.formato ?? "FUTSAL_5"` grava-se na situação e no quadro; RN-SJ-10 compara o nome exato com `NOME_QUADRO_PLANO_JOGO`; a secção `SituacoesJogo` fica no `JogoDetalhe` a seguir ao `<PlanoTatico>` (inalterado; prop `situacoesJogo`); novo `lib/situacoes-escaloes.ts` (escalões dos seletores = `listarEscaloes()` filtrado por `exigirCapacidade("MODELO_JOGO_GERIR", id)`); filtros da biblioteca por links/chips + formulário GET, `?escalaoId=todos` = «Todos»; textos «Nenhuma situação corresponde aos filtros.» e toast «Situação removida deste jogo»; lista de ficheiros e estado da Fase 38 atualizados. **Não toca em auth.** **Correções pós-review (mesmo dia — §16 Fase 38, §24.4, §24.6, §24.7):** `lib/situacoes-escaloes.ts` removido — substituído pela action exportada `listarEscaloesSituacoes()` (fonte única de RN-SJ-2, 1 query por `ordem`, usada também por `listarSituacoesJogo`); nova RN-SJ-15 (transação com `pg_advisory_xact_lock(hashtext('situacoes-jogo:' || jogoId))` em importar/editar/guardar como nova/duplicar, RN-SJ-5 e RN-SJ-13 sob o lock; `P2003` em `apagarCategoriaSituacao` → mensagem de RN-SJ-11); quadro com diagrama inválido → «Editar» desativado + «Diagrama inválido — não é possível editar.»; vazio da biblioteca distingue filtros de categoria/pesquisa de só escalão. **Não toca em auth.**
 
 - **2026-10-17** — **§23.7 — Fix: o seletor de data/hora do agendamento de jogos (Competições) fechava ao mudar mês/dia/hora.** **Causa raiz:** em `components/competicoes/QuadroAgendamento.tsx`, a linha «Por disputar» (`LinhaAgendado`) era um componente declarado dentro do corpo de `QuadroAgendamento`; a cada `onChange` (`setDataEdit`/`setHoraEdit`) o tipo do componente mudava, o React remontava a linha e o `<input type="date|time">` era recriado — o seletor nativo fechava (o Chrome comita o valor ao navegar mês/dia). **Correção:** passa a função de render `renderLinhaAgendado(r)` (com `key={r.id}` no `<li>`), sem alteração de comportamento nem de gravação (`atualizarAgendamentoJogo` inalterada). Novo caso-limite em §23.7. Teste de regressão estrutural `tests/quadro-agendamento-seletor-data.test.ts`. O formulário de `/jogos` (`JogoForm`, `datetime-local`) e o `WizardCompeticao` não têm este padrão — inalterados. **Correções adicionais (mesmo dia, mesma causa raiz):** no mesmo ficheiro, `LinhaDecidido` → função de render `renderLinhaDecidido(r)` (a edição inline dos golos perdia o foco a cada tecla) e `MenuEstado` → `renderMenuEstado(r)` (o `DropdownMenu` remontava a cada re-render, fechando o menu/perdendo o foco do trigger); caso-limite em §23.7 alargado e teste estrutural estendido (nenhum componente PascalCase aninhado no corpo de `QuadroAgendamento`). Varrimento de `app/` e `components/`: não há outros componentes declarados dentro do corpo de outro componente (as restantes constantes PascalCase locais — `Icon`/`Icone` a referenciar ícones de módulo, `Comp` no `Button`, constantes de dados — não criam tipos novos por render). **Não toca em auth.**
 
@@ -4062,6 +4095,175 @@ Tudo aditivo e retrocompatível: enums novos (`AmbitoCompeticao`, `TipoParticipa
 
 ---
 
+## 24. Situações de jogo (biblioteca do Modelo de jogo) — 🔁 novo 2026-10-22
+
+> Decisões finais do utilizador (2026-10-22). Implementação: **Fase 38** (§16). Migração: **Apêndice C.8**. **Não toca em auth.**
+
+### 24.1 Visão e âmbito
+- **Situação de jogo** = diagrama tático reutilizável com nome livre (ex.: «Saída de jogo 1», «Livre lateral 3»), **estático ou animado** (`DiagramaCampo` v2 — §11.2; `passos` opcionais), com descrição opcional e categoria opcional.
+- **Pertence a um escalão** (`escalaoId` obrigatório) e é da **equipa técnica desse escalão**. **Não depende da época** (sem `epocaId`; o wizard «Nova Época» — §8.21 — não a copia nem a altera).
+- **Biblioteca** no separador «Situações de jogo» de `/modelo-jogo`; **uso** nos jogos: importar copia o diagrama para um **quadro do jogo** (`QuadroTatico`) — **snapshot**, como o `SessaoExercicio.snap*` (§3.5/§4.2.1).
+- **Fora de âmbito:** sincronização automática biblioteca↔jogo; «atualizar a original» a partir do jogo; restrição de formato/modalidade entre situação e jogo; situações portáteis (🎒); categorias de sistema/seed.
+
+### 24.2 Glossário (acrescenta a §2.1)
+- **Situação de jogo** — entrada da biblioteca (`SituacaoJogo`).
+- **Situação no jogo** — cópia num `QuadroTatico` do jogo cujo `nome` ≠ `NOME_QUADRO_PLANO_JOGO`.
+- **Original** — a `SituacaoJogo` indicada em `QuadroTatico.situacaoOrigemId`.
+- **Categoria de situação** — agrupador criado pela equipa técnica de um escalão (`CategoriaSituacaoJogo`).
+
+### 24.3 Modelo de dados (aditivo)
+
+```prisma
+// Categoria de situação — DO ESCALÃO (decisão 2026-10-22), criada pela equipa técnica; sem seed nem `sistema`.
+// O clube deriva do escalão (queries filtram por `escalao.clubeId`).
+model CategoriaSituacaoJogo {
+  id        String   @id @default(cuid())
+  escalaoId String   // imutável após criação
+  escalao   Escalao  @relation(fields: [escalaoId], references: [id], onDelete: Cascade)
+  nome      String   // 1–60, trim
+  ordem     Int      @default(0)
+  criadoEm  DateTime @default(now())
+
+  situacoes SituacaoJogo[]
+
+  @@unique([escalaoId, nome])
+  @@index([escalaoId, ordem])
+}
+
+// Situação de jogo — biblioteca do escalão (🏛️). Sem época.
+model SituacaoJogo {
+  id           String   @id @default(cuid())
+  clubeId      String   // scope multi-tenant (todas as queries filtram por clube)
+  clube        Clube    @relation(fields: [clubeId], references: [id], onDelete: Cascade)
+  escalaoId    String   // dono: equipa técnica deste escalão (imutável após criação)
+  escalao      Escalao  @relation(fields: [escalaoId], references: [id], onDelete: Cascade)
+  categoriaId  String?  // null = sem categoria; DEVE ser do mesmo escalão (RN-SJ-11)
+  // NoAction (não Restrict): o bloqueio de apagar categoria em uso é feito na action; NoAction é
+  // verificado no fim da instrução, pelo que apagar o escalão (cascade em categorias E situações) não falha.
+  categoria    CategoriaSituacaoJogo? @relation(fields: [categoriaId], references: [id], onDelete: NoAction)
+  nome         String   // 1–100, trim; ≠ «Plano de jogo» (24.4)
+  descricao    String?  @db.Text // ≤2000; copiada para QuadroTatico.notas ao importar
+  diagrama     Json     // DiagramaCampo v2 com `campo` obrigatório (24.4)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  quadros QuadroTatico[] // cópias nos jogos (FK SetNull do lado do quadro — §3.6)
+
+  @@unique([escalaoId, nome])
+  @@index([clubeId, escalaoId])
+  @@index([categoriaId])
+}
+```
+- **`QuadroTatico`** ganha `situacaoOrigemId String?` (FK `SituacaoJogo`, `onDelete: SetNull`, `@@index([situacaoOrigemId])`) — §3.6.
+- **Relações inversas:** `Clube.situacoesJogo SituacaoJogo[]`, `Escalao.situacoesJogo SituacaoJogo[]`, `Escalao.categoriasSituacao CategoriaSituacaoJogo[]`.
+- **Apagar escalão:** as situações e as categorias do escalão caem por cascade; as cópias nos jogos mantêm-se (o jogo tem o seu próprio ciclo de vida). `apagarEscalao` não muda.
+- **Sem colunas de autoria/propriedade** (`autorId`/`proprietario`): o dono é o escalão.
+
+### 24.4 Regras de negócio
+1. **RN-SJ-1 — Acesso (ver/criar/editar/apagar/importar):** só quem passa `exigirCapacidade("MODELO_JOGO_GERIR", situacao.escalaoId)` (§6.7) — i.e. a **equipa técnica do escalão** (`AtribuicaoEscalao`, âmbito `PROPRIOS_ESCALOES`), o **Coordenador da secção** do escalão (âmbito `SECCAO`) e os perfis `TODO_CLUBE` com a capacidade (Administrador, Diretor Técnico) — decisão do utilizador 2026-10-22: Coordenador e DT incluídos, conforme o modelo de permissões existente. **A leitura também exige a capacidade + âmbito**: `podeLerEscalao`/`escaloesLegiveis` e `Escalao.visivelOutrosTreinadores` **não** dão acesso a situações. Sem `MODELO_JOGO_GERIR` (ex.: Presidente) → sem acesso.
+2. **RN-SJ-2 — Escalões acessíveis** (listagens e seletores; fonte única = action exportada `listarEscaloesSituacoes(): Promise<Resultado<Escalao[]>>` em `lib/actions/situacoesJogo.ts` — 1 query ordenada por `ordem`, usada pelos seletores da UI e por `listarSituacoesJogo`) = `TODO_CLUBE` → todos os escalões do clube; `SECCAO` → escalões com `seccaoId ∈ seccoesCoordenadas`; `PROPRIOS_ESCALOES` → `escaloesAtribuidos`. `listarEscaloesSituacoes` chama primeiro `exigirCapacidade("MODELO_JOGO_GERIR")` sem escalão — autenticação, adesão, licença e capacidade).
+3. **RN-SJ-3 — Campo obrigatório:** `diagrama.campo` (`TipoCampo` = literais de `FormatoJogo`) é obrigatório na situação. **Qualquer** formato é aceite em qualquer escalão (sem validação de modalidade). O formulário pré-seleciona `FUTSAL_5` em escalões de futsal; em escalões de futebol fica por escolher.
+4. **RN-SJ-4 — Nome:** único por escalão (`@@unique([escalaoId, nome])`; violação → «Já existe uma situação com este nome neste escalão.»). O nome **«Plano de jogo»** (`NOME_QUADRO_PLANO_JOGO`, comparação após `trim` e sem distinção de maiúsculas) é **reservado** (é o identificador do quadro do plano — §8.10) → «Este nome está reservado ao quadro do plano de jogo.»
+5. **RN-SJ-5 — Importar = cópia:** `importarSituacaoParaJogo` cria um `QuadroTatico` com `nome = situacao.nome`, `tipo = GERAL`, `notas = situacao.descricao`, `diagrama` = cópia **integral e inalterada** do Json da situação (incl. `campo` e `passos`) e `situacaoOrigemId = situacao.id`. A mesma situação **não** pode ser importada duas vezes para o mesmo jogo (existe quadro do jogo com esse `situacaoOrigemId`) → «Esta situação já foi importada para este jogo.» A situação pode ser de **qualquer escalão acessível** (RN-SJ-1 no escalão da situação **e** no do jogo).
+6. **RN-SJ-6 — Editar no jogo só altera o jogo:** «Só neste jogo» (`atualizarQuadroSituacao`) grava `nome`/`notas`/`diagrama` no `QuadroTatico`; **nunca** escreve em `SituacaoJogo` e mantém `situacaoOrigemId`.
+7. **RN-SJ-7 — Guardar como nova:** `guardarQuadroComoNovaSituacao` cria, numa **transação**, uma `SituacaoJogo` no **escalão do jogo** (`nome`, `categoriaId?`, `descricao = notas`, `diagrama`) **e** grava o quadro (`nome`, `notas`, `diagrama`, `situacaoOrigemId = nova.id`). A original anterior não é tocada. Se o diagrama não tiver `campo` (quadro legado), completa-se com `campo = jogo.formato ?? "FUTSAL_5"` e é **esse** diagrama completado que se grava na situação **e** no quadro.
+8. **RN-SJ-8 — A original só muda na biblioteca:** `atualizarSituacaoJogo` **nunca** escreve em `QuadroTatico`. Não existe «atualizar a original» a partir do jogo nem sincronização em nenhum sentido.
+9. **RN-SJ-9 — Apagar a original** não afeta cópias (FK `SetNull` limpa `situacaoOrigemId`).
+10. **RN-SJ-10 — Quadro do plano intacto:** as actions de situação **recusam** o quadro cujo `nome` é **exatamente igual** a `NOME_QUADRO_PLANO_JOGO` (comparação exata, como o `find` do detalhe do jogo) («Este quadro não é uma situação de jogo.»). A reserva do nome nos inputs (RN-SJ-4) é que ignora maiúsculas/espaços. O detalhe do jogo continua a obter o quadro do plano por `find(nome === NOME_QUADRO_PLANO_JOGO)` (inalterado); as situações no jogo são os restantes quadros do jogo. `criarQuadroTatico`/`atualizarQuadroTatico`/`QuadroTaticoJogo` não mudam.
+11. **RN-SJ-11 — Categorias (do escalão — decisão 2026-10-22):** cada categoria pertence a um escalão; ver/criar/editar/apagar com a regra de RN-SJ-1 no `escalaoId` da categoria. Nome único por escalão («Já existe uma categoria com este nome neste escalão.»). **Apagar** é recusado se houver situações associadas: «Esta categoria está associada a N situação(ões) e não pode ser apagada.» A categoria de uma situação **DEVE** ser do **mesmo escalão** da situação — em `criarSituacaoJogo`/`atualizarSituacaoJogo` e, em `guardarQuadroComoNovaSituacao`, do **escalão do jogo** («Categoria não encontrada neste escalão.»).
+12. **RN-SJ-12 — Gestão das situações no jogo (ajuste 2026-10-22):** importar, editar, duplicar e remover quadros de situação de um jogo exige `exigirCapacidade("MODELO_JOGO_GERIR", jogo.escalaoId)` — i.e. os **treinadores do escalão do jogo** (`AtribuicaoEscalao`) mais Administrador, Diretor Técnico e Coordenador da secção do escalão do jogo, pelo modelo existente (RN-SJ-1). A UI **DEVE** calcular `podeGerirSituacoes` com esse mesmo âmbito (`exigirCapacidade(...).ok` no escalão do jogo), e **não** apenas pela presença da capacidade. A leitura mantém-se (quem lê o jogo).
+13. **RN-SJ-13 — Nomes únicos no jogo:** os quadros de situação de um jogo têm nomes distintos entre si (comparação após `trim`, sem distinção de maiúsculas) → «Já existe um quadro com este nome neste jogo.» Aplica-se a `importarSituacaoParaJogo`, `atualizarQuadroSituacao`, `guardarQuadroComoNovaSituacao` e `duplicarQuadroSituacao`.
+14. **RN-SJ-14 — Duplicar no jogo (variantes):** `duplicarQuadroSituacao` cria, no **mesmo jogo**, um novo `QuadroTatico` com `nome` indicado (obrigatório; RN-SJ-4 «reservado» + RN-SJ-13), `tipo = GERAL`, `notas` e `diagrama` copiados integralmente do quadro de origem e **o mesmo `situacaoOrigemId`** (a variante continua a derivar da mesma original; mínimo coerente — o badge «Da biblioteca» mantém-se válido e a regra de não reimportar continua a verificar-se por `situacaoOrigemId`). Não escreve em `SituacaoJogo`. Recusa o quadro «Plano de jogo» (RN-SJ-10).
+15. **RN-SJ-15 — Concorrência:** `importarSituacaoParaJogo`, `atualizarQuadroSituacao`, `guardarQuadroComoNovaSituacao` e `duplicarQuadroSituacao` correm numa **transação** que começa por `pg_advisory_xact_lock(hashtext('situacoes-jogo:' || jogoId))`; a não-reimportação (RN-SJ-5) e os nomes únicos no jogo (RN-SJ-13) são verificados **sob o lock**. Em `apagarCategoriaSituacao`, um erro Prisma `P2003` (situação associada entretanto, em corrida) devolve a mensagem de RN-SJ-11.
+### 24.5 Schemas Zod e Server Actions
+
+**`lib/schemas/situacaoJogo.ts`:**
+```ts
+nomeSituacaoSchema      = z.string().trim().min(1, "O nome é obrigatório").max(100)
+                            .refine(n => n.toLowerCase() !== NOME_QUADRO_PLANO_JOGO.toLowerCase(),
+                                    "Este nome está reservado ao quadro do plano de jogo.")
+referenciaCategoria     = z.union([z.string().cuid("Categoria inválida"), z.literal(""), z.null()])
+                            .optional().transform(v => (v === "" ? null : v))   // undefined/null/"" → sem categoria
+diagramaSituacaoSchema  = diagramaSchema.refine(d => d.campo !== undefined, "Escolhe o campo da situação.")
+situacaoJogoSchema      = z.object({ escalaoId: z.string().cuid("Escalão inválido"), nome: nomeSituacaoSchema,
+                            categoriaId: referenciaCategoria, descricao: z.string().trim().max(2000).optional(),
+                            diagrama: diagramaSituacaoSchema })
+atualizarSituacaoJogoSchema = situacaoJogoSchema.omit({ escalaoId: true })          // escalão imutável
+filtroSituacoesSchema   = z.object({ escalaoId: z.string().cuid().optional(), categoriaId: z.string().cuid().optional(),
+                            q: z.string().trim().max(100).optional() }).optional()
+categoriaSituacaoSchema = z.object({ escalaoId: z.string().cuid("Escalão inválido"),
+                            nome: z.string().trim().min(1, "O nome é obrigatório").max(60),
+                            ordem: z.number().int().min(0).default(0) })
+atualizarCategoriaSituacaoSchema = categoriaSituacaoSchema.omit({ escalaoId: true })   // escalão imutável
+importarSituacaoSchema  = z.object({ jogoId: z.string().cuid("Jogo inválido"), situacaoId: z.string().cuid("Situação inválida") })
+quadroSituacaoSchema    = z.object({ nome: nomeSituacaoSchema, notas: z.string().trim().max(2000).optional(),
+                            diagrama: diagramaSchema })
+guardarComoNovaSituacaoSchema = quadroSituacaoSchema.extend({ categoriaId: referenciaCategoria })
+duplicarQuadroSituacaoSchema  = z.object({ nome: nomeSituacaoSchema })
+```
+
+**`lib/actions/situacoesJogo.ts`** (`"use server"`; padrão §7.1; todas devolvem `Resultado<T>`; todas as queries filtram por `clubeId` do clube ativo):
+
+| Action | Permissão | Comportamento | `revalidatePath` |
+|---|---|---|---|
+| `listarCategoriasSituacao(escalaoId)` → `CategoriaSituacaoJogo[]` | RN-SJ-1 em `escalaoId` (cuid validado por Zod) | ordem `ordem` asc, `nome` asc | — |
+| `criarCategoriaSituacao(dados)` → `CategoriaSituacaoJogo` | RN-SJ-1 em `dados.escalaoId` | RN-SJ-11 | `/modelo-jogo` |
+| `atualizarCategoriaSituacao(id, dados)` → `CategoriaSituacaoJogo` | RN-SJ-1 no escalão da categoria | `nome`, `ordem`; «Categoria não encontrada» fora do clube (`escalao.clubeId`) | idem |
+| `apagarCategoriaSituacao(id)` | idem | recusa em uso (RN-SJ-11) | idem |
+| `listarEscaloesSituacoes()` → `Escalao[]` | RN-SJ-2 | escalões acessíveis, 1 query ordenada por `ordem` | — |
+| `listarSituacoesJogo(filtro?)` → `SituacaoJogoResumo[]` | RN-SJ-2 | `escalaoId ∈ acessíveis` (∩ `filtro.escalaoId`; fora → «Sem permissão neste escalão»), `categoriaId`, `q` (`nome` contains, insensitive); ordem `nome` asc. Resumo: `id, nome, descricao, diagrama, escalaoId, categoriaId, atualizadoEm, escalao{id,nome}, categoria{id,nome}` | — |
+| `obterSituacaoJogo(id)` → `SituacaoJogoResumo` | RN-SJ-1 no escalão da situação | «Situação não encontrada» fora do clube | — |
+| `criarSituacaoJogo(dados)` → `SituacaoJogoResumo` | RN-SJ-1 em `dados.escalaoId` | RN-SJ-3/4/11; `clubeId` do contexto | `/modelo-jogo` |
+| `atualizarSituacaoJogo(id, dados)` → `SituacaoJogoResumo` | RN-SJ-1 no escalão da situação | `nome`, `categoriaId`, `descricao`, `diagrama`; RN-SJ-8 | `/modelo-jogo`, `/modelo-jogo/situacoes/{id}` |
+| `apagarSituacaoJogo(id)` | idem | `delete` (RN-SJ-9) | `/modelo-jogo` |
+| `importarSituacaoParaJogo(dados)` → `QuadroTatico` | RN-SJ-1 no escalão do jogo **e** no da situação | jogo do clube (`jogo.escalao.clubeId`) senão «Jogo não encontrado»; RN-SJ-5 | `/jogos/{jogoId}` |
+| `atualizarQuadroSituacao(quadroId, dados)` → `QuadroTatico` | `MODELO_JOGO_GERIR` no escalão do jogo | «Quadro tático não encontrado» fora do clube; RN-SJ-10; RN-SJ-6 (`notas ?? null`) | `/jogos/{jogoId}` |
+| `guardarQuadroComoNovaSituacao(quadroId, dados)` → `{ quadro, situacao }` | idem | RN-SJ-10; RN-SJ-4/7/11/13 | `/jogos/{jogoId}`, `/modelo-jogo` |
+| `duplicarQuadroSituacao(quadroId, dados)` → `QuadroTatico` | idem (RN-SJ-12) | RN-SJ-10/13/14 | `/jogos/{jogoId}` |
+
+`SituacaoJogoResumo` é tipo exportado de `lib/actions/situacoesJogo.ts`. Remover uma situação do jogo usa a action **existente** `apagarQuadroTatico(id)` (inalterada). Erros de unicidade Prisma (`P2002`) traduzem-se nas mensagens de RN-SJ-4/RN-SJ-11.
+
+### 24.6 Rotas, navegação e componentes (biblioteca)
+- **Navegação:** item **«Modelo de jogo»** (`/modelo-jogo`, ícone `ClipboardList`) em `ITENS_BASE` (`components/layout/Navegacao.tsx`) **imediatamente a seguir a «Exercícios»**; visível a todos (o acesso é decidido no servidor).
+- **`/modelo-jogo`** ganha separadores (links, como os de momento): **«Princípios»** (default; sem `separador` ou `?separador=principios`) e **«Situações de jogo»** (`?separador=situacoes`). O separador «Princípios» é o conteúdo atual **sem alterações** (tabs por momento, filtro de escalão, botão «Nova representação»); URLs antigas continuam a abrir «Princípios».
+- **Separador «Situações de jogo»** (server component `BibliotecaSituacoes`): filtros em **links/chips** (escalão, categoria) + **formulário GET** (pesquisa): **escalão** (só RN-SJ-2; default `obterEscalaoDoUtilizador()`, senão «Todos»; «Todos» explícito = `?escalaoId=todos`), **categoria** (só com um escalão selecionado; opções = `listarCategoriasSituacao(escalaoId)`; mudar de escalão limpa a categoria) e **pesquisa** por nome — todos na URL (`escalaoId`, `categoria`, `q`) e aplicados em `listarSituacoesJogo`. Ações: **«Nova situação»** (→ `/modelo-jogo/situacoes/nova?escalaoId=…`) e **«Gerir categorias»** (só com um escalão selecionado) → `GerirCategoriasSituacaoDialog` (client, padrão `SubcategoriasLista` em diálogo): título «Categorias de {escalão}», listar, criar, renomear/reordenar, apagar (confirmação); vazio: «Ainda não há categorias neste escalão. Cria as que fizerem sentido (ex.: «Saídas de jogo», «Bolas paradas»).» Não existe página de categorias em Definições. Grelha de cartões (padrão da lista de princípios): `MiniaturaCampo` (`formato = diagrama.campo`), nome, badges de **categoria** (se houver), **escalão** e **«Animada»** (quando `passos.length > 0`); clique → detalhe.
+  - **Vazio:** «Ainda não há situações de jogo» / «Cria situações como «Saída de jogo 1» ou «Livre lateral 3» para as importares nos jogos.» + «Nova situação». Com **categoria ou pesquisa** ativa e 0 resultados: «Nenhuma situação corresponde aos filtros.»; só com filtro de escalão: o vazio acima («Ainda não há situações de jogo»).
+  - **Sem acesso** (sem capacidade/sem escalões): «Sem acesso às situações de jogo» / «As situações de jogo são da equipa técnica de cada escalão.» (sem botões).
+- **`/modelo-jogo/situacoes/nova`** e **`/modelo-jogo/situacoes/[id]/editar`** — `SituacaoJogoForm` (client): **Nome** · **Escalão** (select dos acessíveis, obrigatório; só leitura na edição) · **Categoria** (opcional, «Sem categoria»; opções = categorias do escalão escolhido; mudar de escalão na criação limpa a categoria) · **Campo** (select com os 6 `FormatoJogo`, rótulos de `rotuloCampo` com maiúscula inicial; RN-SJ-3; mudar o campo atualiza `diagrama.campo` sem mexer nos elementos) · **Descrição** · `EditorCampo` (`formato = campo`, `permitirAdversario`, sem `permitirVista` — como no quadro tático). Botões «Guardar» / «Cancelar». Toasts: «Situação criada» / «Situação guardada».
+- **`/modelo-jogo/situacoes/[id]`** — detalhe: «‹ Modelo de jogo» (→ `/modelo-jogo?separador=situacoes`), nome, badges, `DiagramaReproduzivel` (`formato = diagrama.campo`; anima se tiver passos), descrição, «Atualizada em {data}». Botões **«Editar»** e **«Apagar»** (`AlertDialog`: «Apagar a situação «{nome}»?» / «As cópias já importadas para jogos mantêm-se inalteradas.» / [Cancelar] [Apagar]). Erro de `obterSituacaoJogo` → `notFound()`.
+
+### 24.7 Situações no jogo (detalhe do jogo)
+- **Onde:** separador *Convocatória → Plano de jogo*, secção **«Situações de jogo»** (`SituacoesJogo`, client) renderizada no `JogoDetalhe` **a seguir ao `<PlanoTatico>`** (que não é alterado — termina cedo quando não há convocados, pelo que a secção não pode viver dentro dele). `JogoDetalhe` recebe a prop `situacoesJogo`. `app/(app)/jogos/[id]/page.tsx` reutiliza `listarQuadrosTaticos(j.id)` já existente: o quadro do plano continua a ser o `find` por nome; as situações são os restantes, com `diagrama` validado por `diagramaSchema` (inválido → cartão sem diagrama; para quem gere, «Editar» fica desativado com o aviso «Diagrama inválido — não é possível editar.», mantendo «Duplicar» e «Remover do jogo» ativos).
+- **Leitura:** visível a quem lê o jogo (como o quadro do plano). Cada cartão: nome, badge **«Da biblioteca»** com link para `/modelo-jogo/situacoes/{situacaoOrigemId}` (só quando `situacaoOrigemId` ≠ null), `DiagramaReproduzivel`, notas.
+- **Formato diferente (DEVE):** o quadro desenha **sempre o campo da situação** — render com `formato = diagrama.campo ?? jogo.formato` (nunca forçar `jogo.formato`, porque nos componentes de render o prop sobrepõe-se ao `campo`; o `EditorCampo` já dá prioridade a `valor.campo`). Quando `diagrama.campo` ≠ `jogo.formato` (e o jogo tem formato), mostra-se a legenda «Campo da situação: {rótulo} (diferente do formato do jogo).» Não há conversão de coordenadas nem bloqueio.
+- **Gestão (RN-SJ-12 — treinadores do escalão do jogo + admin; botões só com `podeGerirSituacoes`, calculado com âmbito no escalão do jogo; o servidor revalida):**
+  - **«Importar situação»** → `ImportarSituacaoDialog`: filtro de escalão (default = escalão do jogo; outros acessíveis disponíveis), categoria (do escalão selecionado) e pesquisa (via `listarSituacoesJogo`); lista com miniatura e nome; as já importadas neste jogo aparecem desativadas com «Já neste jogo». Escolher → `importarSituacaoParaJogo` → toast «Situação importada» + `router.refresh()`. Sem situações acessíveis: «Não há situações na biblioteca. Cria-as em Modelo de jogo → Situações de jogo.»
+  - **«Editar»** (por cartão): nome, notas e `EditorCampo` (`formato = jogo.formato ?? undefined`, `permitirAdversario`). Botões: **«Só neste jogo»** (`atualizarQuadroSituacao` — toast «Guardado neste jogo»), **«Guardar como nova situação»** (diálogo com Nome — pré-preenchido — e Categoria opcional, só das categorias do **escalão do jogo** → `guardarQuadroComoNovaSituacao`; toast «Nova situação guardada na biblioteca de {escalão}») e **«Cancelar»** (repõe o estado ao abrir). Não existe opção de alterar a original.
+  - **«Duplicar»** (por cartão) → diálogo «Duplicar «{nome}»» com campo **Nome** (obrigatório, pré-preenchido «{nome} (variante)», tem de ser diferente dos outros quadros do jogo — RN-SJ-13) → `duplicarQuadroSituacao` → toast «Variante criada neste jogo» + `router.refresh()`. A variante é independente (editável «Só neste jogo») e mantém o badge «Da biblioteca».
+  - **«Remover do jogo»** → `AlertDialog` «Remover «{nome}» deste jogo?» / «A situação na biblioteca não é afetada.» → `apagarQuadroTatico` → toast «Situação removida deste jogo».
+  - **Vazio:** «Sem situações neste jogo.» (+ com permissão: «Importa situações da biblioteca do Modelo de jogo.»).
+
+### 24.8 Casos-limite
+- Membro que deixa de estar atribuído ao escalão perde o acesso às situações desse escalão (a cópia nos jogos segue as regras do jogo).
+- `Escalao.visivelOutrosTreinadores = true` **não** expõe situações (RN-SJ-1).
+- Situação importada e depois editada/apagada na biblioteca → a cópia no jogo fica igual (RN-SJ-8/9); o badge «Da biblioteca» desaparece quando a original é apagada.
+- Jogo sem `formato` (legado) → render pelo `diagrama.campo`; sem legenda de diferença.
+- Diagrama da situação sem `passos` → estático; com passos → anima na biblioteca e no jogo.
+- Importar de outro escalão acessível → permitido; a cópia pertence ao jogo.
+- «Guardar como nova» com nome já existente no escalão do jogo → erro RN-SJ-4 e **nada** é gravado (transação).
+- Tentar usar as actions de situação sobre o quadro «Plano de jogo» → recusado (RN-SJ-10).
+- Clube técnico Individual → funciona (o treinador é Administrador, `TODO_CLUBE`).
+
+### 24.9 Testes (Vitest) e definição de pronto
+- **Schemas:** nome reservado (variações de maiúsculas/espaços), nome vazio/>100, `campo` em falta, categoria `""`/`null` → sem categoria.
+- **Acesso:** `PROPRIOS_ESCALOES` sem atribuição ao escalão → recusa em listar/obter/criar/editar/apagar/importar; escalão `visivelOutrosTreinadores` não concede; `SECCAO` só na secção coordenada; sem capacidade → recusa; isolamento por clube.
+- **Snapshot:** `importarSituacaoParaJogo` grava diagrama igual (deep-equal) ao da situação, `notas = descricao`, `situacaoOrigemId`; dupla importação recusada; `atualizarQuadroSituacao` não chama `situacaoJogo.update`; `atualizarSituacaoJogo` não chama `quadroTatico.*`; `guardarQuadroComoNovaSituacao` cria no escalão do jogo e reaponta `situacaoOrigemId`; recusa do quadro «Plano de jogo»; `duplicarQuadroSituacao` copia diagrama/notas, mantém `situacaoOrigemId`, recusa nome repetido no jogo (RN-SJ-13); treinador `PROPRIOS_ESCALOES` não atribuído ao escalão do jogo é recusado em importar/editar/duplicar/remover (RN-SJ-12).
+- **Categorias:** unicidade por escalão; apagar em uso recusado; acesso pela regra RN-SJ-1 no escalão da categoria; categoria de outro escalão recusada em criar/atualizar situação e em «Guardar como nova» (tem de ser do escalão do jogo); apagar um escalão com categorias e situações não falha (cascade + `NoAction`).
+- **Zero-regressão:** `tests/modelo-jogo-actions.test.ts` e `tests/modelo-jogo.test.ts` passam sem alterações; o quadro do plano continua a ser selecionado por nome.
+- **Pronto quando:** §16 «Definição de pronto» + migração aditiva aplicada + navegação, separadores, biblioteca, categorias e secção do jogo funcionais com estados vazio/erro/sem acesso; `typecheck`/`lint`/`test` limpos; bíblia atualizada. **Não toca em auth.**
+
+---
+
 ## Apêndice A — Configuração de Futsal ⚽
 
 Referência da entrada `CONFIG_MODALIDADE.FUTSAL` (registry — 20.3). Reflete o comportamento já existente (v6), agora explicitado como configuração.
@@ -4173,6 +4375,16 @@ Todas as alterações são **aditivas** (colunas/tabelas novas, nullable ou com 
 **Relações inversas (aditivas nos modelos existentes):** `Clube.competicoesManoMano`/`Clube.clubesExternos`, `Epoca.competicoesManoMano`, `Escalao.competicoesManoMano` (FK `SetNull`), `Atleta.participacoesManoMano`, `Utilizador.competicoesManoManoCriadas`, `Sessao.duelosManoMano` (FK `SetNull`), `MembroClube.duelosRegistados` (FK `SetNull`).
 
 **Garantias:** nenhuma coluna alterada em tabelas existentes (só relações inversas); a classificação é **calculada** (não há tabela nova de classificação); rollback de código possível sem migração inversa (as tabelas novas são ignoradas pelo código antigo).
+
+### C.8 Migração das situações de jogo (2026-10-22 — §24)
+
+| Alteração | Detalhe |
+|---|---|
+| Tabela nova `CategoriaSituacaoJogo` | FK `escalaoId` → `Escalao` (`Cascade`); `@@unique([escalaoId, nome])`, `@@index([escalaoId, ordem])` |
+| Tabela nova `SituacaoJogo` | FKs `clubeId` → `Clube` (`Cascade`), `escalaoId` → `Escalao` (`Cascade`), `categoriaId` → `CategoriaSituacaoJogo` (`NoAction`, nullable — bloqueio de apagar em uso na action); `@@unique([escalaoId, nome])`, `@@index([clubeId, escalaoId])`, `@@index([categoriaId])` |
+| Coluna nova `QuadroTatico.situacaoOrigemId` | `String?` (FK `SituacaoJogo`, `SetNull`), `@@index([situacaoOrigemId])` |
+
+Migração `20261022120000_situacoes_jogo`. **Sem backfill** (quadros existentes ficam com `situacaoOrigemId = null`; a biblioteca nasce vazia). Sem alteração a colunas existentes. Sem tocar em auth. Rollback de código possível (as tabelas/coluna novas são ignoradas pelo código antigo).
 
 ---
 

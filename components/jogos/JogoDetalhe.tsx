@@ -38,6 +38,7 @@ import {
 import { parseRelatorio, serializarRelatorio } from "@/lib/relatorio-jogo";
 import { MINUTOS_POR_PARTE } from "@/lib/estatisticas";
 import { PlanoTatico } from "@/components/jogos/PlanoTatico";
+import { SituacoesJogo, type DadosSituacoesJogo } from "@/components/jogos/SituacoesJogo";
 import { ScoutingJogo } from "@/components/jogos/ScoutingJogo";
 import { TimelineEventos, type EventoTimeline } from "@/components/jogos/TimelineEventos";
 import type { DiagramaCampo } from "@/lib/schemas/exercicio";
@@ -108,6 +109,7 @@ export function JogoDetalhe({
   escalaoJovem = false,
   quadroInicial = null,
   podeGerirQuadro = false,
+  situacoesJogo,
   mostrarModoAoVivo = false,
   numeroPartes = 2,
 }: {
@@ -143,6 +145,9 @@ export function JogoDetalhe({
   // QuadroTatico.diagrama) + gating por MODELO_JOGO_GERIR.
   quadroInicial?: { id: string; diagrama: DiagramaCampo | null } | null;
   podeGerirQuadro?: boolean;
+  // §24.7: secção «Situações de jogo» abaixo do quadro do plano (quadros do jogo
+  // que não são o «Plano de jogo») + gating de gestão por âmbito (RN-SJ-12).
+  situacoesJogo: DadosSituacoesJogo;
   // §8.25: Modo Jogo ao Vivo. `mostrarModoAoVivo` liga o botão de entrada no
   // separador "Ao Vivo" (só quando o jogo não está terminado). Quando a sessão ao
   // vivo já terminou, o editor manual de minutos (§8.25.6) aparece nas estatísticas.
@@ -491,6 +496,7 @@ export function JogoDetalhe({
               quadroInicial={quadroInicial}
               podeGerirQuadro={podeGerirQuadro}
             />
+            <SituacoesJogo jogoId={jogoId} formato={formato} dados={situacoesJogo} />
           </TabsContent>
         </Tabs>
       </TabsContent>

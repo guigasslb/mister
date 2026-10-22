@@ -152,8 +152,15 @@ export async function exigirCapacidade(
       if (!(await algumEscalaoNaSeccaoCoordenada([escalaoId], ctx))) {
         return { ok: false, erro: "Sem permissão nesta secção" };
       }
+    } else {
+      // TODO_CLUBE → qualquer escalão, mas só DO PRÓPRIO CLUBE (isolamento
+      // multi-tenant): impede mover jogos/sessões/planeamentos para outro clube.
+      const doClube = await prisma.escalao.findFirst({
+        where: { id: escalaoId, clubeId: ctx.clube.id },
+        select: { id: true },
+      });
+      if (!doClube) return { ok: false, erro: "Escalão não encontrado" };
     }
-    // TODO_CLUBE → permitido em qualquer escalão.
   }
 
   return { ok: true, ctx };
