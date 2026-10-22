@@ -1,20 +1,69 @@
 import type { Metadata } from "next";
+import { cache } from "react";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Home, MapPin, Plane, Trophy } from "lucide-react";
 import { obterCalendarioPublico, type JogoCalendarioPublico } from "@/lib/calendario-publico";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { LogoIcon } from "@/components/layout/Logo";
 import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
+import {
+  descricaoCalendarioPublico,
+  separarLocal,
+  resolverUrlBase,
+  tituloCalendarioPublico,
+} from "@/lib/calendario-publico-partilha";
+import { caminhoCalendarioPublico } from "@/lib/schemas/calendario-publico";
 
 // Calendário público de jogos do escalão (bíblia §8.11.1). Só-de-leitura, sem
 // autenticação (prefixo `/r/` fora do matcher do middleware), sem navegação para
 // a app e sem indexação. Lido sempre da BD: revogar/regenerar tem efeito imediato.
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Calendário de jogos",
-  robots: { index: false, follow: false },
-};
+const ROBOTS: Metadata["robots"] = { index: false, follow: false };
+
+/** Uma só leitura por pedido, partilhada por `generateMetadata` e pela página. */
+const obterCalendario = cache((token: string) => obterCalendarioPublico(token));
+
+// Pré-visualização do link (WhatsApp, iMessage, Telegram…): título, descrição e
+// Open Graph/Twitter com URL absoluta. A imagem vem de `opengraph-image.tsx`
+// (o Next acrescenta `og:image`/`twitter:image` resolvidos contra `metadataBase`).
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}): Promise<Metadata> {
+  const { token } = await params;
+  const calendario = await obterCalendario(token);
+  if (!calendario) return { title: { absolute: "Calendário de jogos" }, robots: ROBOTS };
+
+  const h = await headers();
+  const metadataBase = resolverUrlBase({
+    envUrl: process.env.NEXTAUTH_URL ?? process.env.AUTH_URL,
+    host: h.get("x-forwarded-host") ?? h.get("host"),
+    proto: h.get("x-forwarded-proto"),
+  });
+  const titulo = tituloCalendarioPublico(calendario);
+  const descricao = descricaoCalendarioPublico(calendario);
+  const url = caminhoCalendarioPublico(token);
+
+  return {
+    ...(metadataBase ? { metadataBase } : {}),
+    title: { absolute: titulo },
+    description: descricao,
+    robots: ROBOTS,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      siteName: "Mister",
+      locale: "pt_PT",
+      url,
+      title: titulo,
+      description: descricao,
+    },
+    twitter: { card: "summary_large_image", title: titulo, description: descricao },
+  };
+}
 
 function formatarData(iso: string): string {
   return formatarDataHoraLisboa(iso, { weekday: "short", day: "2-digit", month: "short" });
@@ -29,6 +78,7 @@ function formatarHora(iso: string): string | null {
 
 function LinhaJogo({ jogo, clubeNome }: { jogo: JogoCalendarioPublico; clubeNome: string }) {
   const hora = formatarHora(jogo.data);
+  const local = separarLocal(jogo.local);
   return (
     <li
       className="flex items-center gap-4 rounded-lg border border-l-4 border-cinza-200 bg-white p-4 shadow-card"
@@ -64,11 +114,22 @@ function LinhaJogo({ jogo, clubeNome }: { jogo: JogoCalendarioPublico; clubeNome
             )}
             {jogo.casaFora === "CASA" ? "Casa" : "Fora"}
           </span>
-          {jogo.local && (
+          {local.texto && (
             <span className="inline-flex items-center gap-1">
-              <MapPin className="h-3.5 w-3.5" aria-hidden />
-              {jogo.local}
+              {!local.mapaUrl && <MapPin className="h-3.5 w-3.5" aria-hidden />}
+              {local.texto}
             </span>
+          )}
+          {local.mapaUrl && (
+            <a
+              href={local.mapaUrl}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              className="inline-flex min-h-11 items-center gap-1 rounded-md px-1 font-medium text-cinza-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MapPin className="h-3.5 w-3.5" aria-hidden />
+              Ver no mapa
+            </a>
           )}
           {jogo.competicao && (
             <span className="inline-flex items-center gap-1">
@@ -96,7 +157,7 @@ export default async function CalendarioPublicoPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const calendario = await obterCalendarioPublico(token);
+  const calendario = await obterCalendario(token);
   if (!calendario) notFound();
 
   const { clube, escalao, epoca, proximos, realizados } = calendario;

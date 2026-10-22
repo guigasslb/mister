@@ -23,6 +23,7 @@ import {
   gerarTokenCalendario,
   mapearJogoPublico,
   montarCalendarioPublico,
+  nomeSubequipaPublico,
   obterCalendarioPublico,
   whereJogosCalendarioPublico,
   SELECT_ESCALAO_CALENDARIO_PUBLICO,
@@ -343,5 +344,39 @@ describe("actions do link do calendário", () => {
       where: { id: ESC, clubeId: "clube1" },
       select: { calendarioPublicoToken: true },
     });
+  });
+});
+
+// ─── Nome da subequipa no calendário público ─────────────────────────────────
+describe("nomeSubequipaPublico", () => {
+  it("remove o prefixo «<clube> - »", () => {
+    expect(nomeSubequipaPublico("Lusitano GC - Brancos", "Lusitano GC")).toBe("Brancos");
+    expect(nomeSubequipaPublico("lusitano  gc – Azuis", "Lusitano GC")).toBe("Azuis");
+  });
+
+  it("caso real: prefixo diferente do nome do clube → último segmento", () => {
+    expect(nomeSubequipaPublico("Juventude SC - Brancos", "Lusitano GC")).toBe("Brancos");
+    expect(nomeSubequipaPublico("Juventude SC - Azuis")).toBe("Azuis");
+  });
+
+  it("sem separador mantém-se (inclui hífen sem espaços e nome que só começa como o clube)", () => {
+    expect(nomeSubequipaPublico("Brancos", "Lusitano GC")).toBe("Brancos");
+    expect(nomeSubequipaPublico("Benjamins B")).toBe("Benjamins B");
+    expect(nomeSubequipaPublico("Sub-11 A")).toBe("Sub-11 A");
+    expect(nomeSubequipaPublico("Lusitanos", "Lusitano")).toBe("Lusitanos");
+  });
+
+  it("nunca devolve vazio", () => {
+    expect(nomeSubequipaPublico("Lusitano GC - ", "Lusitano GC")).toBe("Lusitano GC -");
+  });
+
+  it("aplicado no DTO público via montarCalendarioPublico", () => {
+    const c = montarCalendarioPublico(
+      ESCALAO_ROW,
+      null,
+      [jogoRow("2026-11-01T10:00:00.000Z", { equipaCompeticao: { nome: "GD Exemplo - Brancos" } })],
+      AGORA,
+    );
+    expect(c.proximos[0].equipa).toBe("Brancos");
   });
 });

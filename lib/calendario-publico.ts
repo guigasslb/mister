@@ -66,7 +66,7 @@ export interface JogoCalendarioPublico {
   casaFora: CasaFora;
   local: string | null;
   competicao: string | null;
-  /** Subequipa da competição (ex.: «Benjamins B»), quando o jogo é de subequipa. */
+  /** Nome próprio da subequipa (ex.: «Brancos» — `nomeSubequipaPublico`), quando o jogo é de subequipa. */
   equipa: string | null;
   /** Só em jogos já realizados com resultado completo. */
   resultado: { marcados: number; sofridos: number } | null;
@@ -82,8 +82,33 @@ export interface CalendarioPublico {
   realizados: JogoCalendarioPublico[];
 }
 
+const SEPARADOR_SUBEQUIPA = /\s+[-–—]\s+/;
+
+/**
+ * Nome próprio da subequipa para o calendário público («Brancos», «Azuis»), sem
+ * prefixo de clube. Determinístico: (1) remove o prefixo «<clube> - » quando o
+ * nome começa pelo nome do clube (sem distinguir maiúsculas/espaços); (2) senão,
+ * num nome «X - Y» (hífen/travessão com espaços) fica o último segmento. Nomes sem
+ * separador mantêm-se. Nunca devolve vazio (cai no nome original).
+ */
+export function nomeSubequipaPublico(nome: string, clubeNome?: string | null): string {
+  const original = nome.trim().replace(/\s+/g, " ");
+  const clube = clubeNome?.trim().replace(/\s+/g, " ").toLowerCase();
+  if (clube && original.toLowerCase().startsWith(clube)) {
+    // Só conta como prefixo se, a seguir ao nome do clube, vier um separador.
+    const m = /^\s*[-–—:·|]\s*(.+)$/.exec(original.slice(clube.length));
+    if (m) return nomeSubequipaPublico(m[1]);
+  }
+  const segmentos = original.split(SEPARADOR_SUBEQUIPA).map((p) => p.trim()).filter(Boolean);
+  return segmentos.length > 1 ? segmentos[segmentos.length - 1] : original;
+}
+
 /** Projeção explícita de um jogo para o DTO público (nunca espalha o registo). */
-export function mapearJogoPublico(jogo: JogoCalendario, agora: Date): JogoCalendarioPublico {
+export function mapearJogoPublico(
+  jogo: JogoCalendario,
+  agora: Date,
+  clubeNome?: string | null,
+): JogoCalendarioPublico {
   const realizado = jogo.data.getTime() < agora.getTime();
   const temResultado = jogo.golosMarcados != null && jogo.golosSofridos != null;
   return {
@@ -92,7 +117,9 @@ export function mapearJogoPublico(jogo: JogoCalendario, agora: Date): JogoCalend
     casaFora: jogo.casaFora,
     local: jogo.local?.trim() || null,
     competicao: jogo.competicaoRef?.nome ?? (jogo.competicao?.trim() || null),
-    equipa: jogo.equipaCompeticao?.nome ?? null,
+    equipa: jogo.equipaCompeticao
+      ? nomeSubequipaPublico(jogo.equipaCompeticao.nome, clubeNome)
+      : null,
     resultado:
       realizado && temResultado
         ? { marcados: jogo.golosMarcados as number, sofridos: jogo.golosSofridos as number }
@@ -119,11 +146,11 @@ export function montarCalendarioPublico(
     epoca: epoca ? { nome: epoca.nome } : null,
     proximos: ordenados
       .filter((j) => j.data.getTime() >= ref)
-      .map((j) => mapearJogoPublico(j, agora)),
+      .map((j) => mapearJogoPublico(j, agora, escalao.clube.nome)),
     realizados: ordenados
       .filter((j) => j.data.getTime() < ref)
       .reverse()
-      .map((j) => mapearJogoPublico(j, agora)),
+      .map((j) => mapearJogoPublico(j, agora, escalao.clube.nome)),
   };
 }
 
