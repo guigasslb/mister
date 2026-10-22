@@ -23,6 +23,12 @@ export function isVideoUrlValido(valor: string): boolean {
   return url.protocol === "https:" && HOSTS_YOUTUBE.has(url.hostname);
 }
 
+/** Limite do local de concentração (texto e/ou link de mapa, que pode ser longo). */
+export const MAX_LOCAL_CONCENTRACAO = 500;
+
+export const ERRO_CONCENTRACAO_DEPOIS_DO_JOGO =
+  "A concentração tem de ser antes da hora do jogo";
+
 export const jogoSchema = z.object({
   data: z.coerce.date(),
   adversario: z.string().min(1, "Indica o adversário").max(100),
@@ -55,6 +61,19 @@ export const jogoSchema = z.object({
     .refine(isVideoUrlValido, "Indica um link válido do YouTube (https)")
     .optional()
     .or(z.literal("")),
+  // 🔁 2026-10-22 (§3.7/§8.11): concentração (opcionais). `horaConcentracao` é um
+  // instante (como `data`), composto no formulário com o dia do jogo; null = limpar,
+  // ausente = não alterar. `localConcentracao` aceita texto e/ou link de mapa.
+  horaConcentracao: z.coerce.date().nullable().optional(),
+  localConcentracao: z.string().trim().max(MAX_LOCAL_CONCENTRACAO).nullable().optional(),
+}).superRefine((d, ctx) => {
+  if (d.horaConcentracao && d.horaConcentracao.getTime() > d.data.getTime()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["horaConcentracao"],
+      message: ERRO_CONCENTRACAO_DEPOIS_DO_JOGO,
+    });
+  }
 });
 
 export type JogoInput = z.infer<typeof jogoSchema>;

@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { Check, Copy, Link2Off, RefreshCw, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +21,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  definirMostrarConvocadosCalendario,
   gerarLinkCalendarioPublico,
   revogarLinkCalendarioPublico,
 } from "@/lib/actions/calendario-publico";
@@ -29,14 +32,17 @@ export function PartilharCalendario({
   escalaoId,
   escalaoNome,
   tokenInicial,
+  mostrarConvocadosInicial,
 }: {
   escalaoId: string;
   escalaoNome: string;
   tokenInicial: string | null;
+  mostrarConvocadosInicial: boolean;
 }) {
   const router = useRouter();
   const [token, setToken] = useState(tokenInicial);
   const [copiado, setCopiado] = useState(false);
+  const [mostrarConvocados, setMostrarConvocados] = useState(mostrarConvocadosInicial);
   const [pending, startTransition] = useTransition();
 
   const url =
@@ -82,6 +88,23 @@ export function PartilharCalendario({
     });
   }
 
+  function alternarConvocados(ativo: boolean) {
+    startTransition(async () => {
+      const res = await definirMostrarConvocadosCalendario({ escalaoId, ativo });
+      if (!res.sucesso) {
+        toast.error(res.erro);
+        return;
+      }
+      setMostrarConvocados(res.dados.mostrarConvocados);
+      toast.success(
+        res.dados.mostrarConvocados
+          ? "Os convocados passam a aparecer no calendário partilhado."
+          : "Os convocados deixam de aparecer no calendário partilhado.",
+      );
+      router.refresh();
+    });
+  }
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -95,10 +118,26 @@ export function PartilharCalendario({
           <DialogTitle>Partilhar calendário — {escalaoNome}</DialogTitle>
           <DialogDescription>
             Quem tiver o link vê apenas os jogos desta equipa na época ativa (data,
-            hora, adversário, casa/fora, local, competição e resultado), sem precisar
-            de conta e sem acesso a mais nada.
+            hora, adversário, casa/fora, local, competição, concentração e resultado),
+            sem precisar de conta e sem acesso a mais nada.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex min-h-11 items-start justify-between gap-4 rounded-md border border-cinza-200 p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="calendario-mostrar-convocados">Mostrar convocados</Label>
+            <p className="text-legenda text-cinza-500">
+              Em cada jogo com convocatória, mostra o primeiro e o último nome e o número
+              dos convocados. Desligado por defeito.
+            </p>
+          </div>
+          <Switch
+            id="calendario-mostrar-convocados"
+            checked={mostrarConvocados}
+            onCheckedChange={alternarConvocados}
+            disabled={pending}
+          />
+        </div>
 
         {token ? (
           <div className="space-y-4">

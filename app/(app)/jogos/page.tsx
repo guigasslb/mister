@@ -164,6 +164,7 @@ export default async function JogosPage({
               escalaoId={escalaoSelecionado.id}
               escalaoNome={escalaoSelecionado.nome}
               tokenInicial={linkCalendario.dados.token}
+              mostrarConvocadosInicial={linkCalendario.dados.mostrarConvocados}
             />
           )}
           <Button asChild variant="outline">

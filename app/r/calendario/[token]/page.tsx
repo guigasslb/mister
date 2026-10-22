@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { Home, MapPin, Plane, Trophy } from "lucide-react";
+import { ChevronDown, Clock, Home, MapPin, Plane, Trophy, Users } from "lucide-react";
 import { obterCalendarioPublico, type JogoCalendarioPublico } from "@/lib/calendario-publico";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { LogoIcon } from "@/components/layout/Logo";
@@ -14,6 +14,7 @@ import {
   tituloCalendarioPublico,
 } from "@/lib/calendario-publico-partilha";
 import { caminhoCalendarioPublico } from "@/lib/schemas/calendario-publico";
+import { formatarConcentracao } from "@/lib/concentracao";
 
 // Calendário público de jogos do escalão (bíblia §8.11.1). Só-de-leitura, sem
 // autenticação (prefixo `/r/` fora do matcher do middleware), sem navegação para
@@ -76,77 +77,143 @@ function formatarHora(iso: string): string | null {
   return formatarDataHoraLisboa(iso, { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Local livre: texto (sem URLs) + link discreto «Ver no mapa» quando há URL http(s). */
+function LocalComMapa({ valor, icone = true }: { valor: string | null; icone?: boolean }) {
+  const local = separarLocal(valor);
+  return (
+    <>
+      {local.texto && (
+        <span className="inline-flex items-center gap-1">
+          {icone && !local.mapaUrl && <MapPin className="h-3.5 w-3.5" aria-hidden />}
+          {local.texto}
+        </span>
+      )}
+      {local.mapaUrl && (
+        <a
+          href={local.mapaUrl}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="inline-flex min-h-11 items-center gap-1 rounded-md px-1 font-medium text-cinza-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <MapPin className="h-3.5 w-3.5" aria-hidden />
+          Ver no mapa
+        </a>
+      )}
+    </>
+  );
+}
+
+/** Painel expansível (concentração + convocados); só existe se houver conteúdo. */
+function DetalhesJogo({ jogo }: { jogo: JogoCalendarioPublico }) {
+  const { concentracao, convocados } = jogo;
+  if (!concentracao && !convocados) return null;
+  const rotulo = [concentracao && "Concentração", convocados && "Convocados"]
+    .filter(Boolean)
+    .join(" e ");
+  return (
+    <details className="group mt-2 border-t border-cinza-100 pt-1">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-md px-1 text-corpo-sec font-medium text-cinza-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        {rotulo}
+        <ChevronDown
+          className="h-4 w-4 flex-shrink-0 transition-transform group-open:rotate-180"
+          aria-hidden
+        />
+      </summary>
+      <div className="space-y-3 px-1 pb-2 pt-1 text-corpo-sec text-cinza-700">
+        {concentracao && (
+          <div>
+            <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+              Concentração
+            </p>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {concentracao.hora && (
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5" aria-hidden />
+                  {formatarConcentracao(concentracao.hora, jogo.data)}
+                </span>
+              )}
+              <LocalComMapa valor={concentracao.local} />
+            </p>
+          </div>
+        )}
+        {convocados && (
+          <div>
+            <p className="inline-flex items-center gap-1 text-legenda font-medium uppercase tracking-wide text-cinza-500">
+              <Users className="h-3.5 w-3.5" aria-hidden />
+              Convocados ({convocados.length})
+            </p>
+            <ul className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
+              {convocados.map((c, i) => (
+                <li key={i}>
+                  {c.nome}
+                  {c.numero != null ? ` · ${c.numero}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function LinhaJogo({ jogo, clubeNome }: { jogo: JogoCalendarioPublico; clubeNome: string }) {
   const hora = formatarHora(jogo.data);
-  const local = separarLocal(jogo.local);
   return (
     <li
-      className="flex items-center gap-4 rounded-lg border border-l-4 border-cinza-200 bg-white p-4 shadow-card"
+      className="rounded-lg border border-l-4 border-cinza-200 bg-white p-4 shadow-card"
       style={{ borderLeftColor: "var(--cor-primaria, #F0531E)" }}
     >
-      <div className="flex w-20 flex-shrink-0 flex-col items-center text-center">
-        <span className="text-legenda font-medium capitalize text-cinza-700">
-          {formatarData(jogo.data)}
-        </span>
-        {hora && <span className="text-legenda text-cinza-500">{hora}</span>}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-corpo font-semibold text-cinza-900">
-            <TituloConfronto
-              clubeNome={clubeNome}
-              adversario={jogo.adversario}
-              casaFora={jogo.casaFora}
-            />
-          </p>
-          {jogo.equipa && (
-            <span className="rounded-full bg-cinza-100 px-2 py-0.5 text-legenda font-medium text-cinza-700">
-              {jogo.equipa}
-            </span>
-          )}
-        </div>
-        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-legenda text-cinza-500">
-          <span className="inline-flex items-center gap-1">
-            {jogo.casaFora === "CASA" ? (
-              <Home className="h-3.5 w-3.5" aria-hidden />
-            ) : (
-              <Plane className="h-3.5 w-3.5" aria-hidden />
-            )}
-            {jogo.casaFora === "CASA" ? "Casa" : "Fora"}
+      <div className="flex items-center gap-4">
+        <div className="flex w-20 flex-shrink-0 flex-col items-center text-center">
+          <span className="text-legenda font-medium capitalize text-cinza-700">
+            {formatarData(jogo.data)}
           </span>
-          {local.texto && (
-            <span className="inline-flex items-center gap-1">
-              {!local.mapaUrl && <MapPin className="h-3.5 w-3.5" aria-hidden />}
-              {local.texto}
-            </span>
-          )}
-          {local.mapaUrl && (
-            <a
-              href={local.mapaUrl}
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-              className="inline-flex min-h-11 items-center gap-1 rounded-md px-1 font-medium text-cinza-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <MapPin className="h-3.5 w-3.5" aria-hidden />
-              Ver no mapa
-            </a>
-          )}
-          {jogo.competicao && (
-            <span className="inline-flex items-center gap-1">
-              <Trophy className="h-3.5 w-3.5" aria-hidden />
-              {jogo.competicao}
-            </span>
-          )}
-        </p>
-      </div>
-      {jogo.resultado && (
-        <div
-          className="text-titulo-seccao font-bold text-cinza-900"
-          aria-label={`Resultado ${jogo.resultado.marcados}–${jogo.resultado.sofridos}`}
-        >
-          {jogo.resultado.marcados}–{jogo.resultado.sofridos}
+          {hora && <span className="text-legenda text-cinza-500">{hora}</span>}
         </div>
-      )}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-corpo font-semibold text-cinza-900">
+              <TituloConfronto
+                clubeNome={clubeNome}
+                adversario={jogo.adversario}
+                casaFora={jogo.casaFora}
+              />
+            </p>
+            {jogo.equipa && (
+              <span className="rounded-full bg-cinza-100 px-2 py-0.5 text-legenda font-medium text-cinza-700">
+                {jogo.equipa}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-legenda text-cinza-500">
+            <span className="inline-flex items-center gap-1">
+              {jogo.casaFora === "CASA" ? (
+                <Home className="h-3.5 w-3.5" aria-hidden />
+              ) : (
+                <Plane className="h-3.5 w-3.5" aria-hidden />
+              )}
+              {jogo.casaFora === "CASA" ? "Casa" : "Fora"}
+            </span>
+            <LocalComMapa valor={jogo.local} />
+            {jogo.competicao && (
+              <span className="inline-flex items-center gap-1">
+                <Trophy className="h-3.5 w-3.5" aria-hidden />
+                {jogo.competicao}
+              </span>
+            )}
+          </p>
+        </div>
+        {jogo.resultado && (
+          <div
+            className="text-titulo-seccao font-bold text-cinza-900"
+            aria-label={`Resultado ${jogo.resultado.marcados}–${jogo.resultado.sofridos}`}
+          >
+            {jogo.resultado.marcados}–{jogo.resultado.sofridos}
+          </div>
+        )}
+      </div>
+      <DetalhesJogo jogo={jogo} />
     </li>
   );
 }

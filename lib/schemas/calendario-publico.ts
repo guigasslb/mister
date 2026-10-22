@@ -14,6 +14,11 @@ export const linkCalendarioPublicoSchema = z.object({
   escalaoId: z.string().cuid(),
 });
 
+/** Opt-in «Mostrar convocados» no calendário público do escalão. */
+export const mostrarConvocadosCalendarioSchema = linkCalendarioPublicoSchema.extend({
+  ativo: z.boolean(),
+});
+
 /**
  * Token recebido no URL público (não confiável): exatamente 32 caracteres
  * base64url. Tudo o resto é recusado antes de chegar à BD.

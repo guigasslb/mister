@@ -473,6 +473,9 @@ model Escalao {
   // 🔁 2026-10-21 (§8.11.1): token do link público só-de-leitura do calendário de jogos
   // (`/r/calendario/<token>`). null = sem link. Regenerar substitui; revogar põe null.
   calendarioPublicoToken   String?  @unique
+  // 🔁 2026-10-22 (§8.11.1): opt-in — o calendário público mostra os convocados
+  // («Primeiro Último · nº») de cada jogo com convocatória. Desligado por defeito.
+  calendarioPublicoMostrarConvocados Boolean @default(false)
   criadoEm                 DateTime @default(now())
 
   sessoes       Sessao[]
@@ -1177,6 +1180,10 @@ model Jogo {
   faltas1aParte         Int? // faltas acumuladas da equipa por parte (futsal)
   faltas2aParte         Int?
   local                 String?
+  // 🔁 2026-10-22 (§3.7/§8.11): concentração (opcional). Instante, como `data`;
+  // o formulário compõe-no com o dia do jogo. Local: texto e/ou link de mapa.
+  horaConcentracao      DateTime?
+  localConcentracao     String?
   relatorio             String?              @db.Text
   videoUrl              String? // link YouTube (sem armazenamento)
   // 🔁 v7 (§3.7): FUTSAL_5 | FUTEBOL_* ; default derivado da secção do escalão.

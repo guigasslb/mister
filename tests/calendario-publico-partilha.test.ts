@@ -27,6 +27,8 @@ function jogo(extra: Partial<JogoCalendarioPublico> = {}): JogoCalendarioPublico
     competicao: "LIGA INTERDISTRITAL - BENJAMINS FUTSAL",
     equipa: "Brancos", // já normalizado por nomeSubequipaPublico
     resultado: null,
+    concentracao: null,
+    convocados: null,
     ...extra,
   };
 }

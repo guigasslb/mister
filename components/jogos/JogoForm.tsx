@@ -20,6 +20,8 @@ import { verificarConflitoAgenda } from "@/lib/actions/agenda";
 import type { ConflitoAgenda } from "@/lib/utils/agenda-conflitos";
 import { LABEL_CASA_FORA, LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
 import { instantToWallClockLisbon, wallClockLisbonToInstant } from "@/lib/utils-datas";
+import { comporHoraConcentracao, horaConcentracaoParaInput } from "@/lib/concentracao";
+import { MAX_LOCAL_CONCENTRACAO } from "@/lib/schemas/jogo";
 import type {
   CasaFora,
   Escalao,
@@ -82,6 +84,8 @@ type JogoParaEdicao = Pick<
   | "equipaCompeticaoId"
   | "formato"
   | "local"
+  | "horaConcentracao"
+  | "localConcentracao"
   | "golosMarcados"
   | "golosSofridos"
   | "faltas1aParte"
@@ -247,6 +251,13 @@ export function JogoForm({
       // Só se envia o formato em futebol; em futsal o backend deriva FUTSAL_5.
       formato: eFutebol && formato ? formato : undefined,
       local: String(fd.get("local") ?? "").trim() || undefined,
+      // Concentração (§3.7/§8.11): hora composta com o dia do jogo; vazio ⇒ limpa (null).
+      horaConcentracao:
+        comporHoraConcentracao(
+          String(fd.get("data") ?? ""),
+          String(fd.get("horaConcentracao") ?? ""),
+        )?.toISOString() ?? null,
+      localConcentracao: String(fd.get("localConcentracao") ?? "").trim() || null,
       golosMarcados: gm !== "" ? Number(gm) : null,
       golosSofridos: gs !== "" ? Number(gs) : null,
       faltas1aParte: f1 !== "" ? Number(f1) : null,
@@ -487,6 +498,34 @@ export function JogoForm({
           </ul>
           <p className="mt-1.5 text-legenda">Podes guardar à mesma.</p>
         </div>
+      )}
+
+      {/* ─── Concentração (opcional) ─────────────────────────────────────── */}
+      <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+        <div className="space-y-1.5">
+          <Label htmlFor="horaConcentracao">Hora de concentração</Label>
+          <Input
+            id="horaConcentracao"
+            name="horaConcentracao"
+            type="time"
+            defaultValue={horaConcentracaoParaInput(jogo?.horaConcentracao)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="localConcentracao">Local de concentração</Label>
+          <Input
+            id="localConcentracao"
+            name="localConcentracao"
+            maxLength={MAX_LOCAL_CONCENTRACAO}
+            defaultValue={jogo?.localConcentracao ?? ""}
+            placeholder="ex: Sede do clube ou link do mapa"
+          />
+        </div>
+      </div>
+      {(erros.horaConcentracao || erros.localConcentracao) && (
+        <p className="text-legenda text-vermelho-600">
+          {erros.horaConcentracao ?? erros.localConcentracao}
+        </p>
       )}
 
       {/* ─── Resultado (só após o jogo) ──────────────────────────────────── */}

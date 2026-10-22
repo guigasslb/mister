@@ -30,6 +30,7 @@ import {
   SELECT_JOGO_CALENDARIO_PUBLICO,
 } from "@/lib/calendario-publico";
 import {
+  definirMostrarConvocadosCalendario,
   gerarLinkCalendarioPublico,
   obterLinkCalendarioPublico,
   revogarLinkCalendarioPublico,
@@ -46,6 +47,7 @@ const ESCALAO_ROW = {
   id: ESC,
   nome: "Benjamins",
   clubeId: "clube1",
+  calendarioPublicoMostrarConvocados: false,
   clube: { nome: "GD Exemplo", corPrimaria: "#0055AA", logoUrl: null },
 };
 
@@ -60,6 +62,8 @@ function jogoRow(dataIso: string, extra: Record<string, unknown> = {}) {
     golosSofridos: 1,
     competicaoRef: { nome: "Distrital" },
     equipaCompeticao: null,
+    horaConcentracao: null,
+    localConcentracao: null,
     ...extra,
   };
 }
@@ -68,6 +72,8 @@ const CAMPOS_PUBLICOS = [
   "adversario",
   "casaFora",
   "competicao",
+  "concentracao",
+  "convocados",
   "data",
   "equipa",
   "local",
@@ -120,7 +126,9 @@ describe("seleção pública mínima", () => {
         "equipaCompeticao",
         "golosMarcados",
         "golosSofridos",
+        "horaConcentracao",
         "local",
+        "localConcentracao",
       ].sort(),
     );
     expect(SELECT_JOGO_CALENDARIO_PUBLICO.competicaoRef).toEqual({ select: { nome: true } });
@@ -129,7 +137,7 @@ describe("seleção pública mínima", () => {
 
   it("o select do escalão só traz identidade do clube", () => {
     expect(Object.keys(SELECT_ESCALAO_CALENDARIO_PUBLICO).sort()).toEqual(
-      ["clube", "clubeId", "id", "nome"].sort(),
+      ["calendarioPublicoMostrarConvocados", "clube", "clubeId", "id", "nome"].sort(),
     );
     expect(SELECT_ESCALAO_CALENDARIO_PUBLICO.clube).toEqual({
       select: { nome: true, corPrimaria: true, logoUrl: true },
@@ -163,6 +171,8 @@ describe("seleção pública mínima", () => {
       competicao: "Distrital",
       equipa: null,
       resultado: { marcados: 3, sofridos: 1 },
+      concentracao: null,
+      convocados: null,
     });
   });
 
@@ -335,14 +345,17 @@ describe("actions do link do calendário", () => {
   });
 
   it("obter: lê o token do escalão filtrado pelo clube", async () => {
-    m(prisma.escalao.findFirst).mockResolvedValue({ calendarioPublicoToken: TOKEN });
+    m(prisma.escalao.findFirst).mockResolvedValue({
+      calendarioPublicoToken: TOKEN,
+      calendarioPublicoMostrarConvocados: true,
+    });
     expect(await obterLinkCalendarioPublico({ escalaoId: ESC })).toEqual({
       sucesso: true,
-      dados: { token: TOKEN },
+      dados: { token: TOKEN, mostrarConvocados: true },
     });
     expect(m(prisma.escalao.findFirst)).toHaveBeenCalledWith({
       where: { id: ESC, clubeId: "clube1" },
-      select: { calendarioPublicoToken: true },
+      select: { calendarioPublicoToken: true, calendarioPublicoMostrarConvocados: true },
     });
   });
 });
@@ -378,5 +391,37 @@ describe("nomeSubequipaPublico", () => {
       AGORA,
     );
     expect(c.proximos[0].equipa).toBe("Brancos");
+  });
+});
+
+describe("definirMostrarConvocadosCalendario", () => {
+  it("exige JOGOS_GERIR no escalão e grava só no escalão do clube", async () => {
+    m(prisma.escalao.updateMany).mockResolvedValue({ count: 1 });
+    expect(await definirMostrarConvocadosCalendario({ escalaoId: ESC, ativo: true })).toEqual({
+      sucesso: true,
+      dados: { mostrarConvocados: true },
+    });
+    expect(m(exigirCapacidade)).toHaveBeenCalledWith("JOGOS_GERIR", ESC);
+    expect(m(prisma.escalao.updateMany)).toHaveBeenCalledWith({
+      where: { id: ESC, clubeId: "clube1" },
+      data: { calendarioPublicoMostrarConvocados: true },
+    });
+    expect(m(revalidatePath)).toHaveBeenCalledWith("/jogos");
+  });
+
+  it("sem permissão, input inválido ou escalão de outro clube → nada muda", async () => {
+    expect((await definirMostrarConvocadosCalendario({ escalaoId: ESC })).sucesso).toBe(false);
+    m(exigirCapacidade).mockResolvedValueOnce({ ok: false, erro: "Sem permissão" });
+    expect(await definirMostrarConvocadosCalendario({ escalaoId: ESC, ativo: true })).toMatchObject({
+      sucesso: false,
+      erro: "Sem permissão",
+    });
+    expect(m(prisma.escalao.updateMany)).not.toHaveBeenCalled();
+    m(prisma.escalao.updateMany).mockResolvedValue({ count: 0 });
+    expect(await definirMostrarConvocadosCalendario({ escalaoId: ESC, ativo: false })).toMatchObject({
+      sucesso: false,
+      erro: "Escalão não encontrado",
+    });
+    expect(m(revalidatePath)).not.toHaveBeenCalled();
   });
 });

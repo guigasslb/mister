@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Home, Plane, TriangleAlert, Video } from "lucide-react";
+import { Pencil, Home, MapPin, Plane, TriangleAlert, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
@@ -27,6 +27,8 @@ import { eEscalaoFormacaoJovem } from "@/lib/schemas/social";
 import { mostrarCargaTreino } from "@/lib/utils";
 import { urlCard } from "@/lib/social/token";
 import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
+import { formatarConcentracao } from "@/lib/concentracao";
+import { separarLocal } from "@/lib/calendario-publico-partilha";
 
 // 🔁 v7 (§3.7): rótulos PT-PT dos formatos de jogo (para o cabeçalho do detalhe).
 const LABEL_FORMATO: Record<string, string> = {
@@ -57,6 +59,38 @@ function formatarHora(data: Date): string | null {
 }
 
 export const metadata: Metadata = { title: "Detalhe do jogo" };
+
+/** Concentração (§3.7/§8.11): hora e local; um URL no local vira «Ver no mapa». */
+function ConcentracaoJogo({
+  hora,
+  local,
+  dataJogo,
+}: {
+  hora: Date | null;
+  local: string | null;
+  dataJogo: Date;
+}) {
+  const { texto, mapaUrl } = separarLocal(local);
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 text-corpo-sec text-cinza-600">
+      <span className="font-medium text-cinza-700">Concentração:</span>
+      {hora && <span>{formatarConcentracao(hora, dataJogo)}</span>}
+      {hora && texto && <span aria-hidden>·</span>}
+      {texto && <span>{texto}</span>}
+      {mapaUrl && (
+        <a
+          href={mapaUrl}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="inline-flex min-h-11 items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+        >
+          <MapPin className="h-3.5 w-3.5" aria-hidden />
+          Ver no mapa
+        </a>
+      )}
+    </p>
+  );
+}
 
 export default async function DetalheJogoPage({
   params,
@@ -353,6 +387,13 @@ export default async function DetalheJogoPage({
           {j.competicao ? ` · ${j.competicao}` : ""}
           {j.local ? ` · ${j.local}` : ""}
         </p>
+        {(j.horaConcentracao || j.localConcentracao) && (
+          <ConcentracaoJogo
+            hora={j.horaConcentracao}
+            local={j.localConcentracao}
+            dataJogo={j.data}
+          />
+        )}
         {j.formato && (
           <p className="text-legenda text-cinza-500">
             {LABEL_FORMATO[j.formato] ?? j.formato} · 2 ×{" "}

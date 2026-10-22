@@ -11,8 +11,10 @@ import {
  * Calendário público de jogos do escalão (bíblia §8.11.1) — leitura SEM
  * autenticação pelo token do link. Expõe exclusivamente o que a página pública
  * mostra: identidade do clube, nome do escalão, época ativa e, por jogo, data/hora,
- * adversário, casa/fora, local, competição, subequipa e resultado (só se já
- * realizado). Nada de atletas, convocatórias, estatísticas, notas ou relatórios.
+ * adversário, casa/fora, local, competição, subequipa, resultado (só se já
+ * realizado), concentração e — só com o opt-in do escalão — os convocados como
+ * «Primeiro Último · nº». Nada de ids, fotos, datas de nascimento, contactos,
+ * encarregados, estatísticas, notas ou relatórios.
  */
 
 /** Token não-adivinhável: 24 bytes aleatórios → 32 caracteres base64url. */
@@ -25,6 +27,7 @@ export const SELECT_ESCALAO_CALENDARIO_PUBLICO = {
   id: true,
   nome: true,
   clubeId: true,
+  calendarioPublicoMostrarConvocados: true,
   clube: { select: { nome: true, corPrimaria: true, logoUrl: true } },
 } satisfies Prisma.EscalaoSelect;
 
@@ -39,14 +42,84 @@ export const SELECT_JOGO_CALENDARIO_PUBLICO = {
   golosSofridos: true,
   competicaoRef: { select: { nome: true } },
   equipaCompeticao: { select: { nome: true } },
+  horaConcentracao: true,
+  localConcentracao: true,
 } satisfies Prisma.JogoSelect;
+
+/**
+ * Convocados (só com o opt-in do escalão): apenas o nome e o número da
+ * participação no escalão/época do jogo, e só atletas do clube do escalão.
+ */
+export function selectConvocadosCalendarioPublico(ctx: {
+  escalaoId: string;
+  epocaId: string;
+  clubeId: string;
+}) {
+  return {
+    where: { convocado: true, atleta: { clubeId: ctx.clubeId } },
+    select: {
+      atleta: {
+        select: {
+          nome: true,
+          participacoes: {
+            where: { escalaoId: ctx.escalaoId, epocaId: ctx.epocaId },
+            select: { numero: true },
+            take: 1,
+          },
+        },
+      },
+    },
+  } satisfies Prisma.Jogo$convocatoriasArgs;
+}
+
+/** Select dos jogos: base fechada + convocados só quando o opt-in está ligado. */
+export function selectJogoCalendarioPublico(ctx: {
+  escalaoId: string;
+  epocaId: string;
+  clubeId: string;
+  mostrarConvocados: boolean;
+}) {
+  return ctx.mostrarConvocados
+    ? { ...SELECT_JOGO_CALENDARIO_PUBLICO, convocatorias: selectConvocadosCalendarioPublico(ctx) }
+    : SELECT_JOGO_CALENDARIO_PUBLICO;
+}
 
 type EscalaoCalendario = Prisma.EscalaoGetPayload<{
   select: typeof SELECT_ESCALAO_CALENDARIO_PUBLICO;
 }>;
 type JogoCalendario = Prisma.JogoGetPayload<{
   select: typeof SELECT_JOGO_CALENDARIO_PUBLICO;
-}>;
+}> & {
+  convocatorias?: { atleta: { nome: string; participacoes: { numero: number | null }[] } }[];
+};
+
+/**
+ * Nome público de um convocado (decisão do utilizador, 2026-10-22): primeira e
+ * última palavra do nome completo («Maria da Silva Santos» → «Maria Santos»);
+ * uma só palavra mantém-se. Espaços extra ignorados.
+ */
+export function nomePrimeiroUltimo(nome: string): string {
+  const palavras = nome.trim().split(/\s+/).filter(Boolean);
+  if (palavras.length <= 1) return palavras[0] ?? "";
+  return `${palavras[0]} ${palavras[palavras.length - 1]}`;
+}
+
+export interface ConvocadoPublico {
+  nome: string; // «Primeiro Último»
+  numero: number | null;
+}
+
+/** Ordena por número (sem número no fim) e depois por nome (pt). */
+export function ordenarConvocadosPublicos(lista: ConvocadoPublico[]): ConvocadoPublico[] {
+  return [...lista].sort((a, b) => {
+    if (a.numero !== b.numero) {
+      if (a.numero === null) return 1;
+      if (b.numero === null) return -1;
+      return a.numero - b.numero;
+    }
+    return a.nome.localeCompare(b.nome, "pt");
+  });
+}
 
 /** Jogos do escalão na época, sempre restritos ao clube do escalão. */
 export function whereJogosCalendarioPublico(
@@ -70,6 +143,10 @@ export interface JogoCalendarioPublico {
   equipa: string | null;
   /** Só em jogos já realizados com resultado completo. */
   resultado: { marcados: number; sofridos: number } | null;
+  /** Concentração (ISO + local livre); null sem hora nem local. */
+  concentracao: { hora: string | null; local: string | null } | null;
+  /** Convocados («Primeiro Último» + nº); null com o opt-in desligado ou sem convocatória. */
+  convocados: ConvocadoPublico[] | null;
 }
 
 export interface CalendarioPublico {
@@ -108,6 +185,7 @@ export function mapearJogoPublico(
   jogo: JogoCalendario,
   agora: Date,
   clubeNome?: string | null,
+  mostrarConvocados = false,
 ): JogoCalendarioPublico {
   const realizado = jogo.data.getTime() < agora.getTime();
   const temResultado = jogo.golosMarcados != null && jogo.golosSofridos != null;
@@ -123,6 +201,22 @@ export function mapearJogoPublico(
     resultado:
       realizado && temResultado
         ? { marcados: jogo.golosMarcados as number, sofridos: jogo.golosSofridos as number }
+        : null,
+    concentracao:
+      jogo.horaConcentracao || jogo.localConcentracao?.trim()
+        ? {
+            hora: jogo.horaConcentracao ? jogo.horaConcentracao.toISOString() : null,
+            local: jogo.localConcentracao?.trim() || null,
+          }
+        : null,
+    convocados:
+      mostrarConvocados && jogo.convocatorias && jogo.convocatorias.length > 0
+        ? ordenarConvocadosPublicos(
+            jogo.convocatorias.map((c) => ({
+              nome: nomePrimeiroUltimo(c.atleta.nome),
+              numero: c.atleta.participacoes[0]?.numero ?? null,
+            })),
+          )
         : null,
   };
 }
@@ -146,11 +240,11 @@ export function montarCalendarioPublico(
     epoca: epoca ? { nome: epoca.nome } : null,
     proximos: ordenados
       .filter((j) => j.data.getTime() >= ref)
-      .map((j) => mapearJogoPublico(j, agora, escalao.clube.nome)),
+      .map((j) => mapearJogoPublico(j, agora, escalao.clube.nome, escalao.calendarioPublicoMostrarConvocados)),
     realizados: ordenados
       .filter((j) => j.data.getTime() < ref)
       .reverse()
-      .map((j) => mapearJogoPublico(j, agora, escalao.clube.nome)),
+      .map((j) => mapearJogoPublico(j, agora, escalao.clube.nome, escalao.calendarioPublicoMostrarConvocados)),
   };
 }
 
@@ -179,7 +273,12 @@ export async function obterCalendarioPublico(
   const jogos = epoca
     ? await prisma.jogo.findMany({
         where: whereJogosCalendarioPublico(escalao, epoca.id),
-        select: SELECT_JOGO_CALENDARIO_PUBLICO,
+        select: selectJogoCalendarioPublico({
+          escalaoId: escalao.id,
+          epocaId: epoca.id,
+          clubeId: escalao.clubeId,
+          mostrarConvocados: escalao.calendarioPublicoMostrarConvocados,
+        }),
         orderBy: { data: "asc" },
       })
     : [];

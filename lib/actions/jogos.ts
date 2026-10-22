@@ -387,6 +387,8 @@ export async function criarJogo(dados: unknown): Promise<Resultado<Jogo>> {
       equipaCompeticaoId: subequipa.dados,
       formato,
       local: parsed.data.local ?? null,
+      horaConcentracao: parsed.data.horaConcentracao ?? null,
+      localConcentracao: parsed.data.localConcentracao || null,
       golosMarcados: parsed.data.golosMarcados ?? null,
       golosSofridos: parsed.data.golosSofridos ?? null,
       faltas1aParte: parsed.data.faltas1aParte ?? null,
@@ -469,6 +471,12 @@ export async function atualizarJogo(id: string, dados: unknown): Promise<Resulta
         competicaoId: parsed.data.competicaoId ?? null,
         equipaCompeticaoId: subequipa.dados,
         local: parsed.data.local ?? null,
+        // Concentração: ausente no input ⇒ não altera (undefined); null ⇒ limpa.
+        horaConcentracao: parsed.data.horaConcentracao,
+        localConcentracao:
+          parsed.data.localConcentracao === undefined
+            ? undefined
+            : parsed.data.localConcentracao || null,
         golosMarcados: parsed.data.golosMarcados ?? null,
         golosSofridos: parsed.data.golosSofridos ?? null,
         faltas1aParte: parsed.data.faltas1aParte ?? null,
