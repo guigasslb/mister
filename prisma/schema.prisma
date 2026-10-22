@@ -470,6 +470,9 @@ model Escalao {
   // Fase expand: nullable; contract (NOT NULL) após backfill (Apêndice C).
   seccaoId                 String?
   seccao                   Seccao?  @relation(fields: [seccaoId], references: [id])
+  // 🔁 2026-10-21 (§8.11.1): token do link público só-de-leitura do calendário de jogos
+  // (`/r/calendario/<token>`). null = sem link. Regenerar substitui; revogar põe null.
+  calendarioPublicoToken   String?  @unique
   criadoEm                 DateTime @default(now())
 
   sessoes       Sessao[]

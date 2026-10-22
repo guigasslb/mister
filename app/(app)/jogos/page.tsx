@@ -16,6 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { listarJogos } from "@/lib/actions/jogos";
+import { obterLinkCalendarioPublico } from "@/lib/actions/calendario-publico";
+import { PartilharCalendario } from "@/components/jogos/PartilharCalendario";
 import { ordenarJogosPorProximidade } from "@/lib/ordenacao-jogos";
 import { LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
 import { listarEscaloes } from "@/lib/actions/escaloes";
@@ -138,6 +140,14 @@ export default async function JogosPage({
     ? escaloes.filter((e) => modalidadePorEscalao.get(e.id) === modalidade)
     : escaloes;
 
+  // §8.11.1: link público do calendário — só com um escalão selecionado e
+  // `JOGOS_GERIR` nesse escalão (a action volta a verificar âmbito e clube).
+  const escalaoSelecionado = escalaoId ? escaloes.find((e) => e.id === escalaoId) : undefined;
+  const linkCalendario =
+    podeGerirJogos && escalaoSelecionado
+      ? await obterLinkCalendarioPublico({ escalaoId: escalaoSelecionado.id })
+      : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -149,6 +159,13 @@ export default async function JogosPage({
               Ver na Agenda
             </Link>
           </Button>
+          {escalaoSelecionado && linkCalendario?.sucesso && (
+            <PartilharCalendario
+              escalaoId={escalaoSelecionado.id}
+              escalaoNome={escalaoSelecionado.nome}
+              tokenInicial={linkCalendario.dados.token}
+            />
+          )}
           <Button asChild variant="outline">
             <Link href="/jogos/competicoes">
               <Trophy className="h-4 w-4" />
