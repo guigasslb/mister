@@ -10,6 +10,7 @@ import { LABEL_MOMENTO, MOMENTOS, lerSubprincipios } from "@/lib/schemas/modeloJ
 import { diagramaSchema } from "@/lib/schemas/exercicio";
 import { MiniaturaCampo } from "@/components/campo/MiniaturaCampo";
 import { FiltroEscalaoModelo } from "@/components/modelo-jogo/FiltroEscalaoModelo";
+import { BibliotecaSituacoes } from "@/components/modelo-jogo/BibliotecaSituacoes";
 import type { MomentoJogo } from "@prisma/client";
 
 function hrefMomento(m: MomentoJogo | null, escalaoId?: string): string {
@@ -22,12 +23,54 @@ function hrefMomento(m: MomentoJogo | null, escalaoId?: string): string {
 
 export const metadata: Metadata = { title: "Modelo de jogo" };
 
+// §24.6: separadores da página (links). Sem `separador` → «Princípios».
+const CLASSE_SEPARADOR =
+  "px-4 py-2.5 text-corpo font-medium border-b-2 transition-colors";
+
+function Separadores({ situacoes }: { situacoes: boolean }) {
+  return (
+    <nav aria-label="Separadores do modelo de jogo" className="-mb-px flex flex-wrap border-b border-cinza-200">
+      <Link
+        href="/modelo-jogo"
+        aria-current={!situacoes ? "page" : undefined}
+        className={`${CLASSE_SEPARADOR} ${!situacoes ? "border-primary text-primary" : "border-transparent text-cinza-600 hover:text-cinza-900"}`}
+      >
+        Princípios
+      </Link>
+      <Link
+        href="/modelo-jogo?separador=situacoes"
+        aria-current={situacoes ? "page" : undefined}
+        className={`${CLASSE_SEPARADOR} ${situacoes ? "border-primary text-primary" : "border-transparent text-cinza-600 hover:text-cinza-900"}`}
+      >
+        Situações de jogo
+      </Link>
+    </nav>
+  );
+}
+
 export default async function ModeloJogoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ momento?: string; escalaoId?: string }>;
+  searchParams: Promise<{
+    momento?: string;
+    escalaoId?: string;
+    separador?: string;
+    categoria?: string;
+    q?: string;
+  }>;
 }) {
-  const { momento: momentoParam, escalaoId } = await searchParams;
+  const { momento: momentoParam, escalaoId, separador, categoria, q } = await searchParams;
+
+  if (separador === "situacoes") {
+    return (
+      <div className="space-y-6">
+        <h1>Modelo de jogo</h1>
+        <Separadores situacoes />
+        <BibliotecaSituacoes escalaoId={escalaoId} categoria={categoria} q={q} />
+      </div>
+    );
+  }
+
   const momento = MOMENTOS.includes(momentoParam as MomentoJogo)
     ? (momentoParam as MomentoJogo)
     : undefined;
@@ -52,6 +95,8 @@ export default async function ModeloJogoPage({
           </Link>
         </Button>
       </div>
+
+      <Separadores situacoes={false} />
 
       {/* Tabs por momento de jogo */}
       <div className="-mb-px flex flex-wrap border-b border-cinza-200">

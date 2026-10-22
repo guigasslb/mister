@@ -336,11 +336,15 @@ describe("Retrocesso — âmbitos TODO_CLUBE e PROPRIOS_ESCALOES não afetados",
       capacidades: ["PLANTEL_GERIR"],
       seccoesCoordenadas: [],
     });
+    mocked(prisma.escalao.findFirst).mockResolvedValue({ id: "qualquer-escalao" });
 
     const r = await exigirCapacidade("PLANTEL_GERIR", "qualquer-escalao");
     expect(r.ok).toBe(true);
-    // Nenhuma consulta ao escalão — TODO_CLUBE passa diretamente
-    expect(prisma.escalao.findFirst).not.toHaveBeenCalled();
+    // Só a verificação de pertença ao clube — sem filtro de secção.
+    const arg = mocked(prisma.escalao.findFirst).mock.calls[0][0] as {
+      where: Record<string, unknown>;
+    };
+    expect(arg.where).toEqual({ id: "qualquer-escalao", clubeId: CLUBE_ID });
   });
 
   it("PROPRIOS_ESCALOES continua a verificar escaloesAtribuidos: permite se atribuído", async () => {
@@ -406,6 +410,34 @@ describe("Capacidade de nível clube (CLUBE_*) com perfil SECCAO — sem restri�
     const r = await exigirCapacidade("CLUBE_ESCALOES", "escalao-qualquer");
     expect(r.ok).toBe(true);
     // CLUBE_ESCALOES não está em CAPACIDADES_LIMITADAS_POR_AMBITO → sem consulta de escalão
+    expect(prisma.escalao.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. Isolamento entre clubes — âmbito TODO_CLUBE (auditoria 2026-10, item 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Isolamento multi-tenant — TODO_CLUBE com escalão de outro clube", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("nega escalão que não pertence ao clube do membro (mover jogo/sessão/planeamento para outro clube)", async () => {
+    setupMembro({ ambito: "TODO_CLUBE", capacidades: ["JOGOS_GERIR"] });
+    mocked(prisma.escalao.findFirst).mockResolvedValue(null);
+
+    const r = await exigirCapacidade("JOGOS_GERIR", "escalao-de-outro-clube");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.erro).toBe("Escalão não encontrado");
+    const arg = mocked(prisma.escalao.findFirst).mock.calls[0][0] as {
+      where: Record<string, unknown>;
+    };
+    expect(arg.where).toEqual({ id: "escalao-de-outro-clube", clubeId: CLUBE_ID });
+  });
+
+  it("sem escalaoId não consulta escalões (capacidade de nível clube)", async () => {
+    setupMembro({ ambito: "TODO_CLUBE", capacidades: ["TREINOS_GERIR"] });
+    const r = await exigirCapacidade("TREINOS_GERIR");
+    expect(r.ok).toBe(true);
     expect(prisma.escalao.findFirst).not.toHaveBeenCalled();
   });
 });

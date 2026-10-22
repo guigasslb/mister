@@ -14,7 +14,9 @@ import { listarQuadrosTaticos } from "@/lib/actions/modeloJogo";
 import { NOME_QUADRO_PLANO_JOGO } from "@/lib/schemas/modeloJogo";
 import { diagramaSchema, type DiagramaCampo } from "@/lib/schemas/exercicio";
 import { prisma } from "@/lib/db";
-import { obterMembroAtual } from "@/lib/permissoes";
+import { exigirCapacidade, obterMembroAtual } from "@/lib/permissoes";
+import { listarCategoriasSituacao, listarEscaloesSituacoes } from "@/lib/actions/situacoesJogo";
+import type { DadosSituacoesJogo } from "@/components/jogos/SituacoesJogo";
 import { JogoDetalhe } from "@/components/jogos/JogoDetalhe";
 import { ApagarJogoButton } from "@/components/jogos/ApagarJogoButton";
 import { FecharJogoButton } from "@/components/jogos/FecharJogoButton";
@@ -130,6 +132,38 @@ export default async function DetalheJogoPage({
     const parsed = diagramaSchema.safeParse(quadroPlano.diagrama);
     quadroInicial = { id: quadroPlano.id, diagrama: parsed.success ? parsed.data : null };
   }
+
+  // §24.7: situações no jogo = os restantes quadros do jogo (o do plano continua a
+  // ser o `find` por nome acima). Diagrama inválido → cartão sem diagrama.
+  const quadrosSituacao = (resQuadros.sucesso ? resQuadros.dados : [])
+    .filter((q) => q.nome !== NOME_QUADRO_PLANO_JOGO)
+    .map((q) => {
+      const parsed = diagramaSchema.safeParse(q.diagrama);
+      return {
+        id: q.id,
+        nome: q.nome,
+        notas: q.notas,
+        diagrama: parsed.success ? parsed.data : null,
+        situacaoOrigemId: q.situacaoOrigemId,
+      };
+    });
+  // RN-SJ-12: gestão só com MODELO_JOGO_GERIR no âmbito do escalão do jogo.
+  const podeGerirSituacoes = (await exigirCapacidade("MODELO_JOGO_GERIR", j.escalaoId)).ok;
+  const [resEscaloesSituacoes, resCategoriasSituacao] = podeGerirSituacoes
+    ? await Promise.all([listarEscaloesSituacoes(), listarCategoriasSituacao(j.escalaoId)])
+    : [null, null];
+  const situacoesJogo: DadosSituacoesJogo = {
+    quadros: quadrosSituacao,
+    podeGerir: podeGerirSituacoes,
+    escalaoId: j.escalaoId,
+    escalaoNome: j.escalao.nome,
+    escaloesAcessiveis: resEscaloesSituacoes?.sucesso
+      ? resEscaloesSituacoes.dados.map((e) => ({ id: e.id, nome: e.nome }))
+      : [],
+    categoriasEscalaoJogo: resCategoriasSituacao?.sucesso
+      ? resCategoriasSituacao.dados.map((c) => ({ id: c.id, nome: c.nome }))
+      : [],
+  };
 
   // Métricas a mostrar: ativas + as que já têm valores neste jogo (histórico, secção 22.1)
   const idsComValor = new Set(
@@ -463,6 +497,7 @@ export default async function DetalheJogoPage({
         escalaoJovem={escalaoJovemDisciplina}
         quadroInicial={quadroInicial}
         podeGerirQuadro={podeGerirQuadro}
+        situacoesJogo={situacoesJogo}
         mostrarModoAoVivo={mostrarModoAoVivo}
         sessaoAoVivoTerminada={sessaoAoVivoTerminada}
         linhasMinutosAoVivo={linhasMinutosAoVivo}
