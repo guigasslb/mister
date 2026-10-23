@@ -1,6 +1,7 @@
 import type { CalendarioPublico, JogoCalendarioPublico } from "@/lib/calendario-publico";
 import { tituloConfronto } from "@/lib/jogo-confronto";
 import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
+import { temaPdf } from "@/lib/pdf/tema";
 
 /**
  * Pré-visualização do link público do calendário (bíblia §8.11.1) — título,
@@ -124,4 +125,38 @@ export function resolverUrlBase(opcoes: {
   const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
   if (!local) url.protocol = "https:";
   return new URL(url.origin);
+}
+
+/**
+ * Estado do painel expansível de um jogo (bíblia §8.11.1), derivado só do DTO
+ * público: `expansivel` (há concentração ou convocados visíveis), `temConvocados`
+ * (convocatória feita e visível — mostra o badge «Convocatória») e o rótulo do
+ * `summary`. Não expõe nada além do que a projeção já traz.
+ */
+export function detalheJogoPublico(
+  jogo: Pick<JogoCalendarioPublico, "concentracao" | "convocados">,
+): { expansivel: boolean; temConvocados: boolean; temConcentracao: boolean; rotulo: string } {
+  const temConcentracao = jogo.concentracao != null;
+  const temConvocados = (jogo.convocados?.length ?? 0) > 0;
+  const rotulo = [temConcentracao && "Concentração", temConvocados && "Convocados"]
+    .filter(Boolean)
+    .join(" e ");
+  return { expansivel: temConcentracao || temConvocados, temConvocados, temConcentracao, rotulo };
+}
+
+/**
+ * Cores AA derivadas da cor do clube para a página pública (botão «Ver no mapa»,
+ * badge «Convocatória», «Ver detalhes»): fundo sólido + texto com contraste ≥4.5:1
+ * e a cor do clube como texto sobre branco (escurecida o mínimo para AA). Reutiliza
+ * `temaPdf` (mesma fórmula WCAG 2.1). Cor inválida → laranja da marca.
+ */
+export function variaveisCorCalendarioPublico(
+  corPrimaria: string | null | undefined,
+): Record<"--cal-solido" | "--cal-solido-texto" | "--cal-acento-texto", string> {
+  const tema = temaPdf(corPrimaria);
+  return {
+    "--cal-solido": tema.solidoFundo,
+    "--cal-solido-texto": tema.solidoTexto,
+    "--cal-acento-texto": tema.acentoTexto,
+  };
 }
