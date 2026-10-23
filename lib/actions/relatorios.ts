@@ -3,7 +3,10 @@
 import { prisma } from "@/lib/db";
 import { obterEpocaAtiva, obterClubeIdAtual } from "@/lib/epoca-context";
 import { podeLerEscalao } from "@/lib/permissoes";
-import { ok, erro, type Resultado } from "@/lib/utils";
+import { ok, erro, erroDeValidacao, type Resultado } from "@/lib/utils";
+import { relatorioEquipaSchema } from "@/lib/schemas/analise";
+import { filtroJogosDaSubequipa } from "@/lib/subequipas-filtro";
+import { SELECT_JOGO_INTERNO, ehJogoInterno } from "@/lib/subequipas";
 
 export interface RelatorioEquipa {
   escalaoNome: string;
@@ -22,9 +25,12 @@ export interface RelatorioEquipa {
 
 export async function obterRelatorioEquipa(
   escalaoId: string,
+  equipaCompeticaoId?: string,
 ): Promise<Resultado<RelatorioEquipa>> {
   const clubeId = await obterClubeIdAtual();
   if (!clubeId) return erro("Não autenticado");
+  const parsed = relatorioEquipaSchema.safeParse({ equipaCompeticaoId });
+  if (!parsed.success) return erroDeValidacao(parsed.error);
   const epoca = await obterEpocaAtiva();
   if (!epoca) return erro("Nenhuma época ativa");
 
@@ -32,10 +38,16 @@ export async function obterRelatorioEquipa(
   if (!escalao) return erro("Escalão não encontrado");
   if (!(await podeLerEscalao(escalaoId))) return erro("Sem permissão neste escalão");
 
+  // §23.11.3 regra 10: filtro opcional «Equipa» (jogos e estatísticas dos atletas).
+  const filtroEquipa = parsed.data.equipaCompeticaoId
+    ? await filtroJogosDaSubequipa(prisma, clubeId, parsed.data.equipaCompeticaoId)
+    : {};
+
   const [jogos, sessoes, nAtletas, estatisticas] = await Promise.all([
     prisma.jogo.findMany({
-      where: { epocaId: epoca.id, escalaoId },
-      select: { golosMarcados: true, golosSofridos: true },
+      where: { epocaId: epoca.id, escalaoId, ...filtroEquipa },
+      // §23.11.3 regra 10: identifica os jogos internos (A vs B), fora dos totais.
+      select: { golosMarcados: true, golosSofridos: true, ...SELECT_JOGO_INTERNO },
     }),
     // Só sessões JÁ EXECUTADAS (data < agora) — simetria com obterAnaliticoEscalao
     // (sessoesExecutadas) e com a contagem de jogos com resultado abaixo: o
@@ -53,7 +65,7 @@ export async function obterRelatorioEquipa(
       },
     }),
     prisma.estatisticaAtleta.findMany({
-      where: { jogo: { epocaId: epoca.id, escalaoId } },
+      where: { jogo: { epocaId: epoca.id, escalaoId, ...filtroEquipa } },
       include: { atleta: { select: { id: true, nome: true } } },
     }),
   ]);
@@ -68,7 +80,7 @@ export async function obterRelatorioEquipa(
   // agendados/futuros e quebrava a identidade jogos === V + E + D.
   let jogosComResultado = 0;
   for (const j of jogos) {
-    if (j.golosMarcados == null || j.golosSofridos == null) continue;
+    if (j.golosMarcados == null || j.golosSofridos == null || ehJogoInterno(j)) continue;
     jogosComResultado++;
     golosMarcados += j.golosMarcados;
     golosSofridos += j.golosSofridos;

@@ -28,6 +28,9 @@ export interface LinhaClassificacao {
 
 /** Jogo da própria equipa com resultado final, na perspetiva do clube. */
 export interface JogoClassificacao {
+  // §23.11.3 regra 7: subequipa própria que disputou o jogo (nome do participante
+  // `PROPRIO`). Ausente = a equipa própria implícita (`nomeEquipaPropria`).
+  equipa?: string;
   adversario: string;
   golosMarcados: number; // golos da própria equipa
   golosSofridos: number; // golos do adversário
@@ -53,6 +56,9 @@ export interface ResultadoClassificacao {
  */
 export interface ClassificacaoArgs {
   nomeEquipaPropria: string;
+  // §23.11.3 regra 7: nomes de todas as equipas próprias (subequipas `PROPRIO`),
+  // destacadas com `ehProprio`. `nomeEquipaPropria` é sempre própria.
+  nomesEquipasProprias?: string[];
   formato: FormatoCompeticao;
   jogosProprios: JogoClassificacao[];
   resultados: ResultadoClassificacao[];
@@ -85,6 +91,7 @@ export interface ClassificacaoArgs {
 export function calcularClassificacao(args: ClassificacaoArgs): LinhaClassificacao[] {
   const {
     nomeEquipaPropria,
+    nomesEquipasProprias = [],
     formato,
     jogosProprios,
     resultados,
@@ -100,7 +107,9 @@ export function calcularClassificacao(args: ClassificacaoArgs): LinhaClassificac
       ? { vitoria: pontosVitoria, empate: pontosEmpate, derrota: pontosDerrota }
       : { vitoria: 0, empate: 0, derrota: 0 };
 
-  const nomeProprio = nomeEquipaPropria.trim();
+  const nomesProprios = new Set(
+    [nomeEquipaPropria, ...nomesEquipasProprias].map((n) => n.trim()).filter((n) => n !== ""),
+  );
   const tabela = new Map<string, LinhaClassificacao>();
 
   const linha = (equipaBruta: string): LinhaClassificacao | null => {
@@ -110,7 +119,7 @@ export function calcularClassificacao(args: ClassificacaoArgs): LinhaClassificac
     if (!l) {
       l = {
         equipa,
-        ehProprio: nomeProprio !== "" && equipa === nomeProprio,
+        ehProprio: nomesProprios.has(equipa),
         jogos: 0,
         vitorias: 0,
         empates: 0,
@@ -144,10 +153,10 @@ export function calcularClassificacao(args: ClassificacaoArgs): LinhaClassificac
     }
   };
 
-  // Jogos próprios: a própria equipa e o adversário (espelho). Já filtrados a
-  // montante para jogos com resultado final (§10.9).
+  // Jogos próprios: a própria equipa (a subequipa do jogo, se indicada) e o
+  // adversário (espelho). Já filtrados a montante para jogos com resultado final (§10.9).
   for (const j of jogosProprios) {
-    registar(nomeEquipaPropria, j.golosMarcados, j.golosSofridos);
+    registar(j.equipa ?? nomeEquipaPropria, j.golosMarcados, j.golosSofridos);
     registar(j.adversario, j.golosSofridos, j.golosMarcados);
   }
 

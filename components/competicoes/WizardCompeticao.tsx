@@ -36,6 +36,7 @@ import {
 } from "@/lib/schemas/competicao";
 import { LABEL_TIPO_JOGO } from "@/lib/schemas/jogo";
 import { gerarLiga, gerarBracket, type EquipaQuadro } from "@/lib/quadro-cliente";
+import { participantesWizard, type EquipaWizard } from "@/lib/subequipas-ui";
 import { criarCompeticaoCompleta } from "@/lib/actions/competicoes";
 import type {
   AmbitoCompeticao,
@@ -159,7 +160,7 @@ export function WizardCompeticao({
   const [erros, setErros] = useState<Record<string, string>>({});
 
   // ── Passo 2 — equipas ──────────────────────────────────────────────────────
-  const [equipas, setEquipas] = useState<EquipaQuadro[]>([]);
+  const [equipas, setEquipas] = useState<EquipaWizard[]>([]);
   const [novaEquipa, setNovaEquipa] = useState("");
   const [duasMaos, setDuasMaos] = useState(false);
 
@@ -178,15 +179,14 @@ export function WizardCompeticao({
   // P1.6 (§23.4 Fluxo D): em competições PRÓPRIAS a equipa do escalão é o primeiro
   // participante (marcada PROPRIO, não removível); as restantes são EXTERNO. Numa
   // EXTERNA todos os participantes são as equipas introduzidas pelo utilizador.
-  const temPropria = ambito === "PROPRIA" && escalaoNome !== "";
-  const participantes = useMemo(() => {
-    const externas = equipas.map((e) => ({ nome: e.nome, ehPropria: false }));
-    if (!temPropria) return externas;
-    const semDup = externas.filter(
-      (e) => e.nome.toLocaleLowerCase("pt") !== escalaoNome.toLocaleLowerCase("pt"),
-    );
-    return [{ nome: escalaoNome, ehPropria: true }, ...semDup];
-  }, [equipas, temPropria, escalaoNome]);
+  // §23.11.3 regra 9: entradas marcadas como «Equipa própria» (subequipas) — se
+  // houver alguma, o escalão deixa de ser juntado automaticamente.
+  const participantes = useMemo(
+    () => participantesWizard(equipas, ambito === "PROPRIA", escalaoNome),
+    [equipas, ambito, escalaoNome],
+  );
+  const temPropria = participantes.some((p) => p.automatica);
+  const algumaMarcada = equipas.some((e) => e.propria);
 
   // Deslocamento de numeração da lista de equipas externas (1 quando há própria).
   const offsetNumeracao = temPropria ? 1 : 0;
@@ -211,8 +211,14 @@ export function WizardCompeticao({
       toast.error("Essa equipa já está na lista.");
       return;
     }
-    setEquipas((atual) => [...atual, { nome: nomeTrim }]);
+    setEquipas((atual) => [...atual, { nome: nomeTrim, propria: false }]);
     setNovaEquipa("");
+  }
+
+  function alternarPropria(indice: number) {
+    setEquipas((atual) =>
+      atual.map((e, i) => (i === indice ? { ...e, propria: !e.propria } : e)),
+    );
   }
 
   function removerEquipa(indice: number) {
@@ -319,6 +325,7 @@ export function WizardCompeticao({
         posicao: i + 1,
         tipo: p.ehPropria ? ("PROPRIO" as const) : ("EXTERNO" as const),
         ...(p.ehPropria ? { escalaoVinculadoId: escalaoId } : {}),
+        ...(p.ehPropria && !p.automatica ? { propria: true } : {}),
       })),
       jogos: jogos.map((j) => ({
         equipaCasa: j.equipaCasa,
@@ -613,6 +620,20 @@ export function WizardCompeticao({
                       {e.nome}
                     </span>
                     <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        aria-pressed={e.propria}
+                        onClick={() => alternarPropria(i)}
+                        title="Equipa própria (subequipa do escalão)"
+                        className={cn(
+                          "min-h-[44px] shrink-0 rounded-md border px-2.5 text-legenda font-medium transition-colors",
+                          e.propria
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-cinza-200 text-cinza-600 hover:bg-cinza-50",
+                        )}
+                      >
+                        {e.propria ? "Própria ✓" : "Equipa própria"}
+                      </button>
                       <Button
                         type="button"
                         variant="ghost"
@@ -652,6 +673,11 @@ export function WizardCompeticao({
               A ordem define a posição (usada nos emparelhamentos de torneio/taça).
               {temPropria
                 ? " A tua equipa é o primeiro participante (própria)."
+                : ""}
+              {" "}Marca «Equipa própria» nas subequipas do clube (ex.: {escalaoNome || "Benjamins"} A
+              e B).
+              {algumaMarcada && ambito === "PROPRIA"
+                ? ` Com equipas próprias marcadas, «${escalaoNome}» não é juntada automaticamente.`
                 : ""}
             </p>
 

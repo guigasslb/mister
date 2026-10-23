@@ -19,7 +19,16 @@ import {
 import { valorMetricaValido } from "@/lib/schemas/metrica";
 import { modalidadeEfetiva, filtroModalidadeJogo } from "@/lib/modalidade-escalao";
 import { recalcularResultadoJogo } from "@/lib/placar-jogo";
-import { sincronizarConfrontoDoJogo } from "@/lib/sincronizacao-jogo-confronto";
+import {
+  sincronizarConfrontoDoJogo,
+  validarLigacaoJogoConfronto,
+} from "@/lib/sincronizacao-jogo-confronto";
+import {
+  validarSubequipaJogo,
+  placarDivergente,
+  adversarioEhOutraSubequipa,
+  ERRO_JOGO_ENTRE_SUBEQUIPAS,
+} from "@/lib/subequipas";
 import {
   Prisma,
   type Epoca,
@@ -38,6 +47,8 @@ const INCLUDE_LISTA = {
   },
   // Etiqueta discreta de autor nas listagens: quem criou o jogo (§ mostrar criador).
   criador: { select: { id: true, nome: true } },
+  // §23.11.3 regra 11: subequipa da competição (nome em vez do do escalão).
+  equipaCompeticao: { select: { id: true, nome: true } },
 } as const;
 
 // F5 (M15): eventos ordenados por minuto e depois por ordem de registo.
@@ -50,6 +61,11 @@ const ORDER_EVENTOS: Prisma.EventoJogoOrderByWithRelationInput[] = [
 const INCLUDE_DETALHE = {
   escalao: {
     select: { id: true, nome: true, seccao: { select: { modalidade: true } } },
+  },
+  // §23.11.3 regras 4 e 11: subequipa do jogo + o seu plantel nesta competição
+  // (vazio ⇒ convocáveis = todo o escalão; senão o plantel, com exceção explícita).
+  equipaCompeticao: {
+    select: { id: true, nome: true, atletas: { select: { atletaId: true } } },
   },
   convocatorias: {
     include: {
@@ -83,7 +99,119 @@ export type JogoListaItem = JogoLista & { modalidade: Modalidade };
 export type JogoDetalhe = Prisma.JogoGetPayload<{ include: typeof INCLUDE_DETALHE }> & {
   numeroPorAtleta: Record<string, number | null>;
   modalidade: Modalidade;
+  /** Confronto interno A vs B (§23.11.3 regras 5–6); `null` nos restantes jogos. */
+  confrontoInterno: ConfrontoInternoJogo | null;
 };
+
+/**
+ * O jogo da OUTRA subequipa no mesmo confronto interno (A vs B — §23.11.3).
+ * `convocadosAtletaIds` não podem ser convocados neste jogo (bloqueio);
+ * `placarDivergente` assinala placares incoerentes entre os dois jogos (prevalece
+ * no confronto o último gravado).
+ */
+export type ConfrontoInternoJogo = {
+  jogoId: string;
+  equipaNome: string;
+  convocadosAtletaIds: string[];
+  placarDivergente: boolean;
+};
+
+/**
+ * Jogo da outra subequipa ligado ao mesmo confronto (só existe num confronto
+ * interno A vs B). Jogos sem subequipa ou sem confronto ⇒ `null` sem query.
+ */
+async function outroJogoDoConfronto(
+  db: Prisma.TransactionClient,
+  jogo: { id: string; resultadoCompeticaoId?: string | null; equipaCompeticaoId?: string | null },
+) {
+  if (!jogo.resultadoCompeticaoId || !jogo.equipaCompeticaoId) return null;
+  return db.jogo.findFirst({
+    where: {
+      id: { not: jogo.id },
+      resultadoCompeticaoId: jogo.resultadoCompeticaoId,
+      AND: [
+        { equipaCompeticaoId: { not: null } },
+        { equipaCompeticaoId: { not: jogo.equipaCompeticaoId } },
+      ],
+    },
+    select: {
+      id: true,
+      adversario: true,
+      golosMarcados: true,
+      golosSofridos: true,
+      equipaCompeticao: { select: { nome: true } },
+      convocatorias: { where: { convocado: true }, select: { atletaId: true } },
+    },
+  });
+}
+
+/**
+ * §23.11.3 regra 5: um atleta não pode estar convocado nos dois jogos do mesmo
+ * confronto interno. Corre DENTRO da transação de escrita: bloqueia (FOR UPDATE)
+ * os jogos do confronto, pela mesma ordem, para que duas gravações concorrentes de
+ * A e de B se serializem e a segunda veja os convocados da primeira. Devolve o erro
+ * (com o campo por atleta) ou `null`. Jogos sem subequipa/confronto: sem queries.
+ */
+async function conflitoConfrontoInterno(
+  tx: Prisma.TransactionClient,
+  jogo: { id: string; resultadoCompeticaoId?: string | null; equipaCompeticaoId?: string | null },
+  atletaIds: string[],
+): Promise<Resultado<never> | null> {
+  if (!jogo.resultadoCompeticaoId || !jogo.equipaCompeticaoId) return null;
+  await tx.$queryRaw`SELECT "id" FROM "Jogo" WHERE "resultadoCompeticaoId" = ${jogo.resultadoCompeticaoId} ORDER BY "id" FOR UPDATE`;
+  const outro = await outroJogoDoConfronto(tx, jogo);
+  if (!outro) return null;
+  const pedidos = new Set(atletaIds);
+  const emConflito = outro.convocatorias.filter((c) => pedidos.has(c.atletaId));
+  if (emConflito.length === 0) return null;
+  const mensagem = `Este atleta já está convocado por ${
+    outro.equipaCompeticao?.nome ?? outro.adversario
+  } neste confronto`;
+  return erro(mensagem, Object.fromEntries(emConflito.map((c) => [c.atletaId, mensagem])));
+}
+
+/**
+ * Valida a competição (clube + escalão do jogo) e a subequipa do jogo
+ * (§23.11.3 regra 1). Devolve o `equipaCompeticaoId` a gravar.
+ */
+async function resolverSubequipaJogo(
+  clubeId: string,
+  dados: {
+    escalaoId: string;
+    adversario: string;
+    competicaoId?: string | null;
+    equipaCompeticaoId?: string | null;
+  },
+  ligadoAConfronto: boolean,
+): Promise<Resultado<string | null>> {
+  let proprias: { id: string; nome: string }[] = [];
+  // A competição (se indicada) tem de pertencer ao clube e ao escalão do jogo.
+  if (dados.competicaoId) {
+    const comp = await prisma.competicao.findFirst({
+      where: { id: dados.competicaoId, clubeId, escalaoId: dados.escalaoId },
+      select: {
+        id: true,
+        equipas: { where: { tipo: "PROPRIO" }, select: { id: true, nome: true } },
+      },
+    });
+    if (!comp)
+      return erro("A competição selecionada não existe ou não pertence a este escalão");
+    proprias = comp.equipas;
+  }
+  const v = validarSubequipaJogo(
+    dados.competicaoId,
+    dados.equipaCompeticaoId,
+    proprias.map((e) => e.id),
+  );
+  if (!v.ok) return erro(v.erro, { equipaCompeticaoId: v.erro });
+  // A vs B criado à mão (sem confronto) contaria a dobrar: tem de vir do quadro.
+  if (
+    !ligadoAConfronto &&
+    adversarioEhOutraSubequipa(dados.adversario, v.equipaCompeticaoId, proprias)
+  )
+    return erro(ERRO_JOGO_ENTRE_SUBEQUIPAS, { adversario: ERRO_JOGO_ENTRE_SUBEQUIPAS });
+  return ok(v.equipaCompeticaoId);
+}
 
 /** Números de camisola dos atletas indicados, no escalão/época dados. */
 async function resolverNumeros(
@@ -205,7 +333,16 @@ export async function obterJogo(id: string): Promise<Resultado<JogoDetalhe>> {
     jogo.modalidadeAtividade,
     jogo.escalao.seccao?.modalidade,
   );
-  return ok({ ...jogo, numeroPorAtleta, modalidade });
+  const outro = await outroJogoDoConfronto(prisma, jogo);
+  const confrontoInterno: ConfrontoInternoJogo | null = outro
+    ? {
+        jogoId: outro.id,
+        equipaNome: outro.equipaCompeticao?.nome ?? outro.adversario,
+        convocadosAtletaIds: outro.convocatorias.map((c) => c.atletaId),
+        placarDivergente: placarDivergente(jogo, outro),
+      }
+    : null;
+  return ok({ ...jogo, numeroPorAtleta, modalidade, confrontoInterno });
 }
 
 export async function criarJogo(dados: unknown): Promise<Resultado<Jogo>> {
@@ -232,19 +369,9 @@ export async function criarJogo(dados: unknown): Promise<Resultado<Jogo>> {
   const formato = derivarFormato(parsed.data.formato, modalidade);
   if (!formato) return erro(ERRO_FORMATO_FUTEBOL);
 
-  // A competição (se indicada) tem de pertencer ao clube e ao escalão do jogo.
-  if (parsed.data.competicaoId) {
-    const comp = await prisma.competicao.findFirst({
-      where: {
-        id: parsed.data.competicaoId,
-        clubeId: ctx.clubeId,
-        escalaoId: parsed.data.escalaoId,
-      },
-      select: { id: true },
-    });
-    if (!comp)
-      return erro("A competição selecionada não existe ou não pertence a este escalão");
-  }
+  // Competição (clube + escalão) e subequipa (§23.11.3 regra 1).
+  const subequipa = await resolverSubequipaJogo(ctx.clubeId, parsed.data, false);
+  if (!subequipa.sucesso) return erro(subequipa.erro, subequipa.camposInvalidos);
 
   const jogo = await prisma.jogo.create({
     data: {
@@ -257,6 +384,7 @@ export async function criarJogo(dados: unknown): Promise<Resultado<Jogo>> {
       // `competicao` (texto livre) foi deprecado no formulário (P4.3); usar
       // `competicaoId`. Novos jogos ficam com o campo legado a null.
       competicaoId: parsed.data.competicaoId ?? null,
+      equipaCompeticaoId: subequipa.dados,
       formato,
       local: parsed.data.local ?? null,
       golosMarcados: parsed.data.golosMarcados ?? null,
@@ -289,19 +417,25 @@ export async function atualizarJogo(id: string, dados: unknown): Promise<Resulta
     if (!permDestino.ok) return erro(permDestino.erro);
   }
 
-  // A competição (se indicada) tem de pertencer ao clube e ao escalão do jogo.
-  if (parsed.data.competicaoId) {
-    const comp = await prisma.competicao.findFirst({
-      where: {
-        id: parsed.data.competicaoId,
-        clubeId,
-        escalaoId: parsed.data.escalaoId,
-      },
-      select: { id: true },
+  // Competição (clube + escalão) e subequipa (§23.11.3 regra 1).
+  const subequipa = await resolverSubequipaJogo(
+    clubeId,
+    parsed.data,
+    Boolean(existe.resultadoCompeticaoId),
+  );
+  if (!subequipa.sucesso) return erro(subequipa.erro, subequipa.camposInvalidos);
+  // Jogo ligado a um confronto: a subequipa tem de jogar esse confronto e não pode
+  // haver outro jogo dela no mesmo confronto (§23.11.3 regras 1 e 5).
+  if (existe.resultadoCompeticaoId) {
+    const msg = await validarLigacaoJogoConfronto(prisma, {
+      jogoId: id,
+      resultadoId: existe.resultadoCompeticaoId,
+      competicaoId: parsed.data.competicaoId ?? null,
+      equipaCompeticaoId: subequipa.dados,
     });
-    if (!comp)
-      return erro("A competição selecionada não existe ou não pertence a este escalão");
+    if (msg) return erro(msg, { equipaCompeticaoId: msg });
   }
+
 
   // Formato (§3.7/§10.8): o indicado prevalece; senão preserva o do jogo; senão
   // deriva da modalidade do escalão de destino (FUTEBOL exige indicá-lo).
@@ -333,6 +467,7 @@ export async function atualizarJogo(id: string, dados: unknown): Promise<Resulta
         // `competicao` (texto livre) foi deprecado no formulário (P4.3): não é
         // reescrito aqui, preservando eventuais valores legados existentes.
         competicaoId: parsed.data.competicaoId ?? null,
+        equipaCompeticaoId: subequipa.dados,
         local: parsed.data.local ?? null,
         golosMarcados: parsed.data.golosMarcados ?? null,
         golosSofridos: parsed.data.golosSofridos ?? null,
@@ -438,6 +573,8 @@ export async function definirConvocatoria(
     if (validos !== idsPedidos.length)
       return erro("Um ou mais atletas não pertencem a este escalão/época.");
   }
+  // §23.11.3 regra 4: num jogo de subequipa a convocatória pode incluir atletas
+  // fora do plantel (exceção explícita na UI) — basta serem do escalão (acima).
 
   const convocadosAtuais = await prisma.convocatoria.findMany({
     where: { jogoId },
@@ -449,18 +586,23 @@ export async function definirConvocatoria(
   const aRemover = [...idsAtuais].filter((id) => !idsNovos.has(id));
   const aAdicionar = atletaIds.filter((id) => !idsAtuais.has(id));
 
-  await prisma.$transaction([
+  const conflito = await prisma.$transaction(async (tx) => {
+    // Regra 5: nunca o mesmo atleta nos dois jogos de um confronto interno A vs B.
+    const emConflito = await conflitoConfrontoInterno(tx, jogo, idsPedidos);
+    if (emConflito) return emConflito;
     // Remover convocatória e estatísticas dos removidos (secção 22.4)
-    prisma.estatisticaAtleta.deleteMany({
+    await tx.estatisticaAtleta.deleteMany({
       where: { jogoId, atletaId: { in: aRemover } },
-    }),
-    prisma.convocatoria.deleteMany({
+    });
+    await tx.convocatoria.deleteMany({
       where: { jogoId, atletaId: { in: aRemover } },
-    }),
-    ...aAdicionar.map((atletaId) =>
-      prisma.convocatoria.create({ data: { jogoId, atletaId, convocado: true } }),
-    ),
-  ]);
+    });
+    for (const atletaId of aAdicionar) {
+      await tx.convocatoria.create({ data: { jogoId, atletaId, convocado: true } });
+    }
+    return null;
+  });
+  if (conflito) return conflito;
   revalidatePath(`${PATH}/${jogoId}`);
   return ok(undefined);
 }
@@ -661,12 +803,14 @@ export async function definirPlanoTatico(
   });
   if (validos !== idsPedidos.length)
     return erro("Um ou mais atletas não pertencem a este escalão/época.");
-
-  await prisma.$transaction(
-    entradas.map((e) => {
+  const conflito = await prisma.$transaction(async (tx) => {
+    // §23.11.3 regra 5: o plano também convoca (upsert) — mesmo bloqueio A vs B.
+    const emConflito = await conflitoConfrontoInterno(tx, jogo, idsPedidos);
+    if (emConflito) return emConflito;
+    for (const e of entradas) {
       const posicaoPrevista = e.posicaoPrevista ?? null;
       const titularPrevisto = e.titularPrevisto ?? false;
-      return prisma.convocatoria.upsert({
+      await tx.convocatoria.upsert({
         where: { jogoId_atletaId: { jogoId, atletaId: e.convocadoId } },
         create: {
           jogoId,
@@ -677,8 +821,10 @@ export async function definirPlanoTatico(
         },
         update: { posicaoPrevista, titularPrevisto },
       });
-    }),
-  );
+    }
+    return null;
+  });
+  if (conflito) return conflito;
   revalidatePath(`${PATH}/${jogoId}`);
   return ok(undefined);
 }

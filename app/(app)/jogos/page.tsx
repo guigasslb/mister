@@ -329,6 +329,12 @@ export default async function JogosPage({
                           casaFora={j.casaFora}
                         />
                       </p>
+                      {/* §23.11.3 regra 11: etiqueta da subequipa (só jogos de subequipa). */}
+                      {j.equipaCompeticao && (
+                        <span className="rounded-full bg-primary/5 px-2 py-0.5 text-legenda font-medium text-primary">
+                          {j.equipaCompeticao.nome}
+                        </span>
+                      )}
                       {/* Badge de modalidade só quando o clube é multi-secção */}
                       {multiSeccao && <BadgeModalidade modalidade={j.modalidade} compacto />}
                       {/* Estado de fecho (só em jogos já realizados) */}

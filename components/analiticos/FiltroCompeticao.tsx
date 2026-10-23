@@ -13,6 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 
 const TODAS = "__todas__";
+const TODAS_EQUIPAS = "__todas_equipas__";
 
 /**
  * Filtro por competição do painel de escalão (P2.5 — bíblia §10.2).
@@ -24,23 +25,42 @@ const TODAS = "__todas__";
 export function FiltroCompeticao({
   competicoes,
   competicaoId,
+  equipaCompeticaoId,
 }: {
   competicoes: CompeticaoOpcao[];
   competicaoId?: string;
+  /** §23.11.3 regra 10: subequipa selecionada no filtro «Equipa» (`?equipa=`). */
+  equipaCompeticaoId?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
-  function definir(valor: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (valor === TODAS) params.delete("competicao");
-    else params.set("competicao", valor);
+  // Filtro «Equipa» só para competições com ≥2 subequipas (`equipas` vem vazio senão).
+  const equipas = competicoes.find((c) => c.id === competicaoId)?.equipas ?? [];
+
+  function navegar(params: URLSearchParams) {
     const query = params.toString();
     startTransition(() => {
       router.replace(query ? `${pathname}?${query}` : pathname);
     });
+  }
+
+  function definir(valor: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (valor === TODAS) params.delete("competicao");
+    else params.set("competicao", valor);
+    // A equipa pertence à competição: muda-se a competição, limpa-se a equipa.
+    params.delete("equipa");
+    navegar(params);
+  }
+
+  function definirEquipa(valor: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (valor === TODAS_EQUIPAS) params.delete("equipa");
+    else params.set("equipa", valor);
+    navegar(params);
   }
 
   return (
@@ -65,6 +85,28 @@ export function FiltroCompeticao({
           </SelectContent>
         </Select>
       </div>
+      {equipas.length >= 2 && (
+        <div className="space-y-1.5">
+          <Label htmlFor="filtro-equipa">Equipa</Label>
+          <Select
+            value={equipaCompeticaoId ?? TODAS_EQUIPAS}
+            onValueChange={definirEquipa}
+            disabled={pending}
+          >
+            <SelectTrigger id="filtro-equipa" className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODAS_EQUIPAS}>Todas as equipas</SelectItem>
+              {equipas.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {pending && (
         <p className="pb-3 text-legenda text-cinza-500" role="status">
           A atualizar…

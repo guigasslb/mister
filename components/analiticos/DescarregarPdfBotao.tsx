@@ -12,22 +12,15 @@ import { useState } from "react";
 import { FileDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  construirUrlPdfAnaliticos,
+  type ParamsPdfAnaliticos,
+} from "@/lib/pdf-analiticos-url";
 
 interface Props {
-  /** Parâmetros do route handler: escalão (com competição opcional) ou clube. */
-  params:
-    | { tipo: "escalao"; escalaoId: string; competicaoId?: string }
-    | { tipo: "clube" };
+  /** Parâmetros do route handler: escalão (com competição/equipa opcionais) ou clube. */
+  params: ParamsPdfAnaliticos;
   rotulo?: string;
-}
-
-function construirUrl(params: Props["params"]): string {
-  const sp = new URLSearchParams({ tipo: params.tipo });
-  if (params.tipo === "escalao") {
-    sp.set("escalaoId", params.escalaoId);
-    if (params.competicaoId) sp.set("competicao", params.competicaoId);
-  }
-  return `/api/pdf?${sp.toString()}`;
 }
 
 export function DescarregarPdfBotao({ params, rotulo = "Guardar PDF" }: Props) {
@@ -36,7 +29,7 @@ export function DescarregarPdfBotao({ params, rotulo = "Guardar PDF" }: Props) {
   function abrir() {
     setAAbrir(true);
     try {
-      const janela = window.open(construirUrl(params), "_blank", "noopener,noreferrer");
+      const janela = window.open(construirUrlPdfAnaliticos(params), "_blank", "noopener,noreferrer");
       if (!janela) {
         toast.error("Permite janelas de pop-up para gerar o PDF.");
       }

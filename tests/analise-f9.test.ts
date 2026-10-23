@@ -28,6 +28,7 @@ vi.mock("@/lib/db", () => ({
     presenca: { findMany: vi.fn(), count: vi.fn(), groupBy: vi.fn() },
     eventoJogo: { findMany: vi.fn() },
     jogo: { findMany: vi.fn() },
+    equipaCompeticao: { findFirst: vi.fn() },
     competicao: { findMany: vi.fn() },
     valorMetrica: { findMany: vi.fn() },
     valorMetricaSessao: { findMany: vi.fn() },
@@ -814,16 +815,22 @@ describe("obterCompeticoesEscalao", () => {
   it("devolve as competições com jogos do escalão/época", async () => {
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO });
     p.competicao.findMany.mockResolvedValue([
-      { id: COMPETICAO, nome: "Campeonato Distrital", tipo: "OFICIAL" },
-      { id: "ckv9v0z1w0006abcd1234efgh", nome: "Torneio de Verão", tipo: "AMIGAVEL" },
+      {
+        id: COMPETICAO,
+        nome: "Campeonato Distrital",
+        tipo: "OFICIAL",
+        equipas: [{ id: "eq-unica", nome: "Sub-13" }],
+      },
+      { id: "ckv9v0z1w0006abcd1234efgh", nome: "Torneio de Verão", tipo: "AMIGAVEL", equipas: [] },
     ]);
 
     const r = await obterCompeticoesEscalao(ESCALAO);
     expect(r.sucesso).toBe(true);
     if (!r.sucesso) return;
+    // Zero-regressão (§23.11.7): com 0/1 equipa própria não há filtro «Equipa».
     expect(r.dados).toEqual([
-      { id: COMPETICAO, nome: "Campeonato Distrital", tipo: "OFICIAL" },
-      { id: "ckv9v0z1w0006abcd1234efgh", nome: "Torneio de Verão", tipo: "AMIGAVEL" },
+      { id: COMPETICAO, nome: "Campeonato Distrital", tipo: "OFICIAL", equipas: [] },
+      { id: "ckv9v0z1w0006abcd1234efgh", nome: "Torneio de Verão", tipo: "AMIGAVEL", equipas: [] },
     ]);
     expect(p.competicao.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1053,5 +1060,156 @@ describe("relatório partilhável (token + snapshot)", () => {
     const rev = await revogarRelatorioPartilhado("rel1");
     expect(rev.sucesso).toBe(true);
     expect(p.relatorioPartilhado.delete).toHaveBeenCalled();
+  });
+});
+
+// ─── §23.11 — Subequipas por competição: filtro «Equipa» e jogos internos ──────
+
+describe("obterCompeticoesEscalao — opções do filtro «Equipa» (§23.11.3 regra 10)", () => {
+  it("devolve as subequipas próprias quando a competição tem ≥2", async () => {
+    p.escalao.findFirst.mockResolvedValue({ id: ESCALAO });
+    const equipas = [
+      { id: "eq-a", nome: "Sub-13 A" },
+      { id: "eq-b", nome: "Sub-13 B" },
+    ];
+    p.competicao.findMany.mockResolvedValue([
+      { id: COMPETICAO, nome: "Distrital", tipo: "OFICIAL", equipas },
+    ]);
+    const r = await obterCompeticoesEscalao(ESCALAO);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(r.dados[0].equipas).toEqual(equipas);
+  });
+});
+
+describe("obterAnaliticoEscalao — subequipas (§23.11.3 regra 10)", () => {
+  const confrontoAB = {
+    jogosDetalhados: [{ equipaCompeticaoId: "eq-a" }, { equipaCompeticaoId: "eq-b" }],
+  };
+  const prepararVazio = () => {
+    p.escalao.findFirst.mockResolvedValue({ id: ESCALAO, nome: "Sub-13" });
+    p.sessao.findMany.mockResolvedValue([]);
+    p.atletaEscalao.findMany.mockResolvedValue(participacoesAtivas(10));
+    p.estatisticaAtleta.findMany.mockResolvedValue([]);
+    p.eventoJogo.findMany.mockResolvedValue([]);
+    p.presenca.findMany.mockResolvedValue([]);
+  };
+
+  it("exclui os dois jogos de um A vs B dos totais de equipa e assinala-os como internos", async () => {
+    prepararVazio();
+    p.jogo.findMany.mockResolvedValue([
+      { id: "j1", data: new Date("2025-09-10"), adversario: "Porto", golosMarcados: 2, golosSofridos: 0, casaFora: "CASA", equipaCompeticaoId: "eq-a", resultadoCompeticao: { jogosDetalhados: [{ equipaCompeticaoId: "eq-a" }] } },
+      { id: "ja", data: new Date("2025-09-17"), adversario: "Sub-13 B", golosMarcados: 3, golosSofridos: 1, casaFora: "CASA", equipaCompeticaoId: "eq-a", resultadoCompeticao: confrontoAB },
+      { id: "jb", data: new Date("2025-09-17"), adversario: "Sub-13 A", golosMarcados: 1, golosSofridos: 3, casaFora: "FORA", equipaCompeticaoId: "eq-b", resultadoCompeticao: confrontoAB },
+    ]);
+    // Os atletas contam normalmente nos jogos internos.
+    p.estatisticaAtleta.findMany.mockResolvedValue([
+      { atletaId: ATLETA, golos: 3, assistencias: 0, blocoTempo: "JOGO_COMPLETO", utilizacao: "TITULAR", cartaoAmarelo: 0, cartaoVermelho: 0, atleta: { nome: "João" } },
+    ]);
+
+    const r = await obterAnaliticoEscalao(ESCALAO);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(r.dados.jogos).toBe(1);
+    expect(r.dados.vitorias).toBe(1);
+    expect(r.dados.derrotas).toBe(0);
+    expect(r.dados.golosMarcados).toBe(2);
+    expect(r.dados.golosSofridos).toBe(0);
+    expect(r.dados.recordCasa).toEqual({ vitorias: 1, empates: 0, derrotas: 0, jogos: 1 });
+    expect(r.dados.recordFora).toEqual({ vitorias: 0, empates: 0, derrotas: 0, jogos: 0 });
+    expect(r.dados.resultados.map((x) => [x.jogoId, x.interno])).toEqual([
+      ["j1", false],
+      ["ja", true],
+      ["jb", true],
+    ]);
+    expect(r.dados.marcadores[0]).toEqual({ atletaId: ATLETA, nome: "João", valor: 3 });
+  });
+
+  it("filtro «Equipa» restringe os jogos (e o que deles deriva) à subequipa", async () => {
+    prepararVazio();
+    p.jogo.findMany.mockResolvedValue([]);
+    const EQUIPA = "ckv9v0z1w0009abcd1234efgh";
+    const r = await obterAnaliticoEscalao(ESCALAO, undefined, COMPETICAO, EQUIPA);
+    expect(r.sucesso).toBe(true);
+    const where = p.jogo.findMany.mock.calls[0][0].where;
+    expect(where).toMatchObject({ competicaoId: COMPETICAO, equipaCompeticaoId: EQUIPA });
+    expect(p.estatisticaAtleta.findMany.mock.calls[0][0].where.jogo).toMatchObject({
+      equipaCompeticaoId: EQUIPA,
+    });
+  });
+
+  it("filtro «Equipa» da equipa própria implícita (1.ª PROPRIO) inclui jogos sem subequipa", async () => {
+    prepararVazio();
+    p.jogo.findMany.mockResolvedValue([]);
+    const EQUIPA = "ckv9v0z1w0009abcd1234efgh";
+    p.equipaCompeticao.findFirst.mockResolvedValue({
+      competicaoId: COMPETICAO,
+      competicao: { equipas: [{ id: EQUIPA }] },
+    });
+    await obterAnaliticoEscalao(ESCALAO, undefined, undefined, EQUIPA);
+    expect(p.equipaCompeticao.findFirst.mock.calls[0][0].where).toMatchObject({
+      id: EQUIPA,
+      tipo: "PROPRIO",
+      competicao: { clubeId: CLUBE },
+    });
+    expect(p.jogo.findMany.mock.calls[0][0].where).toMatchObject({
+      competicaoId: COMPETICAO,
+      OR: [{ equipaCompeticaoId: EQUIPA }, { equipaCompeticaoId: null }],
+    });
+  });
+
+  it("competição + equipa de OUTRA competição ⇒ sem jogos (a competição indicada prevalece)", async () => {
+    prepararVazio();
+    p.jogo.findMany.mockResolvedValue([]);
+    const EQUIPA = "ckv9v0z1w0009abcd1234efgh";
+    // A equipa não pertence à competição indicada → findFirst (filtrado) não a encontra.
+    p.equipaCompeticao.findFirst.mockResolvedValue(null);
+    const r = await obterAnaliticoEscalao(ESCALAO, undefined, COMPETICAO, EQUIPA);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(p.equipaCompeticao.findFirst.mock.calls[0][0].where).toMatchObject({
+      id: EQUIPA,
+      competicaoId: COMPETICAO,
+    });
+    expect(p.jogo.findMany.mock.calls[0][0].where).toMatchObject({
+      competicaoId: COMPETICAO,
+      equipaCompeticaoId: EQUIPA,
+    });
+    expect(r.dados.jogos).toBe(0);
+  });
+
+  it("filtro «Equipa» de outra subequipa (não a 1.ª) não inclui jogos sem subequipa", async () => {
+    prepararVazio();
+    p.jogo.findMany.mockResolvedValue([]);
+    const EQUIPA = "ckv9v0z1w0009abcd1234efgh";
+    p.equipaCompeticao.findFirst.mockResolvedValue({
+      competicaoId: COMPETICAO,
+      competicao: { equipas: [{ id: "eq-primeira" }] },
+    });
+    await obterAnaliticoEscalao(ESCALAO, undefined, undefined, EQUIPA);
+    const where = p.jogo.findMany.mock.calls[0][0].where;
+    expect(where.equipaCompeticaoId).toBe(EQUIPA);
+    expect(where).not.toHaveProperty("OR");
+  });
+
+  it("zero-regressão: sem filtro «Equipa» e sem subequipas nada é excluído", async () => {
+    prepararVazio();
+    p.jogo.findMany.mockResolvedValue([
+      { id: "j1", data: new Date("2025-09-10"), adversario: "A", golosMarcados: 1, golosSofridos: 0, casaFora: "CASA", equipaCompeticaoId: null, resultadoCompeticao: { jogosDetalhados: [{ equipaCompeticaoId: null }] } },
+      { id: "j2", data: new Date("2025-09-17"), adversario: "B", golosMarcados: 0, golosSofridos: 0, casaFora: "FORA", equipaCompeticaoId: null, resultadoCompeticao: null },
+    ]);
+    const r = await obterAnaliticoEscalao(ESCALAO);
+    expect(r.sucesso).toBe(true);
+    if (!r.sucesso) return;
+    expect(p.jogo.findMany.mock.calls[0][0].where).not.toHaveProperty("equipaCompeticaoId");
+    expect(r.dados.jogos).toBe(2);
+    expect(r.dados.vitorias).toBe(1);
+    expect(r.dados.empates).toBe(1);
+    expect(r.dados.resultados.every((x) => x.interno === false)).toBe(true);
+  });
+
+  it("rejeita equipaCompeticaoId que não é cuid", async () => {
+    const r = await obterAnaliticoEscalao(ESCALAO, undefined, undefined, "nao-cuid");
+    expect(r.sucesso).toBe(false);
   });
 });

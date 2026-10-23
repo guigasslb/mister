@@ -19,6 +19,7 @@ import { BotaoPartilhaRanking } from "@/components/social/BotaoPartilhaRanking";
 import { EstadoVazio } from "@/components/layout/EstadosUI";
 import { eEscalaoFormacaoJovem } from "@/lib/schemas/social";
 import { urlCard } from "@/lib/social/token";
+import { equipaFiltroValida } from "@/lib/subequipas-ui";
 
 export const metadata: Metadata = { title: "Analytics do escalão" };
 
@@ -27,19 +28,22 @@ export default async function AnaliticosEscalaoPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ competicao?: string }>;
+  searchParams: Promise<{ competicao?: string; equipa?: string }>;
 }) {
   const { id } = await params;
-  const { competicao } = await searchParams;
+  const { competicao, equipa } = await searchParams;
   // P2.5: filtro opcional por competição (campeonato / taça / particulares).
-  const [res, resTreino, resCompeticoes, resCarga, resCargaAtletas] = await Promise.all([
-    obterAnaliticoEscalao(id, undefined, competicao || undefined),
+  // §23.11.3 regra 10: + filtro opcional «Equipa» (subequipa dessa competição),
+  // validado contra as opções antes de ser aplicado.
+  const resCompeticoes = await obterCompeticoesEscalao(id);
+  const competicoes = resCompeticoes.sucesso ? resCompeticoes.dados : [];
+  const equipaCompeticaoId = equipaFiltroValida(competicoes, competicao || undefined, equipa);
+  const [res, resTreino, resCarga, resCargaAtletas] = await Promise.all([
+    obterAnaliticoEscalao(id, undefined, competicao || undefined, equipaCompeticaoId),
     obterAnaliticoTreinoEscalao(id),
-    obterCompeticoesEscalao(id),
     obterCargaSemanal(id),
     obterCargaAtletas({ escalaoId: id }),
   ]);
-  const competicoes = resCompeticoes.sucesso ? resCompeticoes.dados : [];
   // P4.8 (§8.20): só mostra a secção de carga se houver RPE registado.
   const carga = resCarga.sucesso && resCarga.dados.temDados ? resCarga.dados : null;
   // F2.2 (§8.20): ACWR individual — só aparece se ≥1 atleta reportou RPE na janela.
@@ -70,6 +74,7 @@ export default async function AnaliticosEscalaoPage({
               acao={exportarAnaliticoEscalaoCsv.bind(null, {
                 escalaoId: id,
                 competicaoId: competicao || undefined,
+                equipaCompeticaoId,
               })}
             />
             <DescarregarPdfBotao
@@ -77,6 +82,7 @@ export default async function AnaliticosEscalaoPage({
                 tipo: "escalao",
                 escalaoId: id,
                 competicaoId: competicao || undefined,
+                equipaCompeticaoId,
               }}
             />
             <GerarRelatorioBotao tipo="EPOCA_EQUIPA" escalaoId={id} />
@@ -107,6 +113,7 @@ export default async function AnaliticosEscalaoPage({
                 dados={res.dados}
                 competicoes={competicoes}
                 competicaoId={competicao || undefined}
+                equipaCompeticaoId={equipaCompeticaoId}
               />
               {/* P4.8 (§8.20): carga de treino (RPE/ACWR) — só quando há RPE registado. */}
               {carga && (

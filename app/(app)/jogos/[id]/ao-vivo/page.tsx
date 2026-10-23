@@ -118,7 +118,7 @@ export default async function ModoJogoAoVivoPage({
       adversario={j.adversario}
       clubeNome={clube?.nome}
       casaFora={j.casaFora}
-      escalaoNome={j.escalao.nome}
+      escalaoNome={j.equipaCompeticao?.nome ?? j.escalao.nome}
       modalidade={j.modalidade}
       formato={j.formato}
       convocados={convocados}

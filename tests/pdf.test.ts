@@ -169,6 +169,26 @@ describe("gerarPdfAnalitico", () => {
     expect(r.html).toContain("Por escalão");
   });
 
+  it("aplica o filtro «Equipa» (§23.11.3 regra 10) e, sem ele, chama como antes", async () => {
+    m(obterAnaliticoEscalao).mockResolvedValue(analiticoEscalao());
+
+    await gerarPdfAnalitico({
+      tipo: "escalao",
+      escalaoId: "esc1",
+      competicaoId: "comp1",
+      equipaCompeticaoId: "eq-a",
+    });
+    expect(m(obterAnaliticoEscalao).mock.calls[0]).toEqual(["esc1", undefined, "comp1", "eq-a"]);
+
+    await gerarPdfAnalitico({ tipo: "escalao", escalaoId: "esc1" });
+    expect(m(obterAnaliticoEscalao).mock.calls[1]).toEqual([
+      "esc1",
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("propaga «Sem permissão» como 403", async () => {
     m(obterAnaliticoEscalao).mockResolvedValue({ sucesso: false, erro: "Sem permissão" });
 

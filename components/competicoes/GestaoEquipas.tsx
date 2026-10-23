@@ -24,6 +24,12 @@ import {
   removerEquipaCompeticao,
   gerarQuadroCompeticao,
 } from "@/lib/actions/competicoes";
+import {
+  CopiarPlanteisDialog,
+  PlantelSubequipaDialog,
+  type AtletaEscalaoPlantel,
+  type PlantelAtual,
+} from "@/components/competicoes/PlanteisSubequipas";
 import type { CasaFora, EstadoResultado, FormatoCompeticao } from "@prisma/client";
 
 // Subconjunto de EquipaCompeticao necessário à UI.
@@ -48,15 +54,30 @@ export function GestaoEquipas({
   equipas,
   resultados,
   formato,
+  planteis = [],
+  atletasEscalao = [],
+  competicoesOrigem = [],
 }: {
   competicaoId: string;
   equipas: EquipaGestao[];
   resultados: ResultadoRef[];
   formato: FormatoCompeticao;
+  /**
+   * §23.11: plantéis das subequipas próprias — só preenchido com ≥2 equipas
+   * próprias (com 0/1 a tab mantém-se como antes).
+   */
+  planteis?: PlantelAtual[];
+  /** Atletas do escalão/época da competição (candidatos ao plantel). */
+  atletasEscalao?: AtletaEscalaoPlantel[];
+  /** Outras competições do escalão com equipas próprias (origem da cópia). */
+  competicoesOrigem?: { id: string; nome: string }[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [nome, setNome] = useState("");
+  // §23.11.3: a equipa adicionada pode ser uma subequipa própria (ex.: «Benjamins B»).
+  const [propria, setPropria] = useState(false);
+  const plantelPorEquipa = new Map(planteis.map((p) => [p.id, p]));
 
   // Uma equipa "tem confrontos" se aparecer em algum resultado — por FK
   // (equipaCasaId/equipaForaId) ou por nome legado (equipaCasa/equipaFora).
@@ -81,10 +102,14 @@ export function GestaoEquipas({
     const valor = nome.trim();
     if (valor === "") return;
     startTransition(async () => {
-      const res = await adicionarEquipaCompeticao(competicaoId, { nome: valor });
+      const res = await adicionarEquipaCompeticao(
+        competicaoId,
+        propria ? { nome: valor, propria: true } : { nome: valor },
+      );
       if (res.sucesso) {
         toast.success("Equipa adicionada");
         setNome("");
+        setPropria(false);
         router.refresh();
       } else {
         toast.error(res.erro);
@@ -130,6 +155,16 @@ export function GestaoEquipas({
             disabled={pending}
           />
         </div>
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md border border-cinza-200 px-3 text-corpo-sec text-cinza-900">
+          <input
+            type="checkbox"
+            checked={propria}
+            onChange={(ev) => setPropria(ev.target.checked)}
+            disabled={pending}
+            className="h-5 w-5 accent-primary"
+          />
+          Equipa própria
+        </label>
         <Button type="submit" disabled={pending || nome.trim() === ""}>
           <Plus className="h-4 w-4" />
           Adicionar
@@ -142,6 +177,12 @@ export function GestaoEquipas({
         )}
       </form>
 
+      {planteis.length > 0 && competicoesOrigem.length > 0 && (
+        <div className="flex justify-end">
+          <CopiarPlanteisDialog competicaoId={competicaoId} competicoesOrigem={competicoesOrigem} />
+        </div>
+      )}
+
       {equipas.length === 0 ? (
         <p className="rounded-md border border-dashed border-cinza-300 p-6 text-center text-corpo-sec text-cinza-500">
           Sem equipas nesta competição. Adiciona pelo menos 2 para gerar o quadro.
@@ -151,6 +192,7 @@ export function GestaoEquipas({
           {equipas.map((e) => {
             const proprio = e.tipo === "PROPRIO";
             const comConfronto = temConfronto(e);
+            const plantel = proprio ? plantelPorEquipa.get(e.id) : undefined;
             return (
               <li
                 key={e.id}
@@ -165,6 +207,14 @@ export function GestaoEquipas({
                   <span className="truncate text-corpo font-medium text-cinza-900">{e.nome}</span>
                   {proprio && <Badge variant="secondary">A minha equipa</Badge>}
                 </div>
+
+                {plantel && (
+                  <PlantelSubequipaDialog
+                    equipa={plantel}
+                    planteis={planteis}
+                    atletasEscalao={atletasEscalao}
+                  />
+                )}
 
                 {!proprio &&
                   (comConfronto ? (

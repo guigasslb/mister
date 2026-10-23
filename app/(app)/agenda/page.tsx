@@ -342,7 +342,7 @@ export default async function AgendaPage({
                               {rotulo}
                             </span>
                             <span className="rounded-full bg-primary/5 px-2.5 py-0.5 text-legenda text-primary">
-                              {ev.escalaoNome}
+                              {ev.subequipaNome ?? ev.escalaoNome}
                             </span>
                             {ehJogo && ev.casaFora && (
                               <span className="rounded-full bg-cinza-100 px-2.5 py-0.5 text-legenda text-cinza-600">

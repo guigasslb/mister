@@ -3,7 +3,7 @@
 import { useId, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Ban, Check, Radio, TriangleAlert } from "lucide-react";
+import { Ban, Check, Radio, TriangleAlert, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +49,7 @@ import { SituacoesJogo, type DadosSituacoesJogo } from "@/components/jogos/Situa
 import { ScoutingJogo } from "@/components/jogos/ScoutingJogo";
 import { TimelineEventos, type EventoTimeline } from "@/components/jogos/TimelineEventos";
 import type { DiagramaCampo } from "@/lib/schemas/exercicio";
+import { convocaveisJogo, selecionaveis } from "@/lib/subequipas-ui";
 import type {
   BlocoTempo,
   FormatoJogo,
@@ -112,6 +120,8 @@ export function JogoDetalhe({
   situacoesJogo,
   mostrarModoAoVivo = false,
   numeroPartes = 2,
+  subequipa = null,
+  confrontoInterno = null,
 }: {
   jogoId: string;
   atletas: Atleta[];
@@ -160,6 +170,12 @@ export function JogoDetalhe({
   // enquanto este é atualizado em paralelo; já não são consumidas aqui.
   sessaoAoVivoTerminada?: boolean;
   linhasMinutosAoVivo?: unknown[];
+  // §23.11.3 regra 4: subequipa do jogo e o seu plantel nesta competição (vazio ⇒
+  // convocáveis = todo o escalão). `null` em jogos sem subequipa.
+  subequipa?: { nome: string; plantelIds: string[] } | null;
+  // §23.11.3 regra 5: confronto interno A vs B — atletas já convocados pela outra
+  // subequipa (bloqueados neste jogo).
+  confrontoInterno?: { equipaNome: string; convocadosAtletaIds: string[] } | null;
 }) {
   const eFutebol = modalidade === "FUTEBOL";
   const suspensaoPorAtleta = new Map(suspensoes.map((s) => [s.atletaId, s]));
@@ -173,6 +189,11 @@ export function JogoDetalhe({
   // interpretado como "análise táctica" por `parseRelatorio`.
   const [relatorio, setRelatorio] = useState(() => parseRelatorio(relatorioInicial));
   const [confirmarRemocao, setConfirmarRemocao] = useState<string[] | null>(null);
+  // §23.11.3 regra 4: atletas fora do plantel acrescentados por exceção (ficam
+  // visíveis mesmo se desmarcados) + diálogo da exceção + erros por atleta do servidor.
+  const [revelados, setRevelados] = useState<Set<string>>(() => new Set());
+  const [excecaoAberta, setExcecaoAberta] = useState(false);
+  const [errosConvocatoria, setErrosConvocatoria] = useState<Record<string, string>>({});
 
   const [pendingConv, startConv] = useTransition();
   const [pendingEstat, startEstat] = useTransition();
@@ -197,14 +218,28 @@ export function JogoDetalhe({
     });
   }
 
+  // §23.11: convocáveis (plantel da subequipa + exceções; sem plantel = escalão).
+  const convocaveis = convocaveisJogo({
+    atletas,
+    plantelIds: subequipa?.plantelIds ?? [],
+    convocados,
+    revelados,
+    bloqueadosIds: confrontoInterno?.convocadosAtletaIds ?? [],
+  });
+  const idsSelecionaveis = selecionaveis(convocaveis.visiveis, convocados);
+
   // Todos selecionados quando há atletas e todos estão na convocatória local.
   const todosConvocados =
-    atletas.length > 0 && atletas.every((a) => convocados.has(a.id));
+    idsSelecionaveis.length > 0 && idsSelecionaveis.every((id) => convocados.has(id));
 
   function alternarTodos() {
-    setConvocados(() =>
-      todosConvocados ? new Set() : new Set(atletas.map((a) => a.id)),
-    );
+    setConvocados(() => (todosConvocados ? new Set() : new Set(idsSelecionaveis)));
+  }
+
+  function adicionarForaDoPlantel(id: string) {
+    setRevelados((prev) => new Set(prev).add(id));
+    setConvocados((prev) => new Set(prev).add(id));
+    setExcecaoAberta(false);
   }
 
   function gravarConvocatoria() {
@@ -213,8 +248,10 @@ export function JogoDetalhe({
       if (res.sucesso) {
         toast.success("Convocatória guardada");
         setConfirmarRemocao(null);
+        setErrosConvocatoria({});
       } else {
         toast.error(res.erro);
+        setErrosConvocatoria(res.camposInvalidos ?? {});
       }
     });
   }
@@ -410,29 +447,63 @@ export function JogoDetalhe({
                 </div>
               </div>
             )}
+            {/* §23.11.3 regra 5: confronto interno A vs B. */}
+            {confrontoInterno && (
+              <div className="flex items-start gap-2 rounded-md border border-azul-300/50 bg-azul-50 px-3 py-2 text-corpo-sec text-azul-700">
+                <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <p>
+                  Jogo interno contra {confrontoInterno.equipaNome}: os atletas já convocados por{" "}
+                  {confrontoInterno.equipaNome} não podem ser convocados neste jogo.
+                </p>
+              </div>
+            )}
+            {/* §23.11.3 regra 4: convocatória restrita ao plantel da subequipa. */}
+            {convocaveis.restrito && subequipa && (
+              <div className="flex flex-col gap-2 rounded-md border border-cinza-200 bg-cinza-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-corpo-sec text-cinza-600">
+                  A mostrar o plantel de {subequipa.nome} nesta competição.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-[44px] flex-shrink-0 gap-1.5"
+                  onClick={() => setExcecaoAberta(true)}
+                  disabled={convocaveis.foraDoPlantel.length === 0}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Adicionar atleta fora do plantel
+                </Button>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <p className="text-corpo-sec text-cinza-600">
-                {convocados.size}/{atletas.length} selecionado(s)
+                {convocados.size}/{convocaveis.visiveis.length} selecionado(s)
               </p>
               <Button variant="outline" size="sm" onClick={alternarTodos}>
                 {todosConvocados ? "Desselecionar todos" : "Selecionar todos"}
               </Button>
             </div>
             <ul className="space-y-2">
-              {atletas.map((a) => {
+              {convocaveis.visiveis.map(({ atleta: a, foraPlantel, bloqueado }) => {
                 const suspensao = escalaoJovem
                   ? undefined
                   : suspensaoPorAtleta.get(a.id);
+                const desativado = bloqueado && !convocados.has(a.id);
+                const erroAtleta = errosConvocatoria[a.id];
                 return (
                 <li
                   key={a.id}
-                  className="flex items-center gap-3 rounded-md border border-cinza-200 bg-white p-2.5 shadow-card"
+                  className={`flex items-center gap-3 rounded-md border border-cinza-200 bg-white p-2.5 shadow-card${
+                    erroAtleta ? " flex-wrap" : ""
+                  }${desativado ? " opacity-60" : ""}`}
                 >
                   <input
                     type="checkbox"
                     id={`conv-${a.id}`}
                     checked={convocados.has(a.id)}
                     onChange={() => alternarConvocado(a.id)}
+                    disabled={desativado}
                     className="h-5 w-5 accent-primary"
                   />
                   <label htmlFor={`conv-${a.id}`} className="flex-1 text-corpo text-cinza-900">
@@ -463,6 +534,21 @@ export function JogoDetalhe({
                       <Ban className="h-3 w-3" />
                       {LABEL_SUSPENSAO[suspensao.motivo]}
                     </span>
+                  )}
+                  {foraPlantel && subequipa && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-ambar-500/10 px-2 py-0.5 text-legenda font-medium text-ambar-600">
+                      <TriangleAlert className="h-3 w-3" />
+                      Fora do plantel de {subequipa.nome}
+                    </span>
+                  )}
+                  {bloqueado && confrontoInterno && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-cinza-100 px-2 py-0.5 text-legenda font-medium text-cinza-600">
+                      <Ban className="h-3 w-3" />
+                      Convocado por {confrontoInterno.equipaNome}
+                    </span>
+                  )}
+                  {erroAtleta && (
+                    <p className="w-full text-legenda text-vermelho-600">{erroAtleta}</p>
                   )}
                 </li>
                 );
@@ -936,6 +1022,36 @@ export function JogoDetalhe({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* §23.11.3 regra 4: exceção explícita — convocar atleta do escalão fora do plantel. */}
+      {subequipa && (
+        <Dialog open={excecaoAberta} onOpenChange={setExcecaoAberta}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Adicionar atleta fora do plantel</DialogTitle>
+              <DialogDescription>
+                Atletas do escalão que não estão no plantel de {subequipa.nome}. Ficam assinalados
+                na convocatória.
+              </DialogDescription>
+            </DialogHeader>
+            <ul className="space-y-1.5">
+              {convocaveis.foraDoPlantel.map((a) => (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => adicionarForaDoPlantel(a.id)}
+                    className="flex min-h-[44px] w-full items-center gap-2 rounded-md border border-cinza-200 px-3 py-2 text-left text-corpo text-cinza-900 transition-colors hover:bg-cinza-50"
+                  >
+                    <UserPlus className="h-4 w-4 flex-shrink-0 text-primary" />
+                    {a.numero != null && <span className="text-cinza-400">#{a.numero}</span>}
+                    {a.nome}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </DialogContent>
+        </Dialog>
+      )}
     </Tabs>
   );
 }

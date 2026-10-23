@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Home, Plane, Video } from "lucide-react";
+import { Pencil, Home, Plane, TriangleAlert, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
@@ -376,7 +376,8 @@ export default async function DetalheJogoPage({
             {LABEL_CASA_FORA[j.casaFora]}
           </span>
           <span className="rounded-full bg-primary/5 px-2.5 py-0.5 text-legenda text-primary">
-            {j.escalao.nome}
+            {/* §23.11.3 regra 11: subequipa da competição em vez do escalão. */}
+            {j.equipaCompeticao?.nome ?? j.escalao.nome}
           </span>
           <BadgeModalidade modalidade={j.modalidade} />
         </div>
@@ -395,6 +396,19 @@ export default async function DetalheJogoPage({
         {temResultado && (
           <p className="text-titulo-pagina font-bold text-cinza-900">
             {j.golosMarcados} – {j.golosSofridos}
+          </p>
+        )}
+        {/* §23.11.3 regra 6: placares divergentes no confronto interno A vs B. */}
+        {j.confrontoInterno?.placarDivergente && (
+          <p className="flex items-start gap-1.5 rounded-md border border-ambar-500/40 bg-ambar-500/10 px-3 py-2 text-corpo-sec text-ambar-600">
+            <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>
+              O resultado deste jogo não coincide com o do jogo de{" "}
+              <Link href={`/jogos/${j.confrontoInterno.jogoId}`} className="underline">
+                {j.confrontoInterno.equipaNome}
+              </Link>{" "}
+              no mesmo confronto. Na competição prevalece o último gravado.
+            </span>
           </p>
         )}
         {(j.faltas1aParte != null || j.faltas2aParte != null) && (
@@ -446,6 +460,15 @@ export default async function DetalheJogoPage({
         mostrarModoAoVivo={mostrarModoAoVivo}
         sessaoAoVivoTerminada={sessaoAoVivoTerminada}
         linhasMinutosAoVivo={linhasMinutosAoVivo}
+        subequipa={
+          j.equipaCompeticao
+            ? {
+                nome: j.equipaCompeticao.nome,
+                plantelIds: j.equipaCompeticao.atletas.map((a) => a.atletaId),
+              }
+            : null
+        }
+        confrontoInterno={j.confrontoInterno}
       />
     </div>
   );

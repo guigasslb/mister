@@ -18,7 +18,12 @@ export default async function NovoJogoPage() {
   ]);
   if (!resEscaloes.sucesso) return <EstadoErro mensagem={resEscaloes.erro} />;
   const competicoes = resComp.sucesso
-    ? resComp.dados.map((c) => ({ id: c.id, nome: c.nome, escalaoId: c.escalaoId }))
+    ? resComp.dados.map((c) => ({
+        id: c.id,
+        nome: c.nome,
+        escalaoId: c.escalaoId,
+        equipas: c.equipas,
+      }))
     : [];
   const seccoes = resSeccoes.sucesso ? resSeccoes.dados : [];
   // §3.2: enriquece cada escalão com a modalidade da sua secção (para o seletor
