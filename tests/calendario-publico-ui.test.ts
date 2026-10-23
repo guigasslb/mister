@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LinhaJogo, LocalComMapa } from "@/components/jogos/CalendarioPublicoJogo";
+import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import {
   detalheJogoPublico,
   variaveisCorCalendarioPublico,
@@ -145,5 +146,19 @@ describe("LocalComMapa — botão «Ver no mapa»", () => {
 
   it("esquema não-http fica texto", () => {
     expect(renderLocal("javascript:alert(1)")).not.toContain("<a");
+  });
+});
+
+describe("TituloConfronto — cor do nome do clube", () => {
+  it("no calendário público usa o acento AA (--cal-acento-texto)", () => {
+    const html = render(jogo());
+    expect(html).toContain("color:var(--cal-acento-texto, #C7430F)");
+    expect(html).not.toContain('style="color:var(--cor-primaria');
+  });
+  it("por defeito (restantes ecrãs) mantém --cor-primaria", () => {
+    const html = renderToStaticMarkup(
+      createElement(TituloConfronto, { clubeNome: "Mister FC", adversario: "Benfica", casaFora: "CASA" }),
+    );
+    expect(html).toContain("color:var(--cor-primaria, #F0531E)");
   });
 });

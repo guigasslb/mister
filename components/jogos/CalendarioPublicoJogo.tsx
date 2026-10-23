@@ -144,6 +144,7 @@ export function LinhaJogo({ jogo, clubeNome }: { jogo: JogoCalendarioPublico; cl
                 clubeNome={clubeNome}
                 adversario={jogo.adversario}
                 casaFora={jogo.casaFora}
+                corClube="var(--cal-acento-texto, #C7430F)"
               />
             </p>
             {jogo.equipa && (

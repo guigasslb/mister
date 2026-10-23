@@ -11,18 +11,24 @@ import { nomeClubeSeguro } from "@/lib/jogo-confronto";
  * `aplicarCor`: quando o fundo já usa a cor do clube (ex.: cartão-herói, overlay
  * escuro do Modo Jogo ao Vivo), passar `false` para manter apenas o negrito e
  * herdar a cor do texto — evita perda de contraste.
+ *
+ * `corClube`: valor CSS da cor do nome do clube (por defeito `--cor-primaria`).
+ * O calendário público (§8.11.1) passa a variante com contraste AA garantido
+ * (`var(--cal-acento-texto)`); os restantes ecrãs não a usam.
  */
 export function TituloConfronto({
   clubeNome,
   adversario,
   casaFora,
   aplicarCor = true,
+  corClube = "var(--cor-primaria, #F0531E)",
   className,
 }: {
   clubeNome: string | null | undefined;
   adversario: string;
   casaFora: CasaFora;
   aplicarCor?: boolean;
+  corClube?: string;
   className?: string;
 }) {
   const nome = nomeClubeSeguro(clubeNome);
@@ -31,7 +37,7 @@ export function TituloConfronto({
   const nomeNossaEquipa = (
     <span
       className="font-bold"
-      style={aplicarCor ? { color: "var(--cor-primaria, #F0531E)" } : undefined}
+      style={aplicarCor ? { color: corClube } : undefined}
     >
       {nome}
     </span>
