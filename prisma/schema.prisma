@@ -72,6 +72,9 @@ model Clube {
   // Mano-a-Mano (§3.16): competições de duelos 1×1 do clube e clubes externos criados.
   competicoesManoMano   CompeticaoManoMano[]
   clubesExternosCriados ClubeExterno[]
+
+  // Situações de jogo (§24): biblioteca de diagramas táticos (scope multi-tenant).
+  situacoesJogo SituacaoJogo[]
 }
 
 // ─────────────────────────────────────────────
@@ -278,15 +281,61 @@ enum MomentoJogo {
 
 // Quadro tático específico de um jogo (do clube).
 model QuadroTatico {
-  id       String           @id @default(cuid())
-  jogoId   String
-  jogo     Jogo             @relation(fields: [jogoId], references: [id], onDelete: Cascade)
-  nome     String
-  tipo     TipoQuadroTatico @default(GERAL) // F4 (M8): GERAL | BOLA_PARADA
-  diagrama Json?
-  notas    String?          @db.Text
+  id               String           @id @default(cuid())
+  jogoId           String
+  jogo             Jogo             @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+  nome             String
+  tipo             TipoQuadroTatico @default(GERAL) // F4 (M8): GERAL | BOLA_PARADA
+  diagrama         Json?
+  notas            String?          @db.Text
+  // 🔁 2026-10-22 (§24): situação da biblioteca de onde este quadro foi copiado (ou
+  // a que foi guardada a partir dele). Só informativo — NUNCA sincroniza. Apagar a
+  // situação não afeta o quadro (SetNull). null no quadro "Plano de jogo".
+  situacaoOrigemId String?
+  situacaoOrigem   SituacaoJogo?    @relation(fields: [situacaoOrigemId], references: [id], onDelete: SetNull)
 
   @@index([jogoId])
+  @@index([situacaoOrigemId])
+}
+
+// Categoria de situação — DO ESCALÃO (§24.3), criada pela equipa técnica; sem seed nem `sistema`.
+// O clube deriva do escalão (queries filtram por `escalao.clubeId`).
+model CategoriaSituacaoJogo {
+  id        String   @id @default(cuid())
+  escalaoId String // imutável após criação
+  escalao   Escalao  @relation(fields: [escalaoId], references: [id], onDelete: Cascade)
+  nome      String // 1–60, trim
+  ordem     Int      @default(0)
+  criadoEm  DateTime @default(now())
+
+  situacoes SituacaoJogo[]
+
+  @@unique([escalaoId, nome])
+  @@index([escalaoId, ordem])
+}
+
+// Situação de jogo — biblioteca do escalão (🏛️, §24.3). Sem época.
+model SituacaoJogo {
+  id           String                 @id @default(cuid())
+  clubeId      String // scope multi-tenant (todas as queries filtram por clube)
+  clube        Clube                  @relation(fields: [clubeId], references: [id], onDelete: Cascade)
+  escalaoId    String // dono: equipa técnica deste escalão (imutável após criação)
+  escalao      Escalao                @relation(fields: [escalaoId], references: [id], onDelete: Cascade)
+  categoriaId  String? // null = sem categoria; DEVE ser do mesmo escalão (RN-SJ-11)
+  // NoAction (não Restrict): o bloqueio de apagar categoria em uso é feito na action; NoAction é
+  // verificado no fim da instrução, pelo que apagar o escalão (cascade em categorias E situações) não falha.
+  categoria    CategoriaSituacaoJogo? @relation(fields: [categoriaId], references: [id], onDelete: NoAction)
+  nome         String // 1–100, trim; ≠ «Plano de jogo» (§24.4)
+  descricao    String?                @db.Text // ≤2000; copiada para QuadroTatico.notas ao importar
+  diagrama     Json // DiagramaCampo v2 com `campo` obrigatório (§24.4)
+  criadoEm     DateTime               @default(now())
+  atualizadoEm DateTime               @updatedAt
+
+  quadros QuadroTatico[] // cópias nos jogos (FK SetNull do lado do quadro — §3.6)
+
+  @@unique([escalaoId, nome])
+  @@index([clubeId, escalaoId])
+  @@index([categoriaId])
 }
 
 // Natureza do quadro tático (bíblia §3.6).
@@ -492,6 +541,10 @@ model Escalao {
 
   // Mano-a-Mano (§3.16): competições de duelos 1×1 deste escalão.
   competicoesManoMano CompeticaoManoMano[]
+
+  // Situações de jogo (§24): biblioteca e categorias da equipa técnica deste escalão.
+  situacoesJogo      SituacaoJogo[]
+  categoriasSituacao CategoriaSituacaoJogo[]
 
   @@index([clubeId])
   @@index([seccaoId])
