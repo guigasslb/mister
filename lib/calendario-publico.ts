@@ -14,7 +14,8 @@ import {
  * adversário, casa/fora, local, competição, subequipa, resultado (só se já
  * realizado), concentração e — só com o opt-in do escalão — os convocados como
  * «Primeiro Último · nº» e, nos jogos realizados, os marcadores «Primeiro Último»
- * + nº de golos (🔁 2026-10-26, mesmo opt-in). Nada de ids, fotos, datas de nascimento, contactos,
+ * + nº de golos e o plantel das subequipas «Primeiro Último · nº» (🔁 2026-10-26,
+ * mesmo opt-in). Nada de ids, fotos, datas de nascimento, contactos,
  * encarregados, estatísticas, notas ou relatórios.
  */
 
@@ -102,6 +103,59 @@ export function selectJogoCalendarioPublico(ctx: {
     : SELECT_JOGO_CALENDARIO_PUBLICO;
 }
 
+/**
+ * Plantel das subequipas (só com o opt-in do escalão, 🔁 2026-10-26): competições
+ * do escalão/época/clube do link e, em cada uma, os participantes `PROPRIO`
+ * (§23.11) com o seu plantel `EquipaCompeticaoAtleta`. Só atletas **ativos** do
+ * clube com participação **ATIVA** no escalão/época; apenas nome e número.
+ */
+export function argsEquipasCalendarioPublico(ctx: {
+  escalaoId: string;
+  epocaId: string;
+  clubeId: string;
+}) {
+  const participacao = { escalaoId: ctx.escalaoId, epocaId: ctx.epocaId, estado: "ATIVO" as const };
+  return {
+    where: { escalaoId: ctx.escalaoId, epocaId: ctx.epocaId, clubeId: ctx.clubeId },
+    orderBy: [{ criadoEm: "asc" as const }, { id: "asc" as const }],
+    select: {
+      nome: true,
+      equipas: {
+        where: { tipo: "PROPRIO" as const },
+        orderBy: [{ criadoEm: "asc" as const }, { id: "asc" as const }],
+        select: {
+          nome: true,
+          atletas: {
+            where: {
+              atleta: {
+                clubeId: ctx.clubeId,
+                ativo: true,
+                participacoes: { some: participacao },
+              },
+            },
+            select: {
+              atleta: {
+                select: {
+                  nome: true,
+                  participacoes: { where: participacao, select: { numero: true }, take: 1 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  } satisfies Prisma.CompeticaoFindManyArgs;
+}
+
+type CompeticaoEquipas = {
+  nome: string;
+  equipas: {
+    nome: string;
+    atletas: { atleta: { nome: string; participacoes: { numero: number | null }[] } }[];
+  }[];
+};
+
 type EscalaoCalendario = Prisma.EscalaoGetPayload<{
   select: typeof SELECT_ESCALAO_CALENDARIO_PUBLICO;
 }>;
@@ -180,6 +234,46 @@ export interface JogoCalendarioPublico {
   marcadores: MarcadorPublico[] | null;
 }
 
+/** Plantel de uma subequipa numa competição (só com o opt-in). */
+export interface EquipaPublica {
+  /** Nome próprio da subequipa (`nomeSubequipaPublico`, ex.: «Brancos»). */
+  nome: string;
+  /** Nome da competição a que o plantel pertence (os plantéis são por competição). */
+  competicao: string;
+  /** «Primeiro Último» + nº, ordenados por nº e nome. Nunca vazio. */
+  atletas: ConvocadoPublico[];
+}
+
+/**
+ * Cartões de plantel por subequipa (pura). Só competições com **≥2** participantes
+ * `PROPRIO` (subequipas reais — §23.11); subequipas sem plantel ficam de fora (a
+ * convocatória delas é todo o escalão). Um atleta em várias subequipas aparece
+ * em cada uma (o modelo permite-o — §23.11.3 regra 2).
+ */
+export function montarEquipasPublicas(
+  competicoes: CompeticaoEquipas[],
+  clubeNome?: string | null,
+): EquipaPublica[] {
+  const out: EquipaPublica[] = [];
+  for (const c of competicoes) {
+    if (c.equipas.length < 2) continue;
+    for (const e of c.equipas) {
+      if (e.atletas.length === 0) continue;
+      out.push({
+        nome: nomeSubequipaPublico(e.nome, clubeNome),
+        competicao: c.nome,
+        atletas: ordenarConvocadosPublicos(
+          e.atletas.map((a) => ({
+            nome: nomePrimeiroUltimo(a.atleta.nome),
+            numero: a.atleta.participacoes[0]?.numero ?? null,
+          })),
+        ),
+      });
+    }
+  }
+  return out;
+}
+
 export interface CalendarioPublico {
   clube: { nome: string; corPrimaria: string; logoUrl: string | null };
   escalao: { nome: string };
@@ -188,6 +282,8 @@ export interface CalendarioPublico {
   proximos: JogoCalendarioPublico[];
   /** Data < agora, do mais recente para o mais antigo. */
   realizados: JogoCalendarioPublico[];
+  /** Plantel por subequipa; `[]` com o opt-in desligado ou sem subequipas. */
+  equipas: EquipaPublica[];
 }
 
 const SEPARADOR_SUBEQUIPA = /\s+[-–—]\s+/;
@@ -265,6 +361,7 @@ export function montarCalendarioPublico(
   epoca: { nome: string } | null,
   jogos: JogoCalendario[],
   agora: Date,
+  competicoes: CompeticaoEquipas[] = [],
 ): CalendarioPublico {
   const ordenados = [...jogos].sort((a, b) => a.data.getTime() - b.data.getTime());
   const ref = agora.getTime();
@@ -283,6 +380,9 @@ export function montarCalendarioPublico(
       .filter((j) => j.data.getTime() < ref)
       .reverse()
       .map((j) => mapearJogoPublico(j, agora, escalao.clube.nome, escalao.calendarioPublicoMostrarConvocados)),
+    equipas: escalao.calendarioPublicoMostrarConvocados
+      ? montarEquipasPublicas(competicoes, escalao.clube.nome)
+      : [],
   };
 }
 
@@ -320,6 +420,17 @@ export async function obterCalendarioPublico(
         orderBy: { data: "asc" },
       })
     : [];
+  // Plantel das subequipas: só com o opt-in (desligado ⇒ a query nem corre).
+  const competicoes =
+    epoca && escalao.calendarioPublicoMostrarConvocados
+      ? await prisma.competicao.findMany(
+          argsEquipasCalendarioPublico({
+            escalaoId: escalao.id,
+            epocaId: epoca.id,
+            clubeId: escalao.clubeId,
+          }),
+        )
+      : [];
 
-  return montarCalendarioPublico(escalao, epoca, jogos, agora);
+  return montarCalendarioPublico(escalao, epoca, jogos, agora, competicoes);
 }

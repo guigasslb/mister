@@ -5,12 +5,15 @@ vi.mock("@/lib/db", () => ({
     escalao: { findUnique: vi.fn() },
     epoca: { findFirst: vi.fn() },
     jogo: { findMany: vi.fn() },
+    competicao: { findMany: vi.fn() },
   },
 }));
 
 import { prisma } from "@/lib/db";
 import {
+  argsEquipasCalendarioPublico,
   mapearJogoPublico,
+  montarEquipasPublicas,
   nomePrimeiroUltimo,
   obterCalendarioPublico,
   ordenarConvocadosPublicos,
@@ -82,7 +85,10 @@ function jogoComConvocados() {
   };
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  m(prisma.competicao.findMany).mockResolvedValue([]);
+});
 
 // ─── Nome «Primeiro Último» ─────────────────────────────────────────────────
 describe("nomePrimeiroUltimo", () => {
@@ -393,5 +399,133 @@ describe("marcadores no calendário público", () => {
     expect("estatisticas" in m(prisma.jogo.findMany).mock.calls[0][0].select).toBe(false);
     expect(cal2?.realizados[0].marcadores).toBeNull();
     expect(cal2?.realizados[0].resultado).toEqual({ marcados: 4, sofridos: 2 });
+  });
+});
+
+// ─── Plantel das subequipas (🔁 2026-10-26) ─────────────────────────────────
+describe("plantel das subequipas no calendário público", () => {
+  const atl = (nome: string, numero: number | null, extra: object = {}) => ({
+    atleta: { nome, participacoes: numero == null ? [] : [{ numero }], ...extra },
+  });
+  /** Linhas "da BD" com campos privados a mais (não devem passar). */
+  const COMPETICOES = [
+    {
+      nome: "Distrital",
+      id: "comp1",
+      equipas: [
+        {
+          nome: "GD Exemplo - Brancos",
+          id: "eq1",
+          atletas: [
+            atl("Tomás Pedro Rodrigues", 9, { id: "a1", fotoUrl: "https://x/f.webp" }),
+            atl("Ana Costa", 3),
+            atl("Zé", null),
+            atl("Bruno Dias", 3),
+          ],
+        },
+        { nome: "Azuis", atletas: [atl("Ana Maria Costa", 3), atl("Rui Sá", 1)] },
+        { nome: "Verdes", atletas: [] },
+      ],
+    },
+    // Competição com 1 só PROPRIO (sem subequipas reais) → ignorada.
+    { nome: "Taça", equipas: [{ nome: "Benjamins", atletas: [atl("Rui Sá", 1)] }] },
+  ];
+
+  it("args: só competições do escalão/época/clube, PROPRIO, atletas ativos do clube com participação ATIVA; só nome + nº", () => {
+    const args = argsEquipasCalendarioPublico({ escalaoId: ESC, epocaId: "ep1", clubeId: "clube1" });
+    const part = { escalaoId: ESC, epocaId: "ep1", estado: "ATIVO" };
+    expect(args.where).toEqual({ escalaoId: ESC, epocaId: "ep1", clubeId: "clube1" });
+    expect(args.select).toEqual({
+      nome: true,
+      equipas: {
+        where: { tipo: "PROPRIO" },
+        orderBy: [{ criadoEm: "asc" }, { id: "asc" }],
+        select: {
+          nome: true,
+          atletas: {
+            where: { atleta: { clubeId: "clube1", ativo: true, participacoes: { some: part } } },
+            select: {
+              atleta: {
+                select: {
+                  nome: true,
+                  participacoes: { where: part, select: { numero: true }, take: 1 },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it("projeção: cartão por subequipa, «Primeiro Último · nº», ordenado por nº e nome; sem plantel/sem subequipas fora", () => {
+    const equipas = montarEquipasPublicas(COMPETICOES, "GD Exemplo");
+    expect(equipas).toEqual([
+      {
+        nome: "Brancos",
+        competicao: "Distrital",
+        atletas: [
+          { nome: "Ana Costa", numero: 3 },
+          { nome: "Bruno Dias", numero: 3 },
+          { nome: "Tomás Rodrigues", numero: 9 },
+          { nome: "Zé", numero: null },
+        ],
+      },
+      {
+        nome: "Azuis",
+        competicao: "Distrital",
+        atletas: [
+          { nome: "Rui Sá", numero: 1 },
+          { nome: "Ana Costa", numero: 3 },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(equipas)).not.toMatch(/comp1|eq1|a1|foto|Pedro|Maria/);
+  });
+
+  it("atleta em várias subequipas aparece em cada uma (o modelo permite)", () => {
+    const equipas = montarEquipasPublicas([
+      {
+        nome: "Distrital",
+        equipas: [
+          { nome: "A", atletas: [atl("Rui Sá", 1)] },
+          { nome: "B", atletas: [atl("Rui Sá", 1)] },
+        ],
+      },
+    ]);
+    expect(equipas.map((e) => e.atletas)).toEqual([
+      [{ nome: "Rui Sá", numero: 1 }],
+      [{ nome: "Rui Sá", numero: 1 }],
+    ]);
+  });
+
+  it("leitura pública ligada: query isolada no escalão/época/clube do link → equipas no DTO", async () => {
+    m(prisma.escalao.findUnique).mockResolvedValue(escalao(true));
+    m(prisma.epoca.findFirst).mockResolvedValue({ id: "ep1", nome: "2026/27" });
+    m(prisma.jogo.findMany).mockResolvedValue([]);
+    m(prisma.competicao.findMany).mockResolvedValue(COMPETICOES);
+    const cal = await obterCalendarioPublico(TOKEN, AGORA);
+    expect(m(prisma.competicao.findMany)).toHaveBeenCalledTimes(1);
+    expect(m(prisma.competicao.findMany).mock.calls[0][0]).toEqual(
+      argsEquipasCalendarioPublico({ escalaoId: ESC, epocaId: "ep1", clubeId: "clube1" }),
+    );
+    expect(cal?.equipas.map((e) => e.nome)).toEqual(["Brancos", "Azuis"]);
+  });
+
+  it("leitura pública desligada (ou sem época ativa): a query nem corre e equipas = []", async () => {
+    m(prisma.escalao.findUnique).mockResolvedValue(escalao(false));
+    m(prisma.epoca.findFirst).mockResolvedValue({ id: "ep1", nome: "2026/27" });
+    m(prisma.jogo.findMany).mockResolvedValue([]);
+    m(prisma.competicao.findMany).mockResolvedValue(COMPETICOES);
+    const cal = await obterCalendarioPublico(TOKEN, AGORA);
+    expect(m(prisma.competicao.findMany)).not.toHaveBeenCalled();
+    expect(cal?.equipas).toEqual([]);
+
+    vi.clearAllMocks();
+    m(prisma.escalao.findUnique).mockResolvedValue(escalao(true));
+    m(prisma.epoca.findFirst).mockResolvedValue(null);
+    const cal2 = await obterCalendarioPublico(TOKEN, AGORA);
+    expect(m(prisma.competicao.findMany)).not.toHaveBeenCalled();
+    expect(cal2?.equipas).toEqual([]);
   });
 });

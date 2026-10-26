@@ -1,5 +1,5 @@
 import { ChevronDown, Clock, Goal, Home, MapPin, Plane, Trophy, Users } from "lucide-react";
-import type { JogoCalendarioPublico } from "@/lib/calendario-publico";
+import type { EquipaPublica, JogoCalendarioPublico } from "@/lib/calendario-publico";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
 import {
@@ -225,5 +225,50 @@ export function LinhaJogo({ jogo, clubeNome }: { jogo: JogoCalendarioPublico; cl
       </div>
       <DetalhesJogo jogo={jogo} />
     </li>
+  );
+}
+
+/**
+ * Plantel das subequipas (só com o opt-in «Mostrar convocados»): um cartão por
+ * subequipa com o badge colorido e «Primeiro Último · nº». Mobile-first: uma
+ * coluna; lado a lado a partir de `sm`. Sem equipas ⇒ nada.
+ */
+export function PlantelSubequipas({ equipas }: { equipas: EquipaPublica[] }) {
+  if (equipas.length === 0) return null;
+  const variasCompeticoes = new Set(equipas.map((e) => e.competicao)).size > 1;
+  return (
+    <section aria-labelledby="plantel-equipas">
+      <h2 id="plantel-equipas" className="text-titulo-seccao text-cinza-900">
+        Plantel das equipas
+      </h2>
+      <p className="mb-3 mt-0.5 text-corpo-sec text-cinza-600">Em que equipa joga cada atleta.</p>
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {equipas.map((e, i) => (
+          <li
+            key={i}
+            className="rounded-lg border border-cinza-200 bg-white p-4 shadow-card"
+            aria-label={`Plantel ${e.nome}${variasCompeticoes ? ` — ${e.competicao}` : ""}`}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <BadgeSubequipa nome={e.nome} />
+              {variasCompeticoes && (
+                <span className="text-legenda text-cinza-500">{e.competicao}</span>
+              )}
+              <span className="ml-auto text-legenda text-cinza-500">
+                {e.atletas.length} {e.atletas.length === 1 ? "atleta" : "atletas"}
+              </span>
+            </div>
+            <ul className="mt-2 space-y-0.5 text-corpo-sec text-cinza-700">
+              {e.atletas.map((a, j) => (
+                <li key={j}>
+                  {a.nome}
+                  {a.numero != null ? ` · ${a.numero}` : ""}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

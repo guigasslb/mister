@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { LinhaJogo, LocalComMapa } from "@/components/jogos/CalendarioPublicoJogo";
+import { LinhaJogo, LocalComMapa, PlantelSubequipas } from "@/components/jogos/CalendarioPublicoJogo";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import {
   CORES_BADGE_CONVOCATORIA,
@@ -238,5 +238,39 @@ describe("Marcadores no cartão (jogos realizados)", () => {
     expect(html).toContain("Ana Silva");
     expect(html).not.toContain("×1");
     expect(render(jogo({ resultado: { marcados: 0, sofridos: 1 } }))).not.toContain("Marcadores");
+  });
+});
+
+describe("PlantelSubequipas — cartões por subequipa", () => {
+  const html = (equipas: Parameters<typeof PlantelSubequipas>[0]["equipas"]) =>
+    renderToStaticMarkup(createElement(PlantelSubequipas, { equipas }));
+
+  it("sem equipas → nada", () => {
+    expect(html([])).toBe("");
+  });
+
+  it("um cartão por subequipa, badge colorido, «Nome · nº», lado a lado em ecrãs largos", () => {
+    const out = html([
+      { nome: "Brancos", competicao: "Distrital", atletas: [{ nome: "Ana Costa", numero: 3 }, { nome: "Zé", numero: null }] },
+      { nome: "Azuis", competicao: "Distrital", atletas: [{ nome: "Rui Sá", numero: 1 }] },
+    ]);
+    expect(out).toContain("Plantel das equipas");
+    expect(out).toContain("grid-cols-1");
+    expect(out).toContain("sm:grid-cols-2");
+    expect(out).toContain("background-color:#FFFFFF;color:#141210;border-color:#6B7280");
+    expect(out).toContain("background-color:#1D4ED8;color:#FFFFFF;border-color:#1D4ED8");
+    expect(out).toContain("Ana Costa · 3");
+    expect(out).toContain("<li>Zé</li>");
+    expect(out).toContain("1 atleta");
+    expect(out).not.toContain("Distrital"); // uma só competição → sem subtítulo
+  });
+
+  it("várias competições → mostra a competição em cada cartão", () => {
+    const out = html([
+      { nome: "A", competicao: "Distrital", atletas: [{ nome: "Rui Sá", numero: 1 }] },
+      { nome: "A", competicao: "Taça", atletas: [{ nome: "Rui Sá", numero: 1 }] },
+    ]);
+    expect(out).toContain("Distrital");
+    expect(out).toContain("Taça");
   });
 });

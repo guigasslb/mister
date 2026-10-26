@@ -223,7 +223,7 @@ describe("seleção pública mínima", () => {
     ]);
     expect(cal.clube).toEqual({ nome: "GD Exemplo", corPrimaria: "#0055AA", logoUrl: null });
     expect(Object.keys(cal).sort()).toEqual(
-      ["clube", "epoca", "escalao", "proximos", "realizados"].sort(),
+      ["clube", "epoca", "equipas", "escalao", "proximos", "realizados"].sort(),
     );
     expect(cal.escalao).toEqual({ nome: "Benjamins" });
   });

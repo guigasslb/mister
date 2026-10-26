@@ -128,7 +128,8 @@ export function PartilharCalendario({
             <Label htmlFor="calendario-mostrar-convocados">Mostrar convocados</Label>
             <p className="text-legenda text-cinza-500">
               Em cada jogo com convocatória, mostra o primeiro e o último nome e o número
-              dos convocados e, nos jogos realizados, os marcadores. Desligado por defeito.
+              dos convocados, nos jogos realizados os marcadores e, no topo, o plantel de
+              cada equipa (subequipas). Desligado por defeito.
             </p>
           </div>
           <Switch

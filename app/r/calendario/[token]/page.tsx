@@ -3,7 +3,7 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { obterCalendarioPublico } from "@/lib/calendario-publico";
-import { LinhaJogo } from "@/components/jogos/CalendarioPublicoJogo";
+import { LinhaJogo, PlantelSubequipas } from "@/components/jogos/CalendarioPublicoJogo";
 import { LogoIcon } from "@/components/layout/Logo";
 import {
   descricaoCalendarioPublico,
@@ -72,7 +72,7 @@ export default async function CalendarioPublicoPage({
   const calendario = await obterCalendario(token);
   if (!calendario) notFound();
 
-  const { clube, escalao, epoca, proximos, realizados } = calendario;
+  const { clube, escalao, epoca, proximos, realizados, equipas } = calendario;
   const estiloClube = {
     "--cor-primaria": clube.corPrimaria,
     ...variaveisCorCalendarioPublico(clube.corPrimaria),
@@ -112,6 +112,12 @@ export default async function CalendarioPublicoPage({
             </div>
           </div>
         </header>
+
+        {equipas.length > 0 && (
+          <div className="mb-8">
+            <PlantelSubequipas equipas={equipas} />
+          </div>
+        )}
 
         {semJogos ? (
           <p className="rounded-lg border border-dashed border-cinza-300 bg-white p-6 text-center text-corpo-sec text-cinza-500">

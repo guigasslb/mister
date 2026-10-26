@@ -41,6 +41,7 @@ function cal(extra: Partial<CalendarioPublico> = {}): CalendarioPublico {
     epoca: { nome: "2026/27" },
     proximos: [],
     realizados: [],
+    equipas: [],
     ...extra,
   };
 }
