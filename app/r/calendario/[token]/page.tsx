@@ -6,6 +6,7 @@ import { obterCalendarioPublico } from "@/lib/calendario-publico";
 import { LinhaJogo, PlantelSubequipas } from "@/components/jogos/CalendarioPublicoJogo";
 import { LogoIcon } from "@/components/layout/Logo";
 import {
+  abreviarNomeClube,
   descricaoCalendarioPublico,
   resolverUrlBase,
   tituloCalendarioPublico,
@@ -103,7 +104,9 @@ export default async function CalendarioPublicoPage({
               </span>
             )}
             <div className="min-w-0">
-              <p className="text-legenda uppercase tracking-wide text-cinza-500">{clube.nome}</p>
+              <p className="text-legenda uppercase tracking-wide text-cinza-500">
+                {abreviarNomeClube(clube.nome)}
+              </p>
               <h1 className="leading-tight">Calendário de jogos</h1>
               <p className="mt-0.5 text-corpo-sec text-cinza-600">
                 {escalao.nome}

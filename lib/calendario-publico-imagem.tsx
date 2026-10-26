@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 import type { CalendarioPublico } from "@/lib/calendario-publico";
-import { linhasImagemCalendario } from "@/lib/calendario-publico-partilha";
+import { abreviarNomeClube, linhasImagemCalendario } from "@/lib/calendario-publico-partilha";
 
 /**
  * Imagem Open Graph (1200×630 PNG) do calendário público (bíblia §8.11.1).
@@ -90,7 +90,7 @@ export function renderizarImagemCalendario(cal: CalendarioPublico): ImageRespons
               Calendário de jogos
             </div>
             <div style={{ display: "flex", fontSize: 48, fontWeight: 800, color: CLARO }}>
-              {cal.clube.nome}
+              {abreviarNomeClube(cal.clube.nome)}
             </div>
             <div style={{ display: "flex", fontSize: 30, color: MUTED }}>
               {cal.escalao.nome}

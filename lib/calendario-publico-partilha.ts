@@ -59,7 +59,7 @@ export function dataHoraCurta(iso: string): string {
 }
 
 export function tituloCalendarioPublico(cal: CalendarioPublico): string {
-  return `Calendário de jogos — ${cal.clube.nome} · ${cal.escalao.nome}`;
+  return `Calendário de jogos — ${abreviarNomeClube(cal.clube.nome)} · ${cal.escalao.nome}`;
 }
 
 function truncar(texto: string, max: number): string {
@@ -67,7 +67,8 @@ function truncar(texto: string, max: number): string {
 }
 
 function confronto(cal: CalendarioPublico, jogo: JogoCalendarioPublico): string {
-  return tituloConfronto(cal.clube.nome, jogo.adversario, jogo.casaFora);
+  const nomes = nomesConfrontoPublico(cal.clube.nome, jogo.adversario);
+  return tituloConfronto(nomes.clube, nomes.adversario, jogo.casaFora);
 }
 
 /**
@@ -223,3 +224,92 @@ export function coresSubequipa(nome: string | null | undefined): CoresBadge {
   return CORES_SUBEQUIPA_NEUTRO;
 }
 
+
+/**
+ * Designações institucionais → siglas usadas em Portugal (🔁 2026-10-26, só
+ * apresentação no calendário público). Lista explícita; as mais longas primeiro
+ * para que «Grupo Desportivo e Recreativo» ganhe a «Grupo Desportivo».
+ */
+export const SIGLAS_CLUBE: readonly { designacao: string; sigla: string }[] = [
+  { designacao: "Grupo Desportivo e Recreativo", sigla: "GDR" },
+  { designacao: "Associação Recreativa e Cultural", sigla: "ARC" },
+  { designacao: "Centro Cultural e Desportivo", sigla: "CCD" },
+  { designacao: "Sporting Clube", sigla: "SC" },
+  { designacao: "Sport Clube", sigla: "SC" },
+  { designacao: "Futebol Clube", sigla: "FC" },
+  { designacao: "Grupo Desportivo", sigla: "GD" },
+  { designacao: "Clube Desportivo", sigla: "CD" },
+  { designacao: "Associação Desportiva", sigla: "AD" },
+  { designacao: "Clube de Futebol", sigla: "CF" },
+  { designacao: "União Desportiva", sigla: "UD" },
+  { designacao: "Atlético Clube", sigla: "AC" },
+];
+
+/** Minúsculas, sem acentos e sem pontuação nas pontas — só para comparar palavras. */
+function chavePalavra(palavra: string): string {
+  return palavra
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+
+const PADROES_SIGLA = SIGLAS_CLUBE.map((s) => ({
+  palavras: s.designacao.split(" ").map(chavePalavra),
+  sigla: s.sigla,
+})).sort((a, b) => b.palavras.length - a.palavras.length);
+
+/**
+ * Abrevia o nome do clube só para apresentação («Juventude Sport Clube» →
+ * «Juventude SC»). Substitui apenas sequências completas de palavras de
+ * `SIGLAS_CLUBE` (sem distinguir maiúsculas/acentos), mantendo o resto do nome
+ * e a pontuação final da última palavra substituída. Sem correspondência (ou já
+ * com sigla) → igual. Se o resultado ficar vazio ou só com siglas → original.
+ * Nunca altera dados.
+ */
+export function abreviarNomeClube(nome: string): string {
+  const palavras = nome.trim().split(/\s+/).filter(Boolean);
+  const chaves = palavras.map(chavePalavra);
+  const out: string[] = [];
+  let substituiu = false;
+  let soSiglas = true;
+  for (let i = 0; i < palavras.length; ) {
+    const p = PADROES_SIGLA.find((pad) =>
+      pad.palavras.every((w, k) => chaves[i + k] === w),
+    );
+    if (p) {
+      const ultima = palavras[i + p.palavras.length - 1];
+      const pontuacao = /[^\p{L}\p{N}]+$/u.exec(ultima)?.[0] ?? "";
+      out.push(p.sigla + pontuacao);
+      i += p.palavras.length;
+      substituiu = true;
+    } else {
+      out.push(palavras[i]);
+      if (chaves[i]) soSiglas = false;
+      i += 1;
+    }
+  }
+  if (!substituiu || out.length === 0 || soSiglas) return nome;
+  return out.join(" ");
+}
+
+/**
+ * Nomes do confronto no calendário público: o nosso clube abreviado e o
+ * adversário abreviado **só** quando começa pelo nome do nosso clube (ex.:
+ * confronto interno «Juventude Sport Clube - Azuis» → «Juventude SC - Azuis»);
+ * os restantes adversários ficam como estão.
+ */
+export function nomesConfrontoPublico(
+  clubeNome: string,
+  adversario: string,
+): { clube: string; adversario: string } {
+  const clube = abreviarNomeClube(clubeNome);
+  const base = clubeNome.trim();
+  const chave = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const adv = adversario.trim();
+  const ehNosso =
+    base.length > 0 &&
+    chave(adv).startsWith(chave(base)) &&
+    (adv.length === base.length || /^[\s\-–—:·|]/.test(adv.slice(base.length)));
+  return { clube, adversario: ehNosso ? clube + adv.slice(base.length) : adversario };
+}

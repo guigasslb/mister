@@ -6,6 +6,7 @@ import {
   CORES_BADGE_CONVOCATORIA,
   coresSubequipa,
   detalheJogoPublico,
+  nomesConfrontoPublico,
   separarLocal,
 } from "@/lib/calendario-publico-partilha";
 import { formatarConcentracao } from "@/lib/concentracao";
@@ -171,6 +172,8 @@ export function DetalhesJogo({ jogo }: { jogo: JogoCalendarioPublico }) {
 
 export function LinhaJogo({ jogo, clubeNome }: { jogo: JogoCalendarioPublico; clubeNome: string }) {
   const hora = formatarHora(jogo.data);
+  // Só apresentação: «Juventude Sport Clube» → «Juventude SC» (abreviarNomeClube).
+  const nomes = nomesConfrontoPublico(clubeNome, jogo.adversario);
   return (
     <li
       className="rounded-lg border border-l-4 border-cinza-200 bg-white p-4 shadow-card"
@@ -187,8 +190,8 @@ export function LinhaJogo({ jogo, clubeNome }: { jogo: JogoCalendarioPublico; cl
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-corpo font-semibold text-cinza-900">
               <TituloConfronto
-                clubeNome={clubeNome}
-                adversario={jogo.adversario}
+                clubeNome={nomes.clube}
+                adversario={nomes.adversario}
                 casaFora={jogo.casaFora}
                 corClube="var(--cal-acento-texto, #C7430F)"
               />
