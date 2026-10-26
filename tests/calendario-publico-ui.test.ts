@@ -4,6 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { LinhaJogo, LocalComMapa } from "@/components/jogos/CalendarioPublicoJogo";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import {
+  CORES_BADGE_CONVOCATORIA,
+  CORES_SUBEQUIPA_NEUTRO,
+  PALETA_SUBEQUIPA,
+  coresSubequipa,
   detalheJogoPublico,
   variaveisCorCalendarioPublico,
 } from "@/lib/calendario-publico-partilha";
@@ -22,6 +26,7 @@ function jogo(extra: Partial<JogoCalendarioPublico> = {}): JogoCalendarioPublico
     resultado: null,
     concentracao: null,
     convocados: null,
+    marcadores: null,
     ...extra,
   };
 }
@@ -86,12 +91,12 @@ describe("LinhaJogo — badge e indicador de expansão", () => {
     expect(html).not.toContain("Ver detalhes");
   });
 
-  it("jogo com convocados: badge «Convocatória» na cor do clube + «Ver detalhes» + chevron que roda", () => {
+  it("jogo com convocados: badge verde «Convocatória disponível» + «Ver detalhes» + chevron que roda", () => {
     const html = render(jogo({ convocados: CONVOCADOS }));
     expect(html).toContain("<details");
     const summary = html.slice(html.indexOf("<summary"), html.indexOf("</summary>"));
-    expect(summary).toContain("Convocatória");
-    expect(summary).toContain("bg-[color:var(--cal-solido,#C7430F)]");
+    expect(summary).toContain("Convocatória disponível");
+    expect(summary).toContain("background-color:#E8F5EE;color:#166534;border-color:#1E9E5A");
     expect(summary).toContain("Ver detalhes");
     expect(summary).toContain("Ocultar detalhes");
     expect(summary).toContain("group-open:rotate-180");
@@ -160,5 +165,78 @@ describe("TituloConfronto — cor do nome do clube", () => {
       createElement(TituloConfronto, { clubeNome: "Mister FC", adversario: "Benfica", casaFora: "CASA" }),
     );
     expect(html).toContain("color:var(--cor-primaria, #F0531E)");
+  });
+});
+
+describe("badge «Convocatória disponível» — verde de estado AA", () => {
+  it("texto ≥4.5:1 sobre o fundo; contorno é o verde-600 do sistema de design", () => {
+    const c = CORES_BADGE_CONVOCATORIA;
+    expect(contrastePdf(c.texto, c.fundo)).toBeGreaterThanOrEqual(4.5);
+    expect(c.contorno).toBe("#1E9E5A");
+  });
+});
+
+describe("coresSubequipa — cor derivada do nome", () => {
+  it.each([
+    ["Azuis", "#1D4ED8"],
+    ["Brancos", "#FFFFFF"],
+    ["Equipa Branca", "#FFFFFF"],
+    ["Vermelhos", "#B91C1C"],
+    ["Encarnados", "#B91C1C"],
+    ["Verdes", "#15803D"],
+    ["Pretos", "#141210"],
+    ["Amarelos", "#FACC15"],
+    ["Laranjas", "#C2410C"],
+    ["Roxos", "#7E22CE"],
+    ["Lilases", "#7E22CE"],
+    ["Rosas", "#BE185D"],
+    ["Cinzentos", "#4B5563"],
+    ["AZUL", "#1D4ED8"],
+  ])("%s → %s", (nome, fundo) => {
+    expect(coresSubequipa(nome).fundo).toBe(fundo);
+  });
+
+  it("sem cor reconhecida (ou palavras que só contêm a cor) → neutro", () => {
+    for (const nome of ["Benjamins B", "Sub-11 A", "Verdelhos", "Rosário", "", null]) {
+      expect(coresSubequipa(nome)).toBe(CORES_SUBEQUIPA_NEUTRO);
+    }
+  });
+
+  it("brancos têm contorno visível (≥3:1 sobre o cartão branco)", () => {
+    const b = coresSubequipa("Brancos");
+    expect(contrastePdf(b.contorno, "#FFFFFF")).toBeGreaterThanOrEqual(3);
+  });
+
+  it("AA em toda a paleta (texto ≥4.5:1 sobre o fundo)", () => {
+    for (const c of [...PALETA_SUBEQUIPA.map((p) => p.cores), CORES_SUBEQUIPA_NEUTRO]) {
+      expect(contrastePdf(c.texto, c.fundo)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("o cartão aplica a cor ao badge da subequipa", () => {
+    const html = render(jogo({ equipa: "Azuis" }));
+    expect(html).toContain("background-color:#1D4ED8;color:#FFFFFF;border-color:#1D4ED8");
+    expect(html).toContain(">Azuis</span>");
+  });
+});
+
+describe("Marcadores no cartão (jogos realizados)", () => {
+  it("lista compacta «Nome ×N · Nome»; sem marcadores → nada", () => {
+    const html = render(
+      jogo({
+        resultado: { marcados: 3, sofridos: 1 },
+        marcadores: [
+          { nome: "Tomás Rodrigues", golos: 2 },
+          { nome: "Ana Silva", golos: 1 },
+        ],
+      }),
+    );
+    expect(html).toContain("Marcadores:");
+    expect(html).toContain("Tomás Rodrigues");
+    expect(html).toContain(" ×2");
+    expect(html).toContain("(2 golos)");
+    expect(html).toContain("Ana Silva");
+    expect(html).not.toContain("×1");
+    expect(render(jogo({ resultado: { marcados: 0, sofridos: 1 } }))).not.toContain("Marcadores");
   });
 });

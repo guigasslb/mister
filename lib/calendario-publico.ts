@@ -13,7 +13,8 @@ import {
  * mostra: identidade do clube, nome do escalão, época ativa e, por jogo, data/hora,
  * adversário, casa/fora, local, competição, subequipa, resultado (só se já
  * realizado), concentração e — só com o opt-in do escalão — os convocados como
- * «Primeiro Último · nº». Nada de ids, fotos, datas de nascimento, contactos,
+ * «Primeiro Último · nº» e, nos jogos realizados, os marcadores «Primeiro Último»
+ * + nº de golos (🔁 2026-10-26, mesmo opt-in). Nada de ids, fotos, datas de nascimento, contactos,
  * encarregados, estatísticas, notas ou relatórios.
  */
 
@@ -72,7 +73,20 @@ export function selectConvocadosCalendarioPublico(ctx: {
   } satisfies Prisma.Jogo$convocatoriasArgs;
 }
 
-/** Select dos jogos: base fechada + convocados só quando o opt-in está ligado. */
+/**
+ * Marcadores (só com o opt-in do escalão, 🔁 2026-10-26): a fonte é a
+ * `EstatisticaAtleta` do jogo (verdade final do registo — §8.11; os eventos do
+ * Modo Jogo ao Vivo agregam para ela). Só linhas com golos > 0, só atletas do
+ * clube do escalão, e apenas o nome e o nº de golos.
+ */
+export function selectMarcadoresCalendarioPublico(ctx: { clubeId: string }) {
+  return {
+    where: { golos: { gt: 0 }, atleta: { clubeId: ctx.clubeId } },
+    select: { golos: true, atleta: { select: { nome: true } } },
+  } satisfies Prisma.Jogo$estatisticasArgs;
+}
+
+/** Select dos jogos: base fechada + convocados/marcadores só quando o opt-in está ligado. */
 export function selectJogoCalendarioPublico(ctx: {
   escalaoId: string;
   epocaId: string;
@@ -80,7 +94,11 @@ export function selectJogoCalendarioPublico(ctx: {
   mostrarConvocados: boolean;
 }) {
   return ctx.mostrarConvocados
-    ? { ...SELECT_JOGO_CALENDARIO_PUBLICO, convocatorias: selectConvocadosCalendarioPublico(ctx) }
+    ? {
+        ...SELECT_JOGO_CALENDARIO_PUBLICO,
+        convocatorias: selectConvocadosCalendarioPublico(ctx),
+        estatisticas: selectMarcadoresCalendarioPublico(ctx),
+      }
     : SELECT_JOGO_CALENDARIO_PUBLICO;
 }
 
@@ -91,6 +109,7 @@ type JogoCalendario = Prisma.JogoGetPayload<{
   select: typeof SELECT_JOGO_CALENDARIO_PUBLICO;
 }> & {
   convocatorias?: { atleta: { nome: string; participacoes: { numero: number | null }[] } }[];
+  estatisticas?: { golos: number; atleta: { nome: string } }[];
 };
 
 /**
@@ -121,6 +140,16 @@ export function ordenarConvocadosPublicos(lista: ConvocadoPublico[]): ConvocadoP
   });
 }
 
+export interface MarcadorPublico {
+  nome: string; // «Primeiro Último»
+  golos: number; // ≥ 1
+}
+
+/** Ordena por nº de golos (desc.) e depois por nome (pt). */
+export function ordenarMarcadoresPublicos(lista: MarcadorPublico[]): MarcadorPublico[] {
+  return [...lista].sort((a, b) => b.golos - a.golos || a.nome.localeCompare(b.nome, "pt"));
+}
+
 /** Jogos do escalão na época, sempre restritos ao clube do escalão. */
 export function whereJogosCalendarioPublico(
   escalao: { id: string; clubeId: string },
@@ -147,6 +176,8 @@ export interface JogoCalendarioPublico {
   concentracao: { hora: string | null; local: string | null } | null;
   /** Convocados («Primeiro Último» + nº); null com o opt-in desligado ou sem convocatória. */
   convocados: ConvocadoPublico[] | null;
+  /** Marcadores («Primeiro Último» + golos); só em jogos realizados, com o opt-in ligado e golos registados. */
+  marcadores: MarcadorPublico[] | null;
 }
 
 export interface CalendarioPublico {
@@ -218,6 +249,13 @@ export function mapearJogoPublico(
             })),
           )
         : null,
+    marcadores: (() => {
+      if (!mostrarConvocados || !realizado || !jogo.estatisticas) return null;
+      const lista = jogo.estatisticas
+        .filter((e) => e.golos > 0)
+        .map((e) => ({ nome: nomePrimeiroUltimo(e.atleta.nome), golos: e.golos }));
+      return lista.length > 0 ? ordenarMarcadoresPublicos(lista) : null;
+    })(),
   };
 }
 

@@ -29,6 +29,7 @@ function jogo(extra: Partial<JogoCalendarioPublico> = {}): JogoCalendarioPublico
     resultado: null,
     concentracao: null,
     convocados: null,
+    marcadores: null,
     ...extra,
   };
 }

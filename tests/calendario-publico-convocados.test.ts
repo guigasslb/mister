@@ -14,6 +14,7 @@ import {
   nomePrimeiroUltimo,
   obterCalendarioPublico,
   ordenarConvocadosPublicos,
+  ordenarMarcadoresPublicos,
   selectJogoCalendarioPublico,
   SELECT_JOGO_CALENDARIO_PUBLICO,
 } from "@/lib/calendario-publico";
@@ -151,6 +152,10 @@ describe("convocados no calendário público", () => {
             },
           },
         },
+      },
+      estatisticas: {
+        where: { golos: { gt: 0 }, atleta: { clubeId: "clube1" } },
+        select: { golos: true, atleta: { select: { nome: true } } },
       },
     });
   });
@@ -290,5 +295,103 @@ describe("concentração", () => {
     );
     expect(Object.keys(campos)).not.toContain("horaConcentracao");
     expect(Object.keys(campos)).not.toContain("localConcentracao");
+  });
+});
+
+// ─── Marcadores (🔁 2026-10-26) ─────────────────────────────────────────────
+describe("marcadores no calendário público", () => {
+  const AGORA_M = new Date("2026-11-10T12:00:00.000Z");
+  /** Jogo realizado "da BD" com estatísticas e campos privados a mais. */
+  function jogoRealizado(estatisticas?: unknown[]) {
+    return {
+      ...jogoComConvocados(),
+      golosMarcados: 4,
+      golosSofridos: 2,
+      ...(estatisticas ? { estatisticas } : {}),
+    };
+  }
+  const ESTATS = [
+    {
+      id: "e1",
+      atletaId: "atl1",
+      golos: 1,
+      assistencias: 3,
+      minutos: 40,
+      atleta: { id: "atl1", nome: "Ana Maria Costa", fotoUrl: "https://x/f.webp" },
+    },
+    { golos: 2, atleta: { nome: "Tomás Pedro Rodrigues" } },
+    { golos: 1, atleta: { nome: "Bruno Dias" } },
+    { golos: 0, atleta: { nome: "Zé Sem Golos" } },
+  ];
+
+  it("ordena por golos (desc.) e depois por nome", () => {
+    expect(
+      ordenarMarcadoresPublicos([
+        { nome: "Bruno Dias", golos: 1 },
+        { nome: "Tomás Rodrigues", golos: 2 },
+        { nome: "Ana Costa", golos: 1 },
+      ]),
+    ).toEqual([
+      { nome: "Tomás Rodrigues", golos: 2 },
+      { nome: "Ana Costa", golos: 1 },
+      { nome: "Bruno Dias", golos: 1 },
+    ]);
+  });
+
+  it("ligado + realizado: «Primeiro Último» + golos, sem 0 golos, ids, fotos nem outras estatísticas", () => {
+    const dto = mapearJogoPublico(jogoRealizado(ESTATS) as never, AGORA_M, "GD Exemplo", true);
+    expect(dto.marcadores).toEqual([
+      { nome: "Tomás Rodrigues", golos: 2 },
+      { nome: "Ana Costa", golos: 1 },
+      { nome: "Bruno Dias", golos: 1 },
+    ]);
+    expect(dto.resultado).toEqual({ marcados: 4, sofridos: 2 });
+    const json = JSON.stringify(dto.marcadores);
+    expect(json).not.toMatch(/atl1|e1|foto|assist|minutos|Maria|Pedro|Sem Golos/);
+  });
+
+  it("desligado: sem nomes mesmo que a linha traga estatísticas; o resultado mantém-se", () => {
+    const dto = mapearJogoPublico(jogoRealizado(ESTATS) as never, AGORA_M, "GD Exemplo", false);
+    expect(dto.marcadores).toBeNull();
+    expect(dto.resultado).toEqual({ marcados: 4, sofridos: 2 });
+  });
+
+  it("jogo por realizar ou sem golos registados → null", () => {
+    expect(
+      mapearJogoPublico(jogoRealizado(ESTATS) as never, AGORA, "GD Exemplo", true).marcadores,
+    ).toBeNull();
+    expect(
+      mapearJogoPublico(jogoRealizado([]) as never, AGORA_M, "GD Exemplo", true).marcadores,
+    ).toBeNull();
+    expect(
+      mapearJogoPublico(
+        jogoRealizado([{ golos: 0, atleta: { nome: "Zé" } }]) as never,
+        AGORA_M,
+        "GD Exemplo",
+        true,
+      ).marcadores,
+    ).toBeNull();
+  });
+
+  it("leitura pública: ligado pede só golos>0 do clube (nome + golos); desligado nem consulta", async () => {
+    m(prisma.escalao.findUnique).mockResolvedValue(escalao(true));
+    m(prisma.epoca.findFirst).mockResolvedValue({ id: "ep1", nome: "2026/27" });
+    m(prisma.jogo.findMany).mockResolvedValue([jogoRealizado(ESTATS)]);
+    const cal = await obterCalendarioPublico(TOKEN, AGORA_M);
+    const sel = m(prisma.jogo.findMany).mock.calls[0][0].select;
+    expect(sel.estatisticas).toEqual({
+      where: { golos: { gt: 0 }, atleta: { clubeId: "clube1" } },
+      select: { golos: true, atleta: { select: { nome: true } } },
+    });
+    expect(cal?.realizados[0].marcadores?.[0]).toEqual({ nome: "Tomás Rodrigues", golos: 2 });
+
+    vi.clearAllMocks();
+    m(prisma.escalao.findUnique).mockResolvedValue(escalao(false));
+    m(prisma.epoca.findFirst).mockResolvedValue({ id: "ep1", nome: "2026/27" });
+    m(prisma.jogo.findMany).mockResolvedValue([jogoRealizado(ESTATS)]);
+    const cal2 = await obterCalendarioPublico(TOKEN, AGORA_M);
+    expect("estatisticas" in m(prisma.jogo.findMany).mock.calls[0][0].select).toBe(false);
+    expect(cal2?.realizados[0].marcadores).toBeNull();
+    expect(cal2?.realizados[0].resultado).toEqual({ marcados: 4, sofridos: 2 });
   });
 });

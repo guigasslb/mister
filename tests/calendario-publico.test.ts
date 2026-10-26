@@ -77,6 +77,7 @@ const CAMPOS_PUBLICOS = [
   "data",
   "equipa",
   "local",
+  "marcadores",
   "resultado",
 ].sort();
 
@@ -173,6 +174,7 @@ describe("seleção pública mínima", () => {
       resultado: { marcados: 3, sofridos: 1 },
       concentracao: null,
       convocados: null,
+      marcadores: null,
     });
   });
 

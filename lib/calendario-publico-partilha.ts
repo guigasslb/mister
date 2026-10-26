@@ -160,3 +160,66 @@ export function variaveisCorCalendarioPublico(
     "--cal-acento-texto": tema.acentoTexto,
   };
 }
+
+/** Cores de um badge (fundo, texto e contorno) — texto AA (≥4.5:1) sobre o fundo. */
+export interface CoresBadge {
+  fundo: string;
+  texto: string;
+  contorno: string;
+}
+
+/**
+ * Badge «Convocatória disponível» (🔁 2026-10-26): verde de estado do sistema de
+ * design (`verde-600 #1E9E5A`, docs/BRAND.md) como contorno sobre um fundo verde
+ * muito claro, com texto verde escuro para AA (o branco sobre `verde-600` dá só
+ * ~3.4:1).
+ */
+export const CORES_BADGE_CONVOCATORIA: CoresBadge = {
+  fundo: "#E8F5EE",
+  texto: "#166534",
+  contorno: "#1E9E5A",
+};
+
+/** Neutro (sem cor reconhecida no nome) — o aspeto anterior do badge (cinza-100/cinza-700). */
+export const CORES_SUBEQUIPA_NEUTRO: CoresBadge = {
+  fundo: "#F1EEE9",
+  texto: "#57514A",
+  contorno: "#E4E1DB",
+};
+
+/** Paleta por cor (ordem = prioridade); todas com texto AA sobre o fundo. */
+export const PALETA_SUBEQUIPA: { re: RegExp; cores: CoresBadge }[] = [
+  { re: /^(azul|azuis)$/, cores: { fundo: "#1D4ED8", texto: "#FFFFFF", contorno: "#1D4ED8" } },
+  { re: /^brancos?$|^brancas?$/, cores: { fundo: "#FFFFFF", texto: "#141210", contorno: "#6B7280" } },
+  { re: /^(vermelh|encarnad)[oa]s?$/, cores: { fundo: "#B91C1C", texto: "#FFFFFF", contorno: "#B91C1C" } },
+  { re: /^verdes?$/, cores: { fundo: "#15803D", texto: "#FFFFFF", contorno: "#15803D" } },
+  { re: /^(pret|negr)[oa]s?$/, cores: { fundo: "#141210", texto: "#FFFFFF", contorno: "#141210" } },
+  { re: /^amarel[oa]s?$/, cores: { fundo: "#FACC15", texto: "#141210", contorno: "#A16207" } },
+  { re: /^laranjas?$/, cores: { fundo: "#C2410C", texto: "#FFFFFF", contorno: "#C2410C" } },
+  { re: /^(rox[oa]s?|lilases|lilas)$/, cores: { fundo: "#7E22CE", texto: "#FFFFFF", contorno: "#7E22CE" } },
+  { re: /^ros(a|as)$/, cores: { fundo: "#BE185D", texto: "#FFFFFF", contorno: "#BE185D" } },
+  { re: /^(cinz(a|as|ento|entos|enta|entas))$/, cores: { fundo: "#4B5563", texto: "#FFFFFF", contorno: "#4B5563" } },
+];
+
+/**
+ * Cor do badge da subequipa no calendário público (🔁 2026-10-26), derivada de
+ * forma determinística do nome (não há campo de cor no modelo): normaliza
+ * (minúsculas, sem acentos), divide em palavras e a primeira palavra que seja
+ * uma cor («Azuis», «Brancos», «Vermelhos»/«Encarnados», «Verdes», «Pretos»,
+ * «Amarelos», «Laranjas», «Roxos», «Rosas», «Cinzentos»…) decide. Sem
+ * correspondência → neutro.
+ */
+export function coresSubequipa(nome: string | null | undefined): CoresBadge {
+  const palavras = (nome ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter(Boolean);
+  for (const palavra of palavras) {
+    const hit = PALETA_SUBEQUIPA.find((p) => p.re.test(palavra));
+    if (hit) return hit.cores;
+  }
+  return CORES_SUBEQUIPA_NEUTRO;
+}
+

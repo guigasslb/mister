@@ -1,8 +1,13 @@
-import { ChevronDown, Clock, Home, MapPin, Plane, Trophy, Users } from "lucide-react";
+import { ChevronDown, Clock, Goal, Home, MapPin, Plane, Trophy, Users } from "lucide-react";
 import type { JogoCalendarioPublico } from "@/lib/calendario-publico";
 import { TituloConfronto } from "@/components/jogos/TituloConfronto";
 import { formatarDataHoraLisboa, partesDataLisboa } from "@/lib/utils-datas";
-import { detalheJogoPublico, separarLocal } from "@/lib/calendario-publico-partilha";
+import {
+  CORES_BADGE_CONVOCATORIA,
+  coresSubequipa,
+  detalheJogoPublico,
+  separarLocal,
+} from "@/lib/calendario-publico-partilha";
 import { formatarConcentracao } from "@/lib/concentracao";
 
 // Apresentação de um jogo no calendário público (bíblia §8.11.1). Componentes
@@ -52,13 +57,54 @@ export function LocalComMapa({ valor, icone = true }: { valor: string | null; ic
   );
 }
 
-/** Badge «Convocatória» na cor do clube (fundo sólido AA). */
+/** Badge «Convocatória disponível» — verde de estado do sistema de design, texto AA. */
 function BadgeConvocatoria() {
+  const c = CORES_BADGE_CONVOCATORIA;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--cal-solido,#C7430F)] px-2 py-0.5 text-legenda font-semibold text-[color:var(--cal-solido-texto,#FFFFFF)]">
+    <span
+      className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-legenda font-semibold"
+      style={{ backgroundColor: c.fundo, color: c.texto, borderColor: c.contorno }}
+    >
       <Users className="h-3 w-3" aria-hidden />
-      Convocatória
+      Convocatória disponível
     </span>
+  );
+}
+
+/** Badge da subequipa com a cor derivada do nome («Azuis» = azul…; sem cor → neutro). */
+function BadgeSubequipa({ nome }: { nome: string }) {
+  const c = coresSubequipa(nome);
+  return (
+    <span
+      className="rounded-full border px-2 py-0.5 text-legenda font-medium"
+      style={{ backgroundColor: c.fundo, color: c.texto, borderColor: c.contorno }}
+    >
+      {nome}
+    </span>
+  );
+}
+
+/** Marcadores de um jogo realizado, compactos: «Tomás Rodrigues ×2 · Ana Silva». */
+function Marcadores({ marcadores }: { marcadores: NonNullable<JogoCalendarioPublico["marcadores"]> }) {
+  return (
+    <p className="mt-1 flex items-start gap-1 text-legenda text-cinza-700">
+      <Goal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+      <span>
+        <span className="font-medium">Marcadores:</span>{" "}
+        {marcadores.map((m, i) => (
+          <span key={i}>
+            {i > 0 && " · "}
+            {m.nome}
+            {m.golos > 1 && (
+              <>
+                <span aria-hidden>{` ×${m.golos}`}</span>
+                <span className="sr-only">{` (${m.golos} golos)`}</span>
+              </>
+            )}
+          </span>
+        ))}
+      </span>
+    </p>
   );
 }
 
@@ -147,11 +193,7 @@ export function LinhaJogo({ jogo, clubeNome }: { jogo: JogoCalendarioPublico; cl
                 corClube="var(--cal-acento-texto, #C7430F)"
               />
             </p>
-            {jogo.equipa && (
-              <span className="rounded-full bg-cinza-100 px-2 py-0.5 text-legenda font-medium text-cinza-700">
-                {jogo.equipa}
-              </span>
-            )}
+            {jogo.equipa && <BadgeSubequipa nome={jogo.equipa} />}
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-legenda text-cinza-500">
             <span className="inline-flex items-center gap-1">
@@ -170,6 +212,7 @@ export function LinhaJogo({ jogo, clubeNome }: { jogo: JogoCalendarioPublico; cl
               </span>
             )}
           </p>
+          {jogo.marcadores && <Marcadores marcadores={jogo.marcadores} />}
         </div>
         {jogo.resultado && (
           <div
