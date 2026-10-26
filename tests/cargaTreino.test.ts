@@ -256,6 +256,36 @@ describe("calcularCargaSemanal (ACWR)", () => {
     expect(atual.cargaAcumulada).toBe(0);
     expect(atual.nSessoes).toBe(0);
   });
+
+  it("agrupa por semana local através da mudança de hora (Lisboa, 25/10/2026)", () => {
+    // Regressão: os inícios de semana eram `segunda − k × 168h`; após o fim da hora
+    // de verão as semanas anteriores começavam às 01:00 e nenhuma sessão lhes caía.
+    const tzOriginal = process.env.TZ;
+    process.env.TZ = "Europe/Lisbon";
+    try {
+      const agora = new Date(2026, 9, 26, 10); // segunda, já em WET
+      const sessoes = [4, 3, 2, 1].map((k) => ({
+        data: new Date(2026, 9, 26 - 7 * k, 10), // segundas anteriores, em WEST
+        duracaoMin: 60,
+        rpeSessao: 5,
+      }));
+      sessoes.push({ data: agora, duracaoMin: 60, rpeSessao: 8 });
+      const dados = calcularCargaSemanal(sessoes, 8, agora);
+      expect(dados.slice(-5).map((d) => d.inicioSemana)).toEqual([
+        "2026-09-28",
+        "2026-10-05",
+        "2026-10-12",
+        "2026-10-19",
+        "2026-10-26",
+      ]);
+      expect(dados.slice(-5).map((d) => d.cargaAcumulada)).toEqual([300, 300, 300, 300, 480]);
+      expect(dados[dados.length - 1].acwr).toBeCloseTo(1.6);
+      expect(dados[dados.length - 1].zona).toBe("RISCO");
+    } finally {
+      if (tzOriginal === undefined) delete process.env.TZ;
+      else process.env.TZ = tzOriginal;
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

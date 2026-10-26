@@ -5,7 +5,7 @@
  * *inputs* Zod que as actions esperam (`lib/schemas/jogo-ao-vivo.ts`).
  */
 
-import type { EventoLocal } from "@/lib/jogo-ao-vivo-local";
+import type { EstadoJogoAoVivo, EventoLocal } from "@/lib/jogo-ao-vivo-local";
 import type {
   EventoAoVivoClienteInput,
   EventoEdicaoInput,
@@ -38,6 +38,17 @@ export function paraEventoCliente(e: EventoLocal): EventoAoVivoClienteInput {
     posicao: e.posicao ?? undefined,
     clientEventoId: e.clientEventoId,
   } as EventoAoVivoClienteInput;
+}
+
+/**
+ * O registo desportivo por toque (golo, golo sofrido, cartão, substituição) está
+ * disponível em **todo o jogo em curso** — cronómetro a correr (`EM_CURSO`), em
+ * pausa manual (`PAUSADO`) ou no intervalo (`INTERVALO`) —, usando o segundo
+ * corrente (parado, quando o cronómetro não corre). Só antes do arranque e depois
+ * de terminado é que não há registo (§8.25.3).
+ */
+export function permiteRegistoAoVivo(estado: EstadoJogoAoVivo): boolean {
+  return estado === "EM_CURSO" || estado === "PAUSADO" || estado === "INTERVALO";
 }
 
 /**

@@ -15,6 +15,7 @@ import {
 } from "@/lib/minutos-jogo";
 import { derivarEstatisticas } from "@/lib/derivar-estatisticas";
 import { recalcularResultadoJogo } from "@/lib/placar-jogo";
+import { permiteRegistoAoVivo } from "@/components/jogos/ao-vivo/acoes";
 import {
   parseRelatorio,
   serializarRelatorio,
@@ -491,8 +492,8 @@ export async function terminarParte(
 // ─── 4. substituirEmCampo ──────────────────────────────────────────────────────
 
 /**
- * Substituição durante a parte: regista `SAIDA(sai)` + `ENTRADA(entra)` no mesmo
- * segundo (RN-JV-3). Valida que quem sai está em campo (RN-JV-9), quem entra está
+ * Substituição com o jogo em curso, em pausa ou no intervalo (`permiteRegistoAoVivo`):
+ * regista `SAIDA(sai)` + `ENTRADA(entra)` no mesmo segundo (RN-JV-3). Valida que quem sai está em campo (RN-JV-9), quem entra está
  * na convocatória e não está em campo (RN-JV-10/12) e que não se ultrapassa o
  * tamanho do formato (RN-JV-11).
  */
@@ -515,8 +516,8 @@ export async function substituirEmCampo(
   if (acesso.estado === "erro") return erro(acesso.erro);
   const sessao = acesso.jogo.sessaoAoVivo;
   if (!sessao) return erro("O jogo ao vivo ainda não foi iniciado.");
-  if (sessao.estado !== "EM_CURSO")
-    return erro("Só é possível substituir com o jogo em curso.");
+  if (!permiteRegistoAoVivo(sessao.estado))
+    return erro("Só é possível substituir com o jogo em curso, em pausa ou no intervalo.");
 
   if (parsed.data.sai === parsed.data.entra)
     return erro("O atleta que sai e o que entra têm de ser diferentes.");

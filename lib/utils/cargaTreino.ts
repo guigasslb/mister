@@ -4,9 +4,6 @@
 // funções `async` (Server Actions). Estes helpers são síncronos e sem I/O, para
 // serem diretamente testáveis e reutilizáveis em componentes.
 
-const MS_DIA = 24 * 60 * 60 * 1000;
-export const MS_SEMANA = 7 * MS_DIA;
-
 /** Zona de carga derivada do ACWR (bíblia §8.20). */
 export type ZonaCarga = "SUBCARGA" | "IDEAL" | "RISCO";
 
@@ -50,6 +47,17 @@ export function inicioSemana(d: Date): Date {
   const desvio = (diaSemana + 6) % 7; // dias desde a última segunda-feira
   r.setDate(r.getDate() - desvio);
   r.setHours(0, 0, 0, 0);
+  return r;
+}
+
+/**
+ * Mesma hora local, `k` semanas antes. Aritmética de calendário (`setDate`) e não
+ * `k × 7 × 24h`: numa mudança de hora uma semana local não tem 168h, e subtrair
+ * milissegundos desalinhava os inícios de semana (segunda 00:00 → 01:00/23:00).
+ */
+export function recuarSemanas(d: Date, k: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() - 7 * k);
   return r;
 }
 
@@ -99,7 +107,7 @@ export function calcularCargaSemanal(
   const buckets: Bucket[] = [];
   const porInicio = new Map<number, Bucket>();
   for (let i = 0; i < semanas; i++) {
-    const inicio = new Date(semanaAtual.getTime() - (semanas - 1 - i) * MS_SEMANA);
+    const inicio = recuarSemanas(semanaAtual, semanas - 1 - i);
     const b: Bucket = { inicio, carga: 0, rpeSoma: 0, rpeCount: 0, nSessoes: 0 };
     buckets.push(b);
     porInicio.set(inicio.getTime(), b);
