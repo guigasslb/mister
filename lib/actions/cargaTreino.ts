@@ -22,7 +22,7 @@ import {
 import {
   calcularCargaSemanal,
   inicioSemana,
-  MS_SEMANA,
+  recuarSemanas,
   type DadosCargaSemanal,
   type SessaoCarga,
   type ZonaCarga,
@@ -147,9 +147,7 @@ export async function obterCargaSemanal(
 
   const n = Math.min(Math.max(Math.trunc(semanas), 1), 52);
   const agora = new Date();
-  const janelaInicio = new Date(
-    inicioSemana(agora).getTime() - (n - 1) * MS_SEMANA,
-  );
+  const janelaInicio = recuarSemanas(inicioSemana(agora), n - 1);
 
   const sessoes = await prisma.sessao.findMany({
     where: {
@@ -222,9 +220,7 @@ export async function obterCargaAtletas(input: {
 
   const n = parsed.data.semanas ?? SEMANAS_CARGA_ATLETA_DEFAULT;
   const agora = new Date();
-  const janelaInicio = new Date(
-    inicioSemana(agora).getTime() - (n - 1) * MS_SEMANA,
-  );
+  const janelaInicio = recuarSemanas(inicioSemana(agora), n - 1);
 
   // Plantel ativo do escalão na época (fonte da lista — inclui quem nunca reportou RPE).
   const participacoes = await prisma.atletaEscalao.findMany({

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
 
 // P4.8 (§8.20) — Carga de treino (RPE / ACWR).
 
@@ -37,6 +37,7 @@ import {
   calcularCargaSemanal,
   classificarAcwr,
   inicioSemana,
+  recuarSemanas,
   type SessaoCarga,
 } from "@/lib/utils/cargaTreino";
 import {
@@ -60,6 +61,28 @@ const ESCALAO = "ckv9v0z1w0002abcd1234efgh";
 const ATLETA = "ckv9v0z1w0003abcd1234efgh";
 const ATLETA2 = "ckv9v0z1w0005abcd1234efgh";
 const SESSAO = "ckv9v0z1w0004abcd1234efgh";
+
+// Fuso real dos clubes (Europe/Lisbon): torna os casos de mudança de hora
+// (29-03 e 25-10) determinísticos mesmo quando o runner corre em UTC.
+const TZ_ORIGINAL = process.env.TZ;
+beforeAll(() => {
+  process.env.TZ = "Europe/Lisbon";
+});
+afterAll(() => {
+  if (TZ_ORIGINAL === undefined) delete process.env.TZ;
+  else process.env.TZ = TZ_ORIGINAL;
+});
+
+/** Segunda-feira, 2026-10-26, 09:00 UTC — o instante em que os testes começaram a falhar. */
+const SEG_26_10_0900Z = new Date("2026-10-26T09:00:00Z");
+
+/** Data local `k` semanas de calendário antes da semana de `agora`, no dia `dia` (0=seg) e hora dadas. */
+function naSemana(agora: Date, k: number, dia: number, h: number, m = 0): Date {
+  const d = recuarSemanas(inicioSemana(agora), k);
+  d.setDate(d.getDate() + dia);
+  d.setHours(h, m, 0, 0);
+  return d;
+}
 
 const p = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>;
 const MS_DIA = 24 * 60 * 60 * 1000;
@@ -258,6 +281,87 @@ describe("calcularCargaSemanal (ACWR)", () => {
   });
 });
 
+describe("inicioSemana — fronteiras (Europe/Lisbon)", () => {
+  it("segunda-feira de manhã pertence à própria semana", () => {
+    expect(inicioSemana(new Date(2026, 9, 26, 0, 30))).toEqual(new Date(2026, 9, 26));
+    expect(inicioSemana(SEG_26_10_0900Z)).toEqual(new Date(2026, 9, 26));
+  });
+
+  it("domingo à noite pertence à semana que começou na segunda anterior", () => {
+    expect(inicioSemana(new Date(2026, 9, 25, 23, 30))).toEqual(new Date(2026, 9, 19));
+    expect(inicioSemana(new Date(2026, 2, 29, 23, 30))).toEqual(new Date(2026, 2, 23));
+  });
+});
+
+describe("recuarSemanas", () => {
+  it("recua semanas de calendário mantendo a meia-noite local através da mudança de hora", () => {
+    // 25-10-2026 (verão → inverno): a semana 19-10…25-10 tem 169h.
+    expect(recuarSemanas(new Date(2026, 9, 26), 1)).toEqual(new Date(2026, 9, 19));
+    // 29-03-2026 (inverno → verão): a semana 23-03…29-03 tem 167h.
+    expect(recuarSemanas(new Date(2026, 2, 30), 1)).toEqual(new Date(2026, 2, 23));
+    expect(recuarSemanas(new Date(2026, 9, 26), 7)).toEqual(new Date(2026, 8, 7));
+  });
+});
+
+describe("calcularCargaSemanal — fronteiras de semana e mudança de hora", () => {
+  // 4 semanas a 300 + semana atual a 480 → ACWR 1.6, com sessões colocadas nos
+  // extremos das semanas (segunda 00:15 e domingo 23:45, hora local).
+  function cenario(agora: Date): SessaoCarga[] {
+    return [
+      { data: naSemana(agora, 4, 0, 0, 15), duracaoMin: 60, rpeSessao: 5 },
+      { data: naSemana(agora, 3, 6, 23, 45), duracaoMin: 60, rpeSessao: 5 },
+      { data: naSemana(agora, 2, 0, 0, 15), duracaoMin: 60, rpeSessao: 5 },
+      { data: naSemana(agora, 1, 6, 23, 45), duracaoMin: 60, rpeSessao: 5 },
+      { data: naSemana(agora, 0, 0, 0, 15), duracaoMin: 60, rpeSessao: 8 },
+    ];
+  }
+
+  const casos: Array<[string, Date]> = [
+    ["segunda 26-10-2026 09:00 UTC (após 25-10)", SEG_26_10_0900Z],
+    ["segunda 26-10-2026 00:30 local", new Date(2026, 9, 26, 0, 30)],
+    ["domingo 25-10-2026 23:30 local (dia da mudança)", new Date(2026, 9, 25, 23, 30)],
+    ["segunda 30-03-2026 09:00 local (após 29-03)", new Date(2026, 2, 30, 9, 0)],
+    ["domingo 29-03-2026 23:30 local (dia da mudança)", new Date(2026, 2, 29, 23, 30)],
+  ];
+
+  for (const [nome, agora] of casos) {
+    it(`ACWR correto e semanas alinhadas à segunda 00:00 — ${nome}`, () => {
+      const dados = calcularCargaSemanal(cenario(agora), 8, agora);
+      expect(dados).toHaveLength(8);
+      const atual = dados[dados.length - 1];
+      expect(atual.cargaAcumulada).toBe(480);
+      expect(atual.acwr).toBeCloseTo(1.6);
+      expect(atual.zona).toBe("RISCO");
+      expect(dados.slice(3, 7).map((d) => d.cargaAcumulada)).toEqual([300, 300, 300, 300]);
+      // Inícios de semana consecutivos (segundas-feiras de calendário).
+      for (let i = 0; i < dados.length; i++) {
+        const esperado = recuarSemanas(inicioSemana(agora), dados.length - 1 - i);
+        expect(dados[i].inicioSemana).toBe(
+          `${esperado.getFullYear()}-${String(esperado.getMonth() + 1).padStart(2, "0")}-${String(esperado.getDate()).padStart(2, "0")}`,
+        );
+        expect(esperado.getDay()).toBe(1);
+      }
+    });
+  }
+
+  it("semana da mudança 25-10-2026 é um único bucket 19-10…25-10", () => {
+    const agora = SEG_26_10_0900Z;
+    const dados = calcularCargaSemanal(
+      [
+        { data: new Date(2026, 9, 19, 0, 15), duracaoMin: 60, rpeSessao: 5 },
+        { data: new Date(2026, 9, 25, 23, 45), duracaoMin: 30, rpeSessao: 4 },
+      ],
+      2,
+      agora,
+    );
+    expect(dados[0].inicioSemana).toBe("2026-10-19");
+    expect(dados[0].cargaAcumulada).toBe(420);
+    expect(dados[0].nSessoes).toBe(2);
+    expect(dados[1].inicioSemana).toBe("2026-10-26");
+    expect(dados[1].cargaAcumulada).toBe(0);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Server Actions — escrita
 // ─────────────────────────────────────────────────────────────────────────────
@@ -331,6 +435,14 @@ describe("registarRpeAtleta", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("obterCargaSemanal", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(SEG_26_10_0900Z);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("nega sem capacidade RELATORIOS_VER", async () => {
     (obterMembroAtual as ReturnType<typeof vi.fn>).mockResolvedValue(membro({ capacidades: [] }));
     const r = await obterCargaSemanal(ESCALAO);
@@ -346,8 +458,8 @@ describe("obterCargaSemanal", () => {
 
   it("calcula o ACWR da semana atual a partir das sessões (dados mock)", async () => {
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO });
-    const agora = new Date();
-    const semanaOffset = (k: number) => new Date(agora.getTime() - k * 7 * MS_DIA);
+    // Quarta-feira 12:00 local de cada semana (semanas de calendário, não 7×24h).
+    const semanaOffset = (k: number) => naSemana(new Date(), k, 2, 12);
     p.sessao.findMany.mockResolvedValue([
       { data: semanaOffset(4), duracaoMin: 60, rpeSessao: 5 }, // 300
       { data: semanaOffset(3), duracaoMin: 60, rpeSessao: 5 }, // 300
@@ -367,6 +479,15 @@ describe("obterCargaSemanal", () => {
     expect(atual.zona).toBe("RISCO");
   });
 
+  it("janela da BD começa na segunda 00:00 local, também após a mudança de hora", async () => {
+    p.escalao.findFirst.mockResolvedValue({ id: ESCALAO });
+    p.sessao.findMany.mockResolvedValue([]);
+    await obterCargaSemanal(ESCALAO, 8);
+    const gte: Date = p.sessao.findMany.mock.calls[0][0].where.data.gte;
+    // 26-10-2026 menos 7 semanas = segunda 07-09-2026, 00:00 (hora de verão).
+    expect(gte).toEqual(new Date(2026, 8, 7));
+  });
+
   it("temDados=false quando não há RPE registado", async () => {
     p.escalao.findFirst.mockResolvedValue({ id: ESCALAO });
     p.sessao.findMany.mockResolvedValue([]);
@@ -382,8 +503,16 @@ describe("obterCargaSemanal", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("obterCargaAtletas", () => {
-  // Sessão "k" semanas atrás (mesma âncora do teste de obterCargaSemanal).
-  const semanaOffset = (k: number) => new Date(Date.now() - k * 7 * MS_DIA);
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(SEG_26_10_0900Z);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Sessão "k" semanas de calendário atrás (quarta-feira 12:00 local).
+  const semanaOffset = (k: number) => naSemana(new Date(), k, 2, 12);
   const rpe = (
     atletaId: string,
     k: number,
