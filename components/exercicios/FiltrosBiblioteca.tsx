@@ -23,7 +23,7 @@ const TODOS = "__todos__";
 type SubcategoriaFiltro = {
   id: string;
   nome: string;
-  categoria: CategoriaExercicioPrincipal;
+  categorias: CategoriaExercicioPrincipal[];
 };
 
 /**
@@ -52,7 +52,9 @@ export function FiltrosBiblioteca({
   // Subcategorias oferecidas: restritas à categoria selecionada (quando há uma);
   // sem categoria, mostram-se todas (cada subcategoria é única por clube).
   const subcategoriasDisponiveis = (
-    categoria ? subcategorias.filter((s) => s.categoria === categoria) : subcategorias
+    categoria
+      ? subcategorias.filter((s) => s.categorias.includes(categoria as CategoriaExercicioPrincipal))
+      : subcategorias
   )
     .slice()
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt"));

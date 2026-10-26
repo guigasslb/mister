@@ -151,7 +151,7 @@ export default async function ExerciciosPage({
   const resSubcategorias = await listarSubcategorias();
   const subcategorias = resSubcategorias.sucesso ? resSubcategorias.dados : [];
   const subcategoria = subcategorias.some(
-    (s) => s.id === subcategoriaParam && (!categoria || s.categoria === categoria),
+    (s) => s.id === subcategoriaParam && (!categoria || s.categorias.includes(categoria)),
   )
     ? subcategoriaParam
     : undefined;
@@ -260,7 +260,7 @@ export default async function ExerciciosPage({
             subcategorias={subcategorias.map((s) => ({
               id: s.id,
               nome: s.nome,
-              categoria: s.categoria,
+              categorias: s.categorias,
             }))}
           />
           <div className="space-y-1.5">

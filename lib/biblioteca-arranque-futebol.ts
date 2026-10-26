@@ -269,10 +269,12 @@ export async function instalarSubcategoriasFutebol(
 ): Promise<{ criadas: number }> {
   const existentes = await db.subcategoriaExercicio.findMany({
     where: { clubeId },
-    select: { nome: true, categoria: true },
+    select: { nome: true, categorias: true },
   });
   const chave = (nome: string, categoria: CategoriaExercicioPrincipal) => `${categoria}::${nome}`;
-  const jaExiste = new Set(existentes.map((s) => chave(s.nome, s.categoria)));
+  const jaExiste = new Set(
+    existentes.flatMap((s) => s.categorias.map((c) => chave(s.nome, c))),
+  );
 
   const emFalta = SUBCATEGORIAS_ARRANQUE_FUTEBOL.filter(
     (s) => !jaExiste.has(chave(s.nome, s.categoria)),
@@ -283,7 +285,7 @@ export async function instalarSubcategoriasFutebol(
     data: emFalta.map((s) => ({
       clubeId,
       nome: s.nome,
-      categoria: s.categoria,
+      categorias: [s.categoria],
       ordem: s.ordem,
       sistema: true,
     })),

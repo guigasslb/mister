@@ -18,8 +18,8 @@ export async function listarSubcategorias(
   if (!clubeId) return erro("Não autenticado");
 
   const lista = await prisma.subcategoriaExercicio.findMany({
-    where: { clubeId, ...(categoria ? { categoria } : {}) },
-    orderBy: [{ categoria: "asc" }, { ordem: "asc" }, { nome: "asc" }],
+    where: { clubeId, ...(categoria ? { categorias: { has: categoria } } : {}) },
+    orderBy: [{ ordem: "asc" }, { nome: "asc" }],
   });
   return ok(lista);
 }
@@ -34,7 +34,7 @@ export async function criarSubcategoria(dados: unknown): Promise<Resultado<Subca
   const sub = await prisma.subcategoriaExercicio.create({
     data: {
       nome: parsed.data.nome,
-      categoria: parsed.data.categoria,
+      categorias: parsed.data.categorias,
       ordem: parsed.data.ordem,
       clubeId: perm.ctx.clube.id,
       sistema: false,
@@ -63,7 +63,7 @@ export async function atualizarSubcategoria(
     where: { id },
     data: {
       nome: parsed.data.nome,
-      categoria: parsed.data.categoria,
+      categorias: parsed.data.categorias,
       ordem: parsed.data.ordem,
     },
   });
@@ -101,7 +101,7 @@ export async function instalarSubcategoriasArranque(): Promise<Resultado<{ criad
   await prisma.subcategoriaExercicio.createMany({
     data: SUBCATEGORIAS_ARRANQUE.map((s) => ({
       nome: s.nome,
-      categoria: s.categoria,
+      categorias: [s.categoria],
       ordem: s.ordem,
       clubeId,
       sistema: true,

@@ -233,7 +233,7 @@ async function main() {
   await prisma.subcategoriaExercicio.createMany({
     data: SUBCATEGORIAS_ARRANQUE.map((s) => ({
       nome: s.nome,
-      categoria: s.categoria,
+      categorias: [s.categoria],
       ordem: s.ordem,
       clubeId: clube.id,
       sistema: true,

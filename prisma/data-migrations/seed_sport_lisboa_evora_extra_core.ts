@@ -445,7 +445,7 @@ export async function seedSleExtra(prisma: PrismaClient): Promise<ResultadoSeedE
       data: SUBCATEGORIAS.map((s) => ({
         clubeId: clube.id,
         nome: s.nome,
-        categoria: s.categoria,
+        categorias: [s.categoria],
         ordem: s.ordem,
         sistema: true,
       })),

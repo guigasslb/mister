@@ -52,7 +52,7 @@ function SubcategoriaForm({
 }) {
   const [pending, startTransition] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
-  const [categoria, setCategoria] = useState<string>(sub?.categoria ?? "ATAQUE");
+  const [categoria, setCategoria] = useState<string>(sub?.categorias[0] ?? "ATAQUE");
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -60,7 +60,8 @@ function SubcategoriaForm({
     setErro(null);
     const dados = {
       nome: String(fd.get("nome") ?? "").trim(),
-      categoria,
+      // Seleção única até ao editor multi-categoria (passo seguinte).
+      categorias: [categoria],
       ordem: Number(fd.get("ordem") ?? 0),
     };
     startTransition(async () => {
@@ -164,7 +165,7 @@ export function SubcategoriasLista({
   const grupos = CATEGORIAS_PRINCIPAIS.map((cat) => ({
     cat,
     label: LABEL_CATEGORIA_PRINCIPAL[cat],
-    lista: subcategorias.filter((s) => s.categoria === cat),
+    lista: subcategorias.filter((s) => s.categorias.includes(cat)),
   })).filter((g) => g.lista.length > 0);
 
   return (

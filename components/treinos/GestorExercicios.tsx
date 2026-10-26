@@ -102,7 +102,7 @@ type ExercicioBiblioteca = {
 type Subcategoria = {
   id: string;
   nome: string;
-  categoria: CategoriaExercicioPrincipal;
+  categorias: CategoriaExercicioPrincipal[];
 };
 
 // Sentinela do filtro "todas as fases" no seletor da biblioteca.
