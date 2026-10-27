@@ -15,22 +15,24 @@ vi.mock("@/lib/permissoes", () => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     jogo: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-    convocatoria: { findMany: vi.fn() },
+    convocatoria: { findMany: vi.fn(), count: vi.fn() },
     sessaoJogoAoVivo: { update: vi.fn() },
     eventoJogo: {
       findMany: vi.fn(),
       createMany: vi.fn(),
+      create: vi.fn(),
       count: vi.fn(),
     },
     $transaction: vi.fn(),
   },
 }));
 
-import { sincronizarJogoAoVivo } from "@/lib/actions/jogo-ao-vivo";
+import { sincronizarJogoAoVivo, substituirEmCampo } from "@/lib/actions/jogo-ao-vivo";
 import { recalcularResultadoJogo } from "@/lib/placar-jogo";
 import { obterClubeIdAtual, obterEpocaAtiva } from "@/lib/epoca-context";
 import { exigirCapacidade } from "@/lib/permissoes";
 import { prisma } from "@/lib/db";
+import { permiteRegistoAoVivo } from "@/components/jogos/ao-vivo/acoes";
 
 const ESC_ID = "ckv9v0z1w0000abcd1234efga";
 const JOGO_ID = "ckv9v0z1w0000abcd1234efgb";
@@ -204,5 +206,72 @@ describe("recalcularResultadoJogo — placar coerente e idempotente", () => {
       where: { id: JOGO_ID },
       data: { golosMarcados: 3, golosSofridos: 2 },
     });
+  });
+});
+
+describe("registo com o cronómetro parado (2026-10-26)", () => {
+  it("permite golo/cartão/substituição em EM_CURSO, PAUSADO e INTERVALO", () => {
+    expect(permiteRegistoAoVivo("EM_CURSO")).toBe(true);
+    expect(permiteRegistoAoVivo("PAUSADO")).toBe(true);
+    expect(permiteRegistoAoVivo("INTERVALO")).toBe(true);
+  });
+
+  it("não permite antes do arranque nem depois de terminado", () => {
+    expect(permiteRegistoAoVivo("POR_INICIAR")).toBe(false);
+    expect(permiteRegistoAoVivo("TERMINADO")).toBe(false);
+  });
+
+  it.each(["PAUSADO", "INTERVALO"])(
+    "o servidor aceita golo, cartão e substituição com a sessão %s",
+    async (estado) => {
+      mocked(prisma.jogo.findFirst).mockResolvedValue({
+        ...JOGO,
+        sessaoAoVivo: { ...SESSAO, estado, segundosDecorridos: 600 },
+      });
+      const res = await sincronizarJogoAoVivo(JOGO_ID, [
+        { tipo: "GOLO", atletaId: A, segundoJogo: 600, parte: 1, clientEventoId: "p-g" },
+        { tipo: "CARTAO_AMARELO", atletaId: A, segundoJogo: 600, parte: 1, clientEventoId: "p-c" },
+        { tipo: "SAIDA", atletaId: A, segundoJogo: 600, parte: 1, clientEventoId: "p-s" },
+        { tipo: "ENTRADA", atletaId: B, segundoJogo: 600, parte: 1, clientEventoId: "p-e" },
+      ]);
+      expect(res.sucesso).toBe(true);
+      expect(linhasCriadas().data.map((l) => l.tipo)).toEqual([
+        "GOLO",
+        "CARTAO_AMARELO",
+        "SAIDA",
+        "ENTRADA",
+      ]);
+    },
+  );
+});
+
+describe("substituirEmCampo — mesma regra de estados (2026-10-26)", () => {
+  function comSessao(estado: string) {
+    mocked(prisma.jogo.findFirst).mockResolvedValue({
+      ...JOGO,
+      sessaoAoVivo: { ...SESSAO, estado, segundosDecorridos: 600 },
+    });
+    // A está em campo; B no banco e convocado.
+    mocked(prisma.eventoJogo.findMany).mockResolvedValue([
+      { tipo: "ENTRADA", atletaId: A, segundoJogo: 0, parte: 1, criadoEm: new Date(0) },
+    ]);
+    mocked(prisma.convocatoria.count).mockResolvedValue(1);
+  }
+
+  it.each(["EM_CURSO", "PAUSADO", "INTERVALO"])("aceita com a sessão %s", async (estado) => {
+    comSessao(estado);
+    const res = await substituirEmCampo(JOGO_ID, A, B, 600);
+    expect(res.sucesso).toBe(true);
+    expect(calls(prisma.eventoJogo.create).map((c) => (c[0] as { data: { tipo: string } }).data.tipo)).toEqual([
+      "SAIDA",
+      "ENTRADA",
+    ]);
+  });
+
+  it.each(["POR_INICIAR", "TERMINADO"])("rejeita com a sessão %s", async (estado) => {
+    comSessao(estado);
+    const res = await substituirEmCampo(JOGO_ID, A, B, 600);
+    expect(res.sucesso).toBe(false);
+    expect(calls(prisma.eventoJogo.create)).toHaveLength(0);
   });
 });

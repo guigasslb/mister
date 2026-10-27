@@ -28,7 +28,10 @@ import {
   sincronizarJogoAoVivo,
   terminarJogoAoVivo,
 } from "@/lib/actions/jogo-ao-vivo";
-import { paraEventoCliente } from "@/components/jogos/ao-vivo/acoes";
+import {
+  paraEventoCliente,
+  permiteRegistoAoVivo,
+} from "@/components/jogos/ao-vivo/acoes";
 import {
   eventosPendentes,
   gerarClientEventoId,
@@ -696,7 +699,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
                   </p>
                 </div>
               </div>
-              {sessao.estado === "EM_CURSO" && (
+              {permiteRegistoAoVivo(sessao.estado) && (
                 <div className="mt-3 flex justify-center">
                   <Button
                     onClick={registarGoloSofrido}
@@ -715,7 +718,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
               emCampo={emCampoAtletas}
               banco={bancoAtletas}
               onTapEmCampo={setAcoesId}
-              interativo={sessao.estado === "EM_CURSO" || sessao.estado === "INTERVALO"}
+              interativo={permiteRegistoAoVivo(sessao.estado)}
             />
           </div>
         )}
