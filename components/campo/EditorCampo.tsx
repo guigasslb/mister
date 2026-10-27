@@ -45,6 +45,8 @@ import {
   CONE_COR_DEFAULT,
   ARCO_CORES,
   ARCO_COR_DEFAULT,
+  DISCO_COR_DEFAULT,
+  VARA_COR_DEFAULT,
 } from "./desenho";
 import { useEscalaCampo } from "./useEscalaCampo";
 import { usePointerDrag } from "./usePointerDrag";
@@ -79,6 +81,9 @@ type Ferramenta =
   | "escadinha"
   | "barras"
   | "arco"
+  | "disco"
+  | "vara"
+  | "minibaliza"
   | "apagar";
 
 type EstiloSeta = "movimento" | "passe" | "conducao";
@@ -152,6 +157,59 @@ function IconeArco({ className }: { className?: string }) {
   );
 }
 
+function IconeDisco({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <ellipse cx="12" cy="13" rx="9" ry="5" />
+      <ellipse cx="12" cy="12.5" rx="2.5" ry="1.4" />
+    </svg>
+  );
+}
+
+function IconeVara({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <line x1="12" y1="3" x2="12" y2="19" />
+      <line x1="10" y1="8" x2="14" y2="8" />
+      <line x1="10" y1="13" x2="14" y2="13" />
+      <ellipse cx="12" cy="20" rx="4" ry="1.5" />
+    </svg>
+  );
+}
+
+function IconeMiniBaliza({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="6" y="9" width="12" height="7" rx="0.5" />
+      <line x1="10" y1="9" x2="10" y2="16" strokeWidth={1} />
+      <line x1="14" y1="9" x2="14" y2="16" strokeWidth={1} />
+    </svg>
+  );
+}
+
 const FERRAMENTAS: {
   id: Ferramenta;
   label: string;
@@ -162,12 +220,15 @@ const FERRAMENTAS: {
   { id: "bola", label: "Bola", Icon: Circle },
   { id: "cone", label: "Cone", Icon: Triangle },
   { id: "baliza", label: "Baliza", Icon: Goal },
+  { id: "minibaliza", label: "Mini-baliza", Icon: IconeMiniBaliza },
   { id: "seta", label: "Seta", Icon: MoveRight },
   { id: "linha", label: "Linha", Icon: Minus },
   { id: "texto", label: "Texto", Icon: Type },
   { id: "escadinha", label: "Escadinha", Icon: IconeEscadinha },
   { id: "barras", label: "Barras", Icon: IconeBarras },
   { id: "arco", label: "Arco", Icon: IconeArco },
+  { id: "disco", label: "Disco", Icon: IconeDisco },
+  { id: "vara", label: "Vara", Icon: IconeVara },
   { id: "apagar", label: "Apagar", Icon: Eraser },
 ];
 
@@ -218,6 +279,8 @@ export function EditorCampo({
   const [corJogador, setCorJogador] = useState<CorJogador>("azul");
   const [corCone, setCorCone] = useState<CorCone>(CONE_COR_DEFAULT as CorCone);
   const [corArco, setCorArco] = useState<CorArco>(ARCO_COR_DEFAULT as CorArco);
+  const [corDisco, setCorDisco] = useState<CorCone>(DISCO_COR_DEFAULT as CorCone);
+  const [corVara, setCorVara] = useState<CorCone>(VARA_COR_DEFAULT as CorCone);
   const [estiloSeta, setEstiloSeta] = useState<EstiloSeta>("movimento");
   const [orientacaoBaliza, setOrientacaoBaliza] = useState<
     "horizontal" | "vertical"
@@ -492,6 +555,30 @@ export function EditorCampo({
         ]);
         break;
       }
+      case "disco": {
+        registarHistorico();
+        aplicarElementos([
+          ...elementos,
+          { id: novoId(), tipo: "disco", x, y, cor: corDisco },
+        ]);
+        break;
+      }
+      case "vara": {
+        registarHistorico();
+        aplicarElementos([
+          ...elementos,
+          { id: novoId(), tipo: "vara", x, y, cor: corVara },
+        ]);
+        break;
+      }
+      case "minibaliza": {
+        registarHistorico();
+        aplicarElementos([
+          ...elementos,
+          { id: novoId(), tipo: "minibaliza", x, y, orientacao: orientacaoBaliza },
+        ]);
+        break;
+      }
       case "seta":
       case "linha": {
         setCaminhoAtual((c) => [...c, { x, y }]);
@@ -686,6 +773,22 @@ export function EditorCampo({
     anunciar(`Cor do arco alterada para ${cor}`);
   }
 
+  // Muda a cor de um disco/vara já colocado (via selecção). Atualiza também a
+  // cor ativa da ferramenta correspondente para o próximo elemento a colocar.
+  function mudarCorMaterial(id: string, tipo: "disco" | "vara", cor: CorCone) {
+    registarHistorico();
+    aplicarElementos(
+      elementos.map((el) =>
+        el.id === id && (el.tipo === "disco" || el.tipo === "vara")
+          ? { ...el, cor }
+          : el,
+      ),
+    );
+    if (tipo === "disco") setCorDisco(cor);
+    else setCorVara(cor);
+    anunciar(`Cor do ${tipo} alterada para ${cor}`);
+  }
+
   // Roda uma escadinha/barras já colocada (via selecção). Atualiza também o
   // ângulo ativo da ferramenta para o próximo elemento a colocar.
   function mudarAnguloElemento(id: string, angulo: number) {
@@ -798,6 +901,10 @@ export function EditorCampo({
     elementoSelecionado?.tipo === "arco" ? elementoSelecionado : null;
   const jogadorSelecionado =
     elementoSelecionado?.tipo === "jogador" ? elementoSelecionado : null;
+  const materialSelecionado =
+    elementoSelecionado?.tipo === "disco" || elementoSelecionado?.tipo === "vara"
+      ? elementoSelecionado
+      : null;
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
@@ -1064,6 +1171,36 @@ export function EditorCampo({
               </div>
             )}
 
+            {(ferramenta === "disco" || ferramenta === "vara") && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-cinza-600">
+                  {ferramenta === "disco" ? "Cor do disco:" : "Cor da vara:"}
+                </span>
+                {CONE_CORES.map((c) => {
+                  const ativa =
+                    (ferramenta === "disco" ? corDisco : corVara) === c.valor;
+                  return (
+                    <button
+                      key={c.valor}
+                      type="button"
+                      aria-label={c.nome}
+                      aria-pressed={ativa}
+                      title={c.nome}
+                      onClick={() =>
+                        ferramenta === "disco"
+                          ? setCorDisco(c.valor as CorCone)
+                          : setCorVara(c.valor as CorCone)
+                      }
+                      className={`h-11 w-11 rounded-full border-2 ${
+                        ativa ? "border-cinza-900" : "border-cinza-300"
+                      }`}
+                      style={{ backgroundColor: c.hex }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
             {ferramenta === "seta" && (
               <div className="flex items-center gap-2">
                 <span className="text-cinza-600">Estilo:</span>
@@ -1090,7 +1227,7 @@ export function EditorCampo({
               </div>
             )}
 
-            {ferramenta === "baliza" && (
+            {(ferramenta === "baliza" || ferramenta === "minibaliza") && (
               <div className="flex items-center gap-2">
                 <span className="text-cinza-600">Orientação:</span>
                 {(
@@ -1259,6 +1396,43 @@ export function EditorCampo({
                       title={c.nome}
                       onClick={() =>
                         mudarCorCone(coneSelecionado.id, c.valor as CorCone)
+                      }
+                      className={`h-11 w-11 rounded-full border-2 ${
+                        ativa ? "border-cinza-900" : "border-cinza-300"
+                      }`}
+                      style={{ backgroundColor: c.hex }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {ferramenta === "selecionar" && materialSelecionado && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-cinza-600">
+                  {materialSelecionado.tipo === "disco"
+                    ? "Cor do disco:"
+                    : "Cor da vara:"}
+                </span>
+                {CONE_CORES.map((c) => {
+                  const ativa =
+                    (materialSelecionado.cor ??
+                      (materialSelecionado.tipo === "disco"
+                        ? DISCO_COR_DEFAULT
+                        : VARA_COR_DEFAULT)) === c.valor;
+                  return (
+                    <button
+                      key={c.valor}
+                      type="button"
+                      aria-label={c.nome}
+                      aria-pressed={ativa}
+                      title={c.nome}
+                      onClick={() =>
+                        mudarCorMaterial(
+                          materialSelecionado.id,
+                          materialSelecionado.tipo,
+                          c.valor as CorCone,
+                        )
                       }
                       className={`h-11 w-11 rounded-full border-2 ${
                         ativa ? "border-cinza-900" : "border-cinza-300"

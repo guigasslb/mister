@@ -142,6 +142,37 @@ const arcoSchema = z.object({
   cor: corArcoSchema.optional(),
 });
 
+// Disco (sinalizador raso / "chapéu chinês" achatado). Elemento-ponto com a
+// mesma paleta dos cones. Ausente → amarelo (default no render).
+const discoSchema = z.object({
+  id: z.string(),
+  tipo: z.literal("disco"),
+  x: z.number().min(0).max(400),
+  y: z.number().min(0).max(200),
+  cor: corConeSchema.optional(),
+});
+
+// Vara (poste vertical de slalom). Elemento-ponto com a paleta dos cones.
+// Ausente → amarelo (default no render).
+const varaSchema = z.object({
+  id: z.string(),
+  tipo: z.literal("vara"),
+  x: z.number().min(0).max(400),
+  y: z.number().min(0).max(200),
+  cor: corConeSchema.optional(),
+});
+
+// Mini-baliza (baliza pequena de treino). Distinta da `baliza` normal: tamanho
+// próprio (≈ metade) e render aberto (moldura em U, boca virada para o centro
+// do campo no eixo da orientação); mesma convenção de orientação.
+const miniBalizaSchema = z.object({
+  id: z.string(),
+  tipo: z.literal("minibaliza"),
+  x: z.number().min(0).max(400),
+  y: z.number().min(0).max(200),
+  orientacao: z.enum(["horizontal", "vertical"]),
+});
+
 export const elementoCampoSchema = z.discriminatedUnion("tipo", [
   jogadorSchema,
   bolaSchema,
@@ -153,6 +184,9 @@ export const elementoCampoSchema = z.discriminatedUnion("tipo", [
   escadinhaSchema,
   barrasSchema,
   arcoSchema,
+  discoSchema,
+  varaSchema,
+  miniBalizaSchema,
 ]);
 
 // Passo de animação (secção 11.2 da bíblia): posições dos elementos neste passo.
@@ -214,6 +248,9 @@ export type Escadinha = z.infer<typeof escadinhaSchema>;
 export type Barras = z.infer<typeof barrasSchema>;
 export type CorArco = z.infer<typeof corArcoSchema>;
 export type Arco = z.infer<typeof arcoSchema>;
+export type Disco = z.infer<typeof discoSchema>;
+export type Vara = z.infer<typeof varaSchema>;
+export type MiniBaliza = z.infer<typeof miniBalizaSchema>;
 export type ElementoCampo = z.infer<typeof elementoCampoSchema>;
 export type DiagramaCampo = z.infer<typeof diagramaSchema>;
 
