@@ -215,5 +215,11 @@ export function rotuloElemento(el: ElementoCampo): string {
       return "Barras para saltos";
     case "arco":
       return el.cor ? `Arco (${el.cor})` : "Arco";
+    case "disco":
+      return el.cor ? `Disco (${el.cor})` : "Disco";
+    case "vara":
+      return el.cor ? `Vara (${el.cor})` : "Vara";
+    case "minibaliza":
+      return "Mini-baliza";
   }
 }

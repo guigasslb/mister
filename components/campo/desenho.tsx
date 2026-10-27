@@ -89,6 +89,20 @@ function arcoCor(cor?: string): { hex: string; stroke: string } {
   return ARCO_COR_MAP[cor ?? ARCO_COR_DEFAULT] ?? ARCO_COR_MAP[ARCO_COR_DEFAULT];
 }
 
+// ─── Disco, vara e mini-baliza (secção 11.2) ─────────────────────────────────
+//
+// Disco = sinalizador raso (visto de cima: anel achatado com furo central).
+// Vara = poste vertical de slalom (base + haste listrada). Ambos usam a paleta
+// dos cones (`CONE_CORES`); ausente → amarelo. A mini-baliza é uma baliza de
+// treino com tamanho próprio (≈ metade da baliza normal).
+
+export const DISCO_COR_DEFAULT = "amarelo";
+export const VARA_COR_DEFAULT = "amarelo";
+/** Largura (lado comprido) da mini-baliza em unidades — a baliza normal tem 30. */
+export const MINI_BALIZA_LARGURA = 16;
+/** Profundidade (postes) da mini-baliza em unidades. */
+export const MINI_BALIZA_PROFUNDIDADE = 5;
+
 // ─── Adversário (secção 11.3) ────────────────────────────────────────────────
 //
 // Token genérico da equipa adversária no quadro tático (§8.10). Independente da
@@ -1391,6 +1405,110 @@ export function ElementoSVG({
               strokeLinecap="round"
             />
           </g>
+        </g>
+      );
+    }
+
+    case "disco": {
+      // Sinalizador raso visto de cima/3/4: cúpula baixa achatada com furo ao
+      // centro, sombra no chão e contorno escuro para contraste sobre o relvado.
+      const { hex, stroke } = coneCor(elemento.cor ?? DISCO_COR_DEFAULT);
+      const cx = elemento.x;
+      const cy = elemento.y;
+      return (
+        <g>
+          {decoracoes}
+          <PecaDefs />
+          <ellipse cx={cx + 0.8} cy={cy + 2.2} rx={6.2} ry={2.6} fill="url(#peca-sombra-chao)" />
+          <ellipse cx={cx} cy={cy + 0.6} rx={5.6} ry={3.1} fill={stroke} />
+          <ellipse cx={cx} cy={cy} rx={5.6} ry={3.1} fill={hex} stroke={stroke} strokeWidth={0.5} />
+          <ellipse cx={cx} cy={cy} rx={5.6} ry={3.1} fill="url(#peca-cone-brilho)" />
+          {/* Furo central (vê-se o chão por dentro do disco). */}
+          <ellipse cx={cx} cy={cy - 0.2} rx={1.7} ry={0.95} fill={stroke} fillOpacity={0.85} />
+          <path
+            d={`M ${cx - 4.4} ${cy - 1.1} A 5.6 3.1 0 0 1 ${cx + 1.8} ${cy - 2.9}`}
+            fill="none"
+            stroke="#ffffff"
+            strokeOpacity={0.55}
+            strokeWidth={0.6}
+            strokeLinecap="round"
+          />
+        </g>
+      );
+    }
+
+    case "vara": {
+      // Poste de slalom em pé: base elíptica + haste fina com bandas brancas
+      // (como as varas reais), ancorado no ponto lógico pela base.
+      const { hex, stroke } = coneCor(elemento.cor ?? VARA_COR_DEFAULT);
+      const cx = elemento.x;
+      const cy = elemento.y;
+      const topo = cy - 12;
+      const baseY = cy + 2;
+      const bandas = [0.2, 0.5, 0.8].map((t) => topo + (baseY - topo) * t);
+      return (
+        <g>
+          {decoracoes}
+          <PecaDefs />
+          <ellipse cx={cx + 1.6} cy={baseY + 1.4} rx={4.6} ry={1.6} fill="url(#peca-sombra-chao)" />
+          {/* Base (pé) */}
+          <ellipse cx={cx} cy={baseY + 0.4} rx={3.2} ry={1.3} fill={stroke} />
+          <ellipse cx={cx} cy={baseY} rx={3.2} ry={1.3} fill={hex} stroke={stroke} strokeWidth={0.4} />
+          {/* Haste: contorno escuro + cor + bandas brancas + realce de luz. */}
+          <line x1={cx} y1={topo} x2={cx} y2={baseY} stroke={stroke} strokeWidth={2.6} strokeLinecap="round" />
+          <line x1={cx} y1={topo} x2={cx} y2={baseY} stroke={hex} strokeWidth={1.8} strokeLinecap="round" />
+          {bandas.map((by, i) => (
+            <line key={i} x1={cx} y1={by - 1} x2={cx} y2={by + 1} stroke="#FFFFFF" strokeWidth={1.8} />
+          ))}
+          <line x1={cx - 0.45} y1={topo + 0.6} x2={cx - 0.45} y2={baseY - 0.6} stroke="#ffffff" strokeOpacity={0.35} strokeWidth={0.4} />
+          <circle cx={cx} cy={topo} r={1.1} fill={hex} stroke={stroke} strokeWidth={0.4} />
+        </g>
+      );
+    }
+
+    case "minibaliza": {
+      // Mini-baliza de treino: moldura ABERTA em U (dois postes + barra de
+      // fundo, sem linha na boca), mais pequena do que a baliza (rectângulo
+      // fechado) — distingue-se à vista. A boca vira-se para o centro do campo
+      // no eixo da orientação (horizontal → cima/baixo; vertical → esq./dir.).
+      const horizontal = elemento.orientacao === "horizontal";
+      const w = horizontal ? MINI_BALIZA_LARGURA : MINI_BALIZA_PROFUNDIDADE;
+      const h = horizontal ? MINI_BALIZA_PROFUNDIDADE : MINI_BALIZA_LARGURA;
+      const x0 = elemento.x - w / 2;
+      const y0 = elemento.y - h / 2;
+      const x1 = x0 + w;
+      const y1 = y0 + h;
+      let moldura: string;
+      if (horizontal) {
+        moldura =
+          elemento.y < MEIO_Y
+            ? `M ${x0} ${y1} L ${x0} ${y0} L ${x1} ${y0} L ${x1} ${y1}` // boca para baixo
+            : `M ${x0} ${y0} L ${x0} ${y1} L ${x1} ${y1} L ${x1} ${y0}`; // boca para cima
+      } else {
+        moldura =
+          elemento.x < CAMPO_W / 2
+            ? `M ${x1} ${y0} L ${x0} ${y0} L ${x0} ${y1} L ${x1} ${y1}` // boca para a direita
+            : `M ${x0} ${y0} L ${x1} ${y0} L ${x1} ${y1} L ${x0} ${y1}`; // boca para a esquerda
+      }
+      const net = [];
+      for (let i = 1; i < 3; i++) {
+        net.push(
+          horizontal ? (
+            <line key={i} x1={x0 + (w * i) / 3} y1={y0} x2={x0 + (w * i) / 3} y2={y1} stroke="#ffffff" strokeOpacity={0.35} strokeWidth={0.4} />
+          ) : (
+            <line key={i} x1={x0} y1={y0 + (h * i) / 3} x2={x1} y2={y0 + (h * i) / 3} stroke="#ffffff" strokeOpacity={0.35} strokeWidth={0.4} />
+          ),
+        );
+      }
+      return (
+        <g>
+          {decoracoes}
+          <PecaDefs />
+          <ellipse cx={elemento.x} cy={y1 + 1.2} rx={w / 2 + 1} ry={1.5} fill="url(#peca-sombra-chao)" />
+          <rect x={x0} y={y0} width={w} height={h} fill="#ffffff" fillOpacity={0.08} />
+          {net}
+          <path d={moldura} fill="none" stroke="#1A1D29" strokeOpacity={0.55} strokeWidth={2.2} strokeLinejoin="round" />
+          <path d={moldura} fill="none" stroke="#FFFFFF" strokeWidth={1.3} strokeLinejoin="round" />
         </g>
       );
     }
