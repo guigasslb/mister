@@ -1,14 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Bricolage_Grotesque } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
 import { RegistarSW } from "@/components/layout/RegistarSW";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const display = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
+const inter = localFont({
+  src: "./fonts/Inter-latin-var.woff2",
+  weight: "100 900",
+  variable: "--font-inter",
+});
+const display = localFont({
+  src: "./fonts/BricolageGrotesque-latin-var.woff2",
+  weight: "500 800",
   variable: "--font-display",
 });
 
