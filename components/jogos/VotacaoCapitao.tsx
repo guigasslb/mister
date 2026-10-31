@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Check, CheckCircle2, Crown, Lock, RotateCcw, Users, Vote } from "lucide-react";
@@ -62,6 +63,14 @@ export function VotacaoCapitao({
   const [modoVotacao, setModoVotacao] = useState(false);
   const [passo, setPasso] = useState<Passo>({ tipo: "votante" });
   const [desempateId, setDesempateId] = useState<string | null>(null);
+  // Portal do modo votação para o <body> (só existe no cliente).
+  const [montado, setMontado] = useState(false);
+  // Âncora no sítio original da árvore: daqui lê-se a cor do clube (`--primary`/`--ring`,
+  // definidos pelo layout num <div> interno) para a reaplicar no overlay em portal.
+  const ancoraRef = useRef<HTMLSpanElement>(null);
+  const [temaClube, setTemaClube] = useState<React.CSSProperties>({});
+
+  useEffect(() => setMontado(true), []);
 
   const { convocados } = vista;
   const progresso = progressoVotacao(convocados);
@@ -110,10 +119,38 @@ export function VotacaoCapitao({
     });
   }
 
+  const emModoVotacao = modoVotacao && vista.estado === "ABERTA";
+
+  useEffect(() => {
+    if (!emModoVotacao || !ancoraRef.current) return;
+    const estilo = getComputedStyle(ancoraRef.current);
+    const tema: Record<string, string> = {};
+    for (const v of ["--primary", "--ring"]) {
+      const valor = estilo.getPropertyValue(v).trim();
+      if (valor) tema[v] = valor;
+    }
+    setTemaClube(tema as React.CSSProperties);
+  }, [emModoVotacao]);
+
   // ─── Modo votação (ecrã inteiro, só com a votação aberta) ───
-  if (modoVotacao && vista.estado === "ABERTA") {
-    return (
-      <div className="fixed inset-0 z-[45] flex flex-col bg-white">
+  // Em portal para o <body>: dentro do layout, o ancestral `.app-content` retém um
+  // `transform` (animar-entrada, fill-mode `both`) e passa a ser o bloco de contenção
+  // do `position: fixed` — o overlay ficava confinado à altura do cabeçalho da página
+  // (grelha de nomes cortada num mini-contentor com scroll) e preso no stacking
+  // context dele (`z-index: 1`), por baixo da BarraTopo/navegação. No <body>, cobre a
+  // viewport acima da BarraTopo (z-30) e da navegação (z-40), abaixo dos diálogos
+  // (z-50) e dos toasts.
+  if (emModoVotacao) {
+    const ancora = <span ref={ancoraRef} hidden />;
+    if (!montado) return ancora;
+    const conteudo = (
+      <div
+        className="fixed inset-0 z-[45] flex flex-col bg-white"
+        style={temaClube}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Votação do capitão"
+      >
         <header className="flex items-center justify-between gap-3 border-b border-cinza-200 px-4 py-2">
           <p className="flex items-center gap-2 font-display text-titulo-seccao text-cinza-900">
             <Vote className="h-5 w-5 text-primary" />
@@ -264,6 +301,12 @@ export function VotacaoCapitao({
           )}
         </main>
       </div>
+    );
+    return (
+      <>
+        {ancora}
+        {createPortal(conteudo, document.body)}
+      </>
     );
   }
 
