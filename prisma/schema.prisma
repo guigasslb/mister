@@ -594,21 +594,25 @@ model Atleta {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  presencas             Presenca[]
-  convocatorias         Convocatoria[]
-  estatisticas          EstatisticaAtleta[]
-  consentimentos        Consentimento[]
-  participacoes         AtletaEscalao[]
+  presencas               Presenca[]
+  convocatorias           Convocatoria[]
+  estatisticas            EstatisticaAtleta[]
+  consentimentos          Consentimento[]
+  participacoes           AtletaEscalao[]
   // Subequipas (2026-10-17): plantéis de subequipas em competições.
-  equipasCompeticao     EquipaCompeticaoAtleta[]
+  equipasCompeticao       EquipaCompeticaoAtleta[]
   // P1.5: eventos de jogo (ao vivo) associados ao atleta.
-  eventosJogo           EventoJogo[]
+  eventosJogo             EventoJogo[]
   // P4.8 (§8.20): RPE individual reportado pelo atleta por sessão.
-  rpesAtletas           RpeAtleta[]
+  rpesAtletas             RpeAtleta[]
   // Mano-a-Mano (§3.16): participações do atleta em competições de duelos 1×1.
-  participacoesManoMano ParticipanteManoMano[]
+  participacoesManoMano   ParticipanteManoMano[]
   // §8.20: valores de métricas configuráveis registados por sessão de treino.
-  valoresMetricasSessao ValorMetricaSessao[]
+  valoresMetricasSessao   ValorMetricaSessao[]
+  // Votação secreta do capitão.
+  votacoesCapitaoVencidas VotacaoCapitao[]             @relation("VotacaoCapitaoVencedor")
+  participacoesVotacaoCap ParticipacaoVotacaoCapitao[]
+  votosCapitaoRecebidos   VotoCapitao[]
 
   @@index([clubeId])
   @@index([clubeId, ativo])
@@ -1245,14 +1249,16 @@ model Jogo {
   // F8 (§3.12): id do evento correspondente no Google Calendar (idempotência da sincronização).
   googleEventId String?
 
-  convocatorias Convocatoria[]
-  estatisticas  EstatisticaAtleta[]
-  quadros       QuadroTatico[]
-  eventos       EventoJogo[]
+  convocatorias  Convocatoria[]
+  estatisticas   EstatisticaAtleta[]
+  quadros        QuadroTatico[]
+  eventos        EventoJogo[]
   // F5 (M15): scouting contextualizado no jogo (dia de jogo).
-  observacoes   ObservacaoAdversario[]
+  observacoes    ObservacaoAdversario[]
   // 🔁 v7 (§8.25.8): estado de condução do Modo Jogo ao Vivo (1:1 com Jogo).
-  sessaoAoVivo  SessaoJogoAoVivo?
+  sessaoAoVivo   SessaoJogoAoVivo?
+  // Votação secreta do capitão (1:1 com Jogo; repetir = apagar e recriar).
+  votacaoCapitao VotacaoCapitao?
 
   fechado Boolean @default(false) // false = aberto (por fechar); true = fechado pelo treinador
 
@@ -1531,6 +1537,62 @@ model SessaoJogoAoVivo {
   aCorrerDesde       DateTime? // instante do arranque do cronómetro; null se em intervalo/pausado/terminado
   criadoEm           DateTime         @default(now())
   atualizadoEm       DateTime         @updatedAt
+}
+
+// Votação secreta do capitão de um jogo. Votam e são votáveis só os convocados
+// (validado na action). Segredo por desenho: a participação (quem já votou) e o voto
+// (em quem) vivem em tabelas separadas SEM qualquer ligação entre si — nem FK, nem
+// timestamp, nem id sequencial/temporal (UUID v4 aleatório no voto; PK composta na
+// participação) — para que nem pela BD seja possível saber quem votou em quem.
+// Multi-tenancy herdada via Jogo (como SessaoJogoAoVivo/EventoJogo).
+model VotacaoCapitao {
+  id               String               @id @default(cuid())
+  // Uma votação por jogo. Repetir a votação = apagar (cascade em participações/votos) e recriar.
+  jogoId           String               @unique
+  jogo             Jogo                 @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+  estado           EstadoVotacaoCapitao @default(ABERTA)
+  // Preenchido ao fechar. SetNull: o hard-delete do atleta (RGPD) preserva a votação.
+  vencedorAtletaId String?
+  vencedorAtleta   Atleta?              @relation("VotacaoCapitaoVencedor", fields: [vencedorAtletaId], references: [id], onDelete: SetNull)
+  criadaEm         DateTime             @default(now())
+  fechadaEm        DateTime?
+
+  participacoes ParticipacaoVotacaoCapitao[]
+  votos         VotoCapitao[]
+
+  @@index([vencedorAtletaId])
+}
+
+// Quem já votou (no máximo uma vez por votação). NÃO referencia o voto e não tem
+// id nem timestamp próprios (PK composta), para impedir correlação com VotoCapitao.
+model ParticipacaoVotacaoCapitao {
+  votacaoId String
+  votacao   VotacaoCapitao @relation(fields: [votacaoId], references: [id], onDelete: Cascade)
+  atletaId  String
+  // P1.3 (RGPD): Cascade — o hard-delete do atleta apaga as suas participações.
+  atleta    Atleta         @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+
+  @@id([votacaoId, atletaId])
+  @@index([atletaId])
+}
+
+// Voto anónimo: só a votação e o atleta votado. Sem votante e sem timestamp; id
+// UUID v4 (aleatório, ao contrário do cuid que codifica o instante de criação).
+model VotoCapitao {
+  id             String         @id @default(uuid())
+  votacaoId      String
+  votacao        VotacaoCapitao @relation(fields: [votacaoId], references: [id], onDelete: Cascade)
+  votadoAtletaId String
+  // P1.3 (RGPD): Cascade — o hard-delete do atleta apaga os votos recebidos.
+  votadoAtleta   Atleta         @relation(fields: [votadoAtletaId], references: [id], onDelete: Cascade)
+
+  @@index([votacaoId, votadoAtletaId])
+  @@index([votadoAtletaId])
+}
+
+enum EstadoVotacaoCapitao {
+  ABERTA
+  FECHADA
 }
 
 // Scouting do adversário (do clube).

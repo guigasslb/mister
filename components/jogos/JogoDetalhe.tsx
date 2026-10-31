@@ -3,7 +3,7 @@
 import { useId, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Ban, Check, Radio, TriangleAlert, UserPlus } from "lucide-react";
+import { Ban, Check, Radio, TriangleAlert, UserPlus, Vote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,7 +43,7 @@ import {
   type SuspensaoPendente,
 } from "@/lib/schemas/jogo";
 import { parseRelatorio, serializarRelatorio } from "@/lib/relatorio-jogo";
-import { MINUTOS_POR_PARTE } from "@/lib/estatisticas";
+import { MINUTOS_POR_PARTE, maxTitulares } from "@/lib/estatisticas";
 import { PlanoTatico } from "@/components/jogos/PlanoTatico";
 import { SituacoesJogo, type DadosSituacoesJogo } from "@/components/jogos/SituacoesJogo";
 import { ScoutingJogo } from "@/components/jogos/ScoutingJogo";
@@ -567,6 +567,31 @@ export function JogoDetalhe({
 
           {/* ─── Plano (dia de jogo) ─── */}
           <TabsContent value="plano" className="space-y-4">
+            {/* Votação secreta do capitão: ecrã dedicado (tablet de mão em mão). */}
+            {convocadosSalvos.length >= 2 && (
+              <div className="flex flex-col gap-2 rounded-lg border border-cinza-200 bg-white p-4 shadow-card sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="flex items-center gap-1.5 text-subtitulo text-cinza-900">
+                    <Vote className="h-4 w-4 text-primary" />
+                    Votação secreta do capitão
+                  </p>
+                  <p className="text-corpo-sec text-cinza-600">
+                    Os convocados votam no tablet, um a um, sem verem os votos dos colegas.
+                    Só o {maxTitulares(formato, modalidade)} inicial pode ser votado.
+                  </p>
+                  {convocadosSalvos.filter((a) => planoInicial[a.id]?.titularPrevisto).length <
+                    2 && (
+                    <p className="mt-1 flex items-center gap-1.5 text-corpo-sec text-ambar-600">
+                      <TriangleAlert className="h-4 w-4 flex-shrink-0" />
+                      Define primeiro o {maxTitulares(formato, modalidade)} inicial no plano de jogo abaixo.
+                    </p>
+                  )}
+                </div>
+                <Button asChild variant="outline" className="min-h-[44px] flex-shrink-0">
+                  <Link href={`/jogos/${jogoId}/votacao-capitao`}>Abrir votação</Link>
+                </Button>
+              </div>
+            )}
             <PlanoTatico
               jogoId={jogoId}
               convocados={convocadosSalvos.map((a) => ({
