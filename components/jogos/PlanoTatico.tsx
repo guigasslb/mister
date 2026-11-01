@@ -170,17 +170,21 @@ export function PlanoTatico({
       {/* Quadro tático interativo: formação dos titulares + adversários +
           jogadas (setas). Persistido em QuadroTatico.diagrama — §8.10/§11.3. */}
       <div className="rounded-lg border border-cinza-200 bg-cinza-50 p-4">
-        <p className="mb-3 text-legenda font-medium uppercase tracking-wide text-cinza-500">
-          Quadro tático ({titulares.length}/{MAX_TITULARES} titular
-          {titulares.length === 1 ? "" : "es"})
-        </p>
         <div className="space-y-3">
+          {/* O título é passado ao quadro para partilhar a linha com o botão
+              «Ecrã inteiro» (visível em leitura e em edição). */}
           <QuadroTaticoJogo
             jogoId={jogoId}
             formato={formato}
             quadroInicial={quadroInicial}
             diagramaFormacao={diagrama}
             podeGerir={podeGerirQuadro}
+            cabecalho={
+              <p className="text-legenda font-medium uppercase tracking-wide text-cinza-500">
+                Quadro tático ({titulares.length}/{MAX_TITULARES} titular
+                {titulares.length === 1 ? "" : "es"})
+              </p>
+            }
           />
         </div>
       </div>
