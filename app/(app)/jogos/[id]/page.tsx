@@ -20,6 +20,7 @@ import type { DadosSituacoesJogo } from "@/components/jogos/SituacoesJogo";
 import { JogoDetalhe } from "@/components/jogos/JogoDetalhe";
 import { ApagarJogoButton } from "@/components/jogos/ApagarJogoButton";
 import { FecharJogoButton } from "@/components/jogos/FecharJogoButton";
+import { ReiniciarJogoAoVivoButton } from "@/components/jogos/ao-vivo/ReiniciarJogoAoVivoButton";
 import { ConvocatoriaWhatsApp } from "@/components/jogos/ConvocatoriaWhatsApp";
 import { BotoesPartilhaJogo } from "@/components/social/BotoesPartilhaJogo";
 import { LABEL_CASA_FORA } from "@/lib/schemas/jogo";
@@ -271,6 +272,9 @@ export default async function DetalheJogoPage({
   });
   const sessaoAoVivoTerminada = sessaoAoVivo?.estado === "TERMINADO";
   const mostrarModoAoVivo = !sessaoAoVivoTerminada && !j.fechado;
+  // §8.25.9: «Reiniciar jogo» só com sessão ao vivo e ESTATISTICAS_GERIR no escalão.
+  const podeReiniciarAoVivo =
+    sessaoAoVivo != null && (await exigirCapacidade("ESTATISTICAS_GERIR", j.escalaoId)).ok;
 
   // Seed do editor tabular: um intervalo por atleta (1ª ENTRADA → última SAIDA),
   // derivado dos eventos ao vivo (segundo absoluto → minutos inteiros).
@@ -353,6 +357,7 @@ export default async function DetalheJogoPage({
             </Link>
           </Button>
           {jogoPassou && <FecharJogoButton jogoId={j.id} fechado={j.fechado} />}
+          {podeReiniciarAoVivo && <ReiniciarJogoAoVivoButton jogoId={j.id} />}
           <ApagarJogoButton jogoId={j.id} />
         </div>
       </div>

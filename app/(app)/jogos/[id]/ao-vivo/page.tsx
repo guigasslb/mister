@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { obterJogo } from "@/lib/actions/jogos";
 import { listarAtletas } from "@/lib/actions/atletas";
-import { obterClubeAtivo } from "@/lib/permissoes";
+import { exigirCapacidade, obterClubeAtivo } from "@/lib/permissoes";
 import { prisma } from "@/lib/db";
 import { maxTitulares, MINUTOS_POR_PARTE } from "@/lib/estatisticas";
 import { parseRelatorio } from "@/lib/relatorio-jogo";
@@ -43,9 +43,11 @@ export default async function ModoJogoAoVivoPage({
   if (!res.sucesso) notFound();
   const j = res.dados;
 
-  const [resAtletas, clube] = await Promise.all([
+  const [resAtletas, clube, permReiniciar] = await Promise.all([
     listarAtletas(j.escalaoId),
     obterClubeAtivo(),
+    // §8.25.9: «Reiniciar jogo» exige ESTATISTICAS_GERIR no escalão (RN-JV-16).
+    exigirCapacidade("ESTATISTICAS_GERIR", j.escalaoId),
   ]);
   const atletas = resAtletas.sucesso ? resAtletas.dados : [];
   const atletaPorId = new Map(atletas.map((a) => [a.id, a]));
@@ -129,6 +131,7 @@ export default async function ModoJogoAoVivoPage({
       notasIniciais={notasIniciais}
       sessaoServidor={sessaoServidor}
       eventosServidor={eventosServidor}
+      podeReiniciar={permReiniciar.ok}
     />
   );
 }

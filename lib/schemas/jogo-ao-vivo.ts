@@ -179,3 +179,8 @@ export const eventoEdicaoSchema = z
 export type EventoEdicaoInput = z.infer<typeof eventoEdicaoSchema>;
 
 export const editarEventosSchema = z.array(eventoEdicaoSchema);
+
+// ─── 13. Reiniciar o jogo ──────────────────────────────────────────────────────
+
+/** Id do jogo a repor ao estado anterior ao início do Modo Jogo ao Vivo (§8.25.9). */
+export const reiniciarJogoAoVivoSchema = z.string().cuid();

@@ -48,6 +48,7 @@ import {
   type TipoEventoJogoAoVivo,
 } from "@/lib/minutos-jogo";
 import { ArranqueAoVivo } from "@/components/jogos/ao-vivo/ArranqueAoVivo";
+import { ReiniciarJogoAoVivoButton } from "@/components/jogos/ao-vivo/ReiniciarJogoAoVivoButton";
 import { LABEL_CASA_FORA } from "@/lib/schemas/jogo";
 import type { CasaFora, FormatoJogo, Modalidade, Posicao } from "@prisma/client";
 
@@ -80,6 +81,8 @@ interface JogoAoVivoProps {
   /** Estado hidratado do servidor (se já existir uma sessão); local tem precedência. */
   sessaoServidor: SessaoLocal | null;
   eventosServidor: EventoLocal[];
+  /** §8.25.9: o utilizador tem `ESTATISTICAS_GERIR` no escalão → «Reiniciar jogo». */
+  podeReiniciar: boolean;
 }
 
 /**
@@ -157,15 +160,21 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
 
   // ── Persistência + sincronização ─────────────────────────────────────────────
   const sincronizarRef = useRef(false);
+  // §8.25.9 «Reiniciar jogo»: enquanto o reinício decorre não se sincroniza, e
+  // qualquer sincronização em curso é descartada (a geração mudou) para não repor
+  // no ecrã/IndexedDB o estado antigo depois de `limparEstadoLocal`.
+  const reiniciandoRef = useRef(false);
+  const geracaoRef = useRef(0);
 
   const sincronizar = useCallback(
     async (atual: EstadoLocalCompleto) => {
-      if (sincronizarRef.current) return;
+      if (sincronizarRef.current || reiniciandoRef.current) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       // Nada a fazer antes de o jogo arrancar localmente.
       if (atual.sessao.estado === "POR_INICIAR") return;
 
       sincronizarRef.current = true;
+      const geracao = geracaoRef.current;
       try {
         let trabalho = atual;
 
@@ -185,6 +194,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
             titulares,
           });
           if (!resIni.sucesso) return; // sem rede/erro → tenta mais tarde
+          if (geracao !== geracaoRef.current) return; // jogo reiniciado entretanto
           trabalho = {
             ...trabalho,
             sessao: { ...trabalho.sessao, servidorIniciado: true },
@@ -200,6 +210,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
         const pendentes = eventosPendentes(trabalho);
         if (pendentes.length > 0) {
           const res = await sincronizarJogoAoVivo(jogoId, pendentes.map(paraEventoCliente));
+          if (geracao !== geracaoRef.current) return; // jogo reiniciado entretanto
           if (!res.sucesso) {
             // Mantém o que já foi consolidado (init), tenta reenviar a outbox depois.
             if (trabalho !== atual) {
@@ -214,6 +225,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
           };
         }
 
+        if (geracao !== geracaoRef.current) return; // jogo reiniciado entretanto
         if (trabalho !== atual) {
           setEstado(trabalho);
           void guardarEstadoLocal(jogoId, trabalho);
@@ -239,7 +251,7 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
   const finalizadoRef = useRef(false);
   const finalizarNoServidor = useCallback(
     async (atual: EstadoLocalCompleto, segundoFinal: number) => {
-      if (finalizadoRef.current) return;
+      if (finalizadoRef.current || reiniciandoRef.current) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       finalizadoRef.current = true;
       try {
@@ -266,6 +278,24 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online]);
+
+  // ── Reinício do zero (§8.25.9) ───────────────────────────────────────────────
+  // O botão chama `reiniciarJogoAoVivo` e `limparEstadoLocal`; aqui suspende-se a
+  // sincronização durante o pedido e, após sucesso, volta-se ao ecrã de arranque.
+  function antesDeReiniciar() {
+    reiniciandoRef.current = true;
+    geracaoRef.current += 1;
+  }
+  function aposReiniciar(sucesso: boolean) {
+    reiniciandoRef.current = false;
+    if (!sucesso) return;
+    finalizadoRef.current = false;
+    setAcoesId(null);
+    setSaiId(null);
+    setConfirmarTerminar(false);
+    setNotas("");
+    setEstado(null);
+  }
 
   // ── Helpers de construção de eventos ─────────────────────────────────────────
   function novoEvento(
@@ -624,17 +654,28 @@ export function JogoAoVivo(props: JogoAoVivoProps) {
             {props.escalaoNome} · {LABEL_CASA_FORA[props.casaFora]} ({nomeEquipa})
           </p>
         </div>
-        <span
-          className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-legenda text-white/70"
-          title={online ? "Online" : "Offline — os eventos ficam guardados localmente"}
-        >
-          {online ? (
-            <Wifi className="h-3.5 w-3.5" aria-hidden />
-          ) : (
-            <WifiOff className="h-3.5 w-3.5 text-ambar-500" aria-hidden />
+        <div className="flex items-center gap-2">
+          {/* §8.25.9: só com sessão iniciada (local ou servidor) e ESTATISTICAS_GERIR. */}
+          {props.podeReiniciar && hidratado && sessao && sessao.estado !== "POR_INICIAR" && (
+            <ReiniciarJogoAoVivoButton
+              jogoId={jogoId}
+              tema="escuro"
+              onAntes={antesDeReiniciar}
+              onDepois={aposReiniciar}
+            />
           )}
-          <span className="sr-only">{online ? "Online" : "Offline"}</span>
-        </span>
+          <span
+            className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-legenda text-white/70"
+            title={online ? "Online" : "Offline — os eventos ficam guardados localmente"}
+          >
+            {online ? (
+              <Wifi className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <WifiOff className="h-3.5 w-3.5 text-ambar-500" aria-hidden />
+            )}
+            <span className="sr-only">{online ? "Online" : "Offline"}</span>
+          </span>
+        </div>
       </header>
 
       {/* Corpo com scroll */}
