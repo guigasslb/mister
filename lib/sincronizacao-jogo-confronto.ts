@@ -345,18 +345,12 @@ export async function sincronizarJogoDoConfronto(
 }
 
 /**
- * /jogos → competição. Reflete data/hora e resultado do `Jogo` no confronto
- * ligado, orientados pelo lado da equipa própria do jogo (a sua subequipa, ou a
- * equipa própria implícita quando o jogo não tem subequipa). Só sincroniza se o
- * jogo continuar na mesma competição, escalão e época do confronto. Num confronto
- * interno A vs B o outro jogo não é tocado: prevalece no confronto o último
- * gravado (§23.11.3 regra 6). Devolve o `competicaoId` sincronizado (para
- * revalidação) ou `null`.
+ * Jogo + confronto ligado, quando a sincronização /jogos → competição se aplica:
+ * o jogo continua na mesma competição, escalão e época do confronto e o lado da
+ * sua equipa própria é identificável. Fonte única das guardas usadas por
+ * `sincronizarConfrontoDoJogo` e `reverterConfrontoDoJogo` (simetria).
  */
-export async function sincronizarConfrontoDoJogo(
-  db: ClienteDb,
-  jogoId: string,
-): Promise<string | null> {
+async function resolverConfrontoDoJogo(db: ClienteDb, jogoId: string) {
   const j = await db.jogo.findUnique({
     where: { id: jogoId },
     select: {
@@ -375,6 +369,7 @@ export async function sincronizarConfrontoDoJogo(
           equipaFora: true,
           equipaCasaId: true,
           equipaForaId: true,
+          estado: true,
           competicao: {
             select: {
               escalaoId: true,
@@ -401,6 +396,25 @@ export async function sincronizarConfrontoDoJogo(
     : proprias[0];
   const l = propria ? ladoProprio(c, propria) : null;
   if (!l) return null;
+  return { j, c, l, proprias };
+}
+
+/**
+ * /jogos → competição. Reflete data/hora e resultado do `Jogo` no confronto
+ * ligado, orientados pelo lado da equipa própria do jogo (a sua subequipa, ou a
+ * equipa própria implícita quando o jogo não tem subequipa). Só sincroniza se o
+ * jogo continuar na mesma competição, escalão e época do confronto. Num confronto
+ * interno A vs B o outro jogo não é tocado: prevalece no confronto o último
+ * gravado (§23.11.3 regra 6). Devolve o `competicaoId` sincronizado (para
+ * revalidação) ou `null`.
+ */
+export async function sincronizarConfrontoDoJogo(
+  db: ClienteDb,
+  jogoId: string,
+): Promise<string | null> {
+  const r = await resolverConfrontoDoJogo(db, jogoId);
+  if (!r) return null;
+  const { j, c, l, proprias } = r;
 
   await db.resultadoCompeticao.update({
     where: { id: c.id },
@@ -468,4 +482,38 @@ export async function validarLigacaoJogoConfronto(
   }
   if (lados.length < 2 && outros.length > 0) return "Este confronto já tem um jogo ligado";
   return null;
+}
+
+/**
+ * Reinício do Modo Jogo ao Vivo (§8.25.9): desfaz no confronto ligado o que a
+ * sincronização /jogos → competição derivou do jogo — um confronto `REALIZADO`
+ * volta a `AGENDADO` («por disputar») com `golosCasa`/`golosFora` = `null` e sem
+ * vencedor de walkover. Mesmas guardas de `sincronizarConfrontoDoJogo`; a data/hora
+ * mantém-se (o jogo não muda de data). Não atua quando o confronto não está
+ * `REALIZADO` (CANCELADO/WALKOVER/AGENDADO não são derivados do jogo) nem num
+ * confronto interno A vs B em que o outro jogo tem resultado (o placar pode ser
+ * dele, §23.11.3 regra 6). Devolve o `competicaoId` revertido ou `null`.
+ */
+export async function reverterConfrontoDoJogo(
+  db: ClienteDb,
+  jogoId: string,
+): Promise<string | null> {
+  const r = await resolverConfrontoDoJogo(db, jogoId);
+  if (!r || r.c.estado !== "REALIZADO") return null;
+
+  const outroJogoComResultado = await db.jogo.count({
+    where: {
+      resultadoCompeticaoId: r.c.id,
+      id: { not: jogoId },
+      golosMarcados: { not: null },
+      golosSofridos: { not: null },
+    },
+  });
+  if (outroJogoComResultado > 0) return null;
+
+  await db.resultadoCompeticao.update({
+    where: { id: r.c.id },
+    data: { estado: "AGENDADO", golosCasa: null, golosFora: null, walkoverVencedor: null },
+  });
+  return r.c.competicaoId;
 }

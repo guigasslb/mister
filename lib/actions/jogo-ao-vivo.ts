@@ -15,6 +15,7 @@ import {
 } from "@/lib/minutos-jogo";
 import { derivarEstatisticas } from "@/lib/derivar-estatisticas";
 import { recalcularResultadoJogo } from "@/lib/placar-jogo";
+import { reverterConfrontoDoJogo } from "@/lib/sincronizacao-jogo-confronto";
 import { permiteRegistoAoVivo } from "@/components/jogos/ao-vivo/acoes";
 import {
   parseRelatorio,
@@ -28,6 +29,7 @@ import {
   notaAoVivoSchema,
   sincronizarEventosSchema,
   editarEventosSchema,
+  reiniciarJogoAoVivoSchema,
 } from "@/lib/schemas/jogo-ao-vivo";
 import {
   Prisma,
@@ -1087,4 +1089,57 @@ export async function previewMinutosJogo(
     : maxSegundoEvento;
 
   return ok(calcularMinutosDeEventos(eventos, segundoFinal));
+}
+
+// ─── 13. reiniciarJogoAoVivo ───────────────────────────────────────────────────
+
+/**
+ * Repõe o jogo ao estado anterior ao início do Modo Jogo ao Vivo (§8.25.9), numa
+ * só transação. Apaga: a `SessaoJogoAoVivo` (o jogo volta a «por iniciar», sem
+ * sessão); os `EventoJogo` do modo ao vivo — cronómetro/quintetos (`TIPOS_AO_VIVO`)
+ * e a captura sincronizada (`clientEventoId` preenchido, que o registo clássico
+ * nunca grava); **todas** as `EstatisticaAtleta` do jogo (os `ValorMetrica` em
+ * cascade); o resultado (`golosMarcados`/`golosSofridos` = `null`); e a chave
+ * `notasAoVivo` de `Jogo.relatorio`. Reverte também o confronto da competição
+ * ligado (`REALIZADO` → `AGENDADO`, golos `null` — `reverterConfrontoDoJogo`). Mantém
+ * os dados do jogo, a convocatória, os eventos clássicos e a votação do capitão.
+ * Mesma autorização do arranque (`ESTATISTICAS_GERIR`, via `aceder`).
+ */
+export async function reiniciarJogoAoVivo(jogoId: string): Promise<Resultado<void>> {
+  const parsed = reiniciarJogoAoVivoSchema.safeParse(jogoId);
+  if (!parsed.success) return erroDeValidacao(parsed.error);
+
+  const acesso = await aceder(parsed.data);
+  if (acesso.estado === "erro") return erro(acesso.erro);
+  const { jogo } = acesso;
+
+  // Só reescreve o relatório se tiver uma nota ao vivo (as restantes secções ficam).
+  const relatorio = parseRelatorio(jogo.relatorio);
+  const limparNota = relatorio.notasAoVivo !== "";
+  relatorio.notasAoVivo = "";
+
+  const competicaoRevertida = await prisma.$transaction(async (tx) => {
+    await tx.eventoJogo.deleteMany({
+      where: {
+        jogoId: jogo.id,
+        OR: [{ tipo: { in: TIPOS_AO_VIVO } }, { clientEventoId: { not: null } }],
+      },
+    });
+    await tx.estatisticaAtleta.deleteMany({ where: { jogoId: jogo.id } });
+    await tx.sessaoJogoAoVivo.deleteMany({ where: { jogoId: jogo.id } });
+    await tx.jogo.update({
+      where: { id: jogo.id },
+      data: {
+        golosMarcados: null,
+        golosSofridos: null,
+        ...(limparNota ? { relatorio: serializarRelatorio(relatorio) || null } : {}),
+      },
+    });
+    return reverterConfrontoDoJogo(tx, jogo.id);
+  });
+
+  if (competicaoRevertida) revalidatePath(`/jogos/competicoes/${competicaoRevertida}`);
+  revalidatePath("/jogos");
+  pathsJogo(jogo.id);
+  return ok(undefined);
 }
