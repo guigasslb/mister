@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { FormatoJogo } from "@prisma/client";
 import type { ElementoCampo, TamanhoEscadinha } from "@/lib/schemas/exercicio";
 import { ancoraElemento, rotuloElemento, pontosSemRepetidos } from "./animacao";
@@ -126,8 +127,9 @@ export const ESCADINHA_DEGRAUS: Record<TamanhoEscadinha, number> = {
 // elementos, animação e interação é agnóstico ao fundo.
 
 const BRANCO = "#FFFFFF";
-// Fundo do campo = cor do clube (--cor-primaria, alimentada pelo layout — ver
-// docs/BRAND.md §3). Fallback = laranja da marca, como no resto do ficheiro.
+// Fundo dos campos de FUTEBOL = cor do clube (--cor-primaria, alimentada pelo
+// layout — ver docs/BRAND.md §3). Fallback = laranja da marca, como no resto do
+// ficheiro. (O futsal usa o piso de madeira — ver `MadeiraDefs`.)
 // As linhas mantêm-se a branco (BRANCO) para contraste sobre o acento do clube.
 const RELVA = "var(--cor-primaria, #F0531E)";
 const TRACO = 1.5;
@@ -168,12 +170,111 @@ function FundoDefs() {
   );
 }
 
-/** Relvado + contorno + linha de meio-campo + marca central (comum a todos). */
-function Relvado() {
+// ─── Piso de madeira do futsal (decisão 2026-11-01) ──────────────────────────
+//
+// O campo de FUTSAL deixou de usar a cor do clube: com clubes de equipamento
+// azul (ou outra cor forte) o fundo confundia-se com os jogadores. Passa a ser um
+// soalho de pavilhão em carvalho médio, com textura subtil de tábuas e veios
+// (`<pattern>` SVG, sem filtros → barato de pintar em animação/ecrã inteiro e
+// fiel em impressão). Fonte única destas cores. O futebol mantém a cor do clube.
+
+/**
+ * Tons das tábuas (carvalho médio, variação ténue para não competir com as
+ * linhas) — o branco das marcações fica a ≈3:1 ou mais por cima de todos.
+ */
+const MADEIRA_TONS = ["#B98351", "#B07848", "#BC8857", "#AE7744"];
+/** Juntas e veios (castanho escuro, sempre em baixa opacidade). */
+const MADEIRA_JUNTA = "#4A2A10";
+
+const MADEIRA_PADRAO_W = 128;
+const MADEIRA_TABUA_H = 6;
+/** Juntas (x) de cada fiada de tábuas no padrão — desencontradas como no parquet. */
+const MADEIRA_FIADAS: number[][] = [
+  [0, 46, 92],
+  [22, 70, 112],
+  [10, 58, 100],
+  [34, 80, 122],
+];
+
+/**
+ * `<pattern>` do soalho de madeira. Cada fiada tem 3 tábuas de tons ligeiramente
+ * diferentes; a tábua que atravessa o bordo do padrão é desenhada em dois troços
+ * com o mesmo tom para o padrão encaixar sem costura. `id` vem de `useId` (único
+ * por instância — várias miniaturas na mesma página).
+ */
+function MadeiraDefs({ id }: { id: string }) {
+  const altura = MADEIRA_FIADAS.length * MADEIRA_TABUA_H;
+  return (
+    <defs>
+      <pattern
+        id={id}
+        x={0}
+        y={0}
+        width={MADEIRA_PADRAO_W}
+        height={altura}
+        patternUnits="userSpaceOnUse"
+      >
+        {MADEIRA_FIADAS.map((juntas, f) => {
+          const y = f * MADEIRA_TABUA_H;
+          return (
+            <g key={f}>
+              {juntas.map((x0, t) => {
+                const x1 = juntas[t + 1] ?? juntas[0] + MADEIRA_PADRAO_W;
+                const tom = MADEIRA_TONS[(f + t) % MADEIRA_TONS.length];
+                const troco1 = Math.min(x1, MADEIRA_PADRAO_W) - x0;
+                const troco2 = x1 - MADEIRA_PADRAO_W;
+                return (
+                  <g key={t}>
+                    <rect x={x0} y={y} width={troco1} height={MADEIRA_TABUA_H} fill={tom} />
+                    {troco2 > 0 && (
+                      <rect x={0} y={y} width={troco2} height={MADEIRA_TABUA_H} fill={tom} />
+                    )}
+                  </g>
+                );
+              })}
+              {/* Veios: fios finos ao longo da tábua, desfasados por fiada. */}
+              <g stroke={MADEIRA_JUNTA} strokeWidth={0.25}>
+                <line
+                  x1={0}
+                  y1={y + 2 + (f % 2) * 0.6}
+                  x2={MADEIRA_PADRAO_W}
+                  y2={y + 2.4 + (f % 2) * 0.6}
+                  strokeOpacity={0.1}
+                />
+                <line
+                  x1={0}
+                  y1={y + 4.2 - (f % 2) * 0.5}
+                  x2={MADEIRA_PADRAO_W}
+                  y2={y + 3.9 - (f % 2) * 0.5}
+                  strokeOpacity={0.07}
+                />
+              </g>
+              {/* Juntas: topo da fiada + topos das tábuas. */}
+              <g stroke={MADEIRA_JUNTA} strokeOpacity={0.28} strokeWidth={0.35}>
+                <line x1={0} y1={y} x2={MADEIRA_PADRAO_W} y2={y} />
+                {juntas.map((x) => (
+                  <line key={x} x1={x} y1={y} x2={x} y2={y + MADEIRA_TABUA_H} />
+                ))}
+              </g>
+            </g>
+          );
+        })}
+      </pattern>
+    </defs>
+  );
+}
+
+/**
+ * Relvado/piso + contorno + linha de meio-campo + marca central (comum a todos).
+ * `piso` = preenchimento do fundo (default: cor do clube). `ripado` = linhas
+ * horizontais ténues por cima do piso (o futsal dispensa-as — o padrão de
+ * madeira já tem as juntas das tábuas).
+ */
+function Relvado({ piso = RELVA, ripado = true }: { piso?: string; ripado?: boolean }) {
   return (
     <>
       <FundoDefs />
-      <rect x={0} y={0} width={CAMPO_W} height={CAMPO_H} fill={RELVA} />
+      <rect x={0} y={0} width={CAMPO_W} height={CAMPO_H} fill={piso} />
       {/* Vinheta/brilho central — enriquece o acento do clube com volume, sem o
           substituir; as linhas brancas mantêm-se legíveis por cima. */}
       <rect
@@ -186,12 +287,14 @@ function Relvado() {
       {/* Ripado do pavilhão: linhas horizontais finas (textura de soalho/parquet)
           por cima do acento do clube. Muito ténues para não competir com as
           marcações brancas do campo (que se mantêm intactas). */}
-      <g stroke={BRANCO} strokeOpacity={0.06} strokeWidth={0.5}>
-        {Array.from({ length: Math.floor(CAMPO_H / 10) - 1 }, (_, i) => {
-          const y = (i + 1) * 10;
-          return <line key={i} x1={0} y1={y} x2={CAMPO_W} y2={y} />;
-        })}
-      </g>
+      {ripado && (
+        <g stroke={BRANCO} strokeOpacity={0.06} strokeWidth={0.5}>
+          {Array.from({ length: Math.floor(CAMPO_H / 10) - 1 }, (_, i) => {
+            const y = (i + 1) * 10;
+            return <line key={i} x1={0} y1={y} x2={CAMPO_W} y2={y} />;
+          })}
+        </g>
+      )}
       <g filter="url(#campo-linha-relevo)">
         <rect
           x={4}
@@ -295,9 +398,12 @@ function ArcoPenalti({
 
 /** Fundo de futsal (secção 13.1) — quartos de círculo de 6 m e 2.ª penalidade. */
 function FundoFutsal5() {
+  // ids de <pattern> únicos por instância; `useId` devolve ":r0:" → só [A-Za-z0-9].
+  const idMadeira = `campo-madeira-${useId().replace(/[^A-Za-z0-9]/g, "")}`;
   return (
     <g>
-      <Relvado />
+      <MadeiraDefs id={idMadeira} />
+      <Relvado piso={`url(#${idMadeira})`} ripado={false} />
       <g filter="url(#campo-linha-relevo)">
       {/* Balizas nas duas extremidades (baliza de futsal = 3m ≈ 30 unidades).
           Antes só os fundos de futebol as desenhavam; no futsal (e no plano de
@@ -443,6 +549,52 @@ const CFG_FUTEBOL_11: CfgFutebol = {
   arco: { arcR: 37 },
   goalAltura: 23,
 };
+
+/**
+ * Linhas de referência do fundo (x verticais / y horizontais) para as guias de
+ * alinhamento do editor (§11.2). Derivadas das MESMAS configurações que
+ * desenham as marcações, para que o encaixe coincida com o que se vê: contorno,
+ * meio-campo, eixo longitudinal, linhas das áreas e marcas de penálti.
+ */
+export function linhasGuiaCampo(
+  formato: FormatoJogo = FormatoJogo.FUTSAL_5,
+): { xs: number[]; ys: number[] } {
+  const xs = [4, CAMPO_W / 2, CAMPO_W - 4];
+  const ys = [4, MEIO_Y, CAMPO_H - 4];
+  const ladoX = (dist: number) => [4 + dist, CAMPO_W - 4 - dist];
+  let cfg: CfgFutebol | null = null;
+  switch (formato) {
+    case FormatoJogo.FUTEBOL_3_3:
+      cfg = CFG_FUTEBOL_3_3;
+      break;
+    case FormatoJogo.FUTEBOL_5_5:
+      cfg = CFG_FUTEBOL_5_5;
+      break;
+    case FormatoJogo.FUTEBOL_7:
+      cfg = CFG_FUTEBOL_7;
+      break;
+    case FormatoJogo.FUTEBOL_9:
+      cfg = CFG_FUTEBOL_9;
+      break;
+    case FormatoJogo.FUTEBOL_11:
+      cfg = CFG_FUTEBOL_11;
+      break;
+    default:
+      cfg = null;
+  }
+  if (!cfg) {
+    // Futsal: linha da área (6 m → x=64), 2.ª penalidade (10 m → x=100).
+    xs.push(...ladoX(60), ...ladoX(96));
+  } else {
+    for (const area of [cfg.bigArea, cfg.smallArea]) {
+      if (!area) continue;
+      xs.push(...ladoX(area.prof));
+      ys.push(MEIO_Y - area.altura / 2, MEIO_Y + area.altura / 2);
+    }
+    if (cfg.penalti) xs.push(...ladoX(cfg.penalti.dist));
+  }
+  return { xs, ys };
+}
 
 // ─── Linhas de referência do campo (secção 11.5) ─────────────────────────────
 

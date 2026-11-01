@@ -34,9 +34,38 @@ describe("LinhasCampo — fundos por formato (§11.5 / Apêndice B)", () => {
       // Nota: o <defs> (FundoDefs) só contém radialGradient + filter, sem <rect>,
       // logo não influencia esta contagem por substring.
       expect(contar(markup, "<rect")).toBeGreaterThanOrEqual(3);
-      // Relva = cor do clube (--cor-primaria), com fallback laranja da marca.
-      expect(markup).toContain("var(--cor-primaria, #F0531E)");
+      if (formato === FormatoJogo.FUTSAL_5) {
+        // Futsal = piso de madeira (padrão SVG), nunca a cor do clube (2026-11-01).
+        expect(markup).toMatch(/<pattern id="campo-madeira-[A-Za-z0-9]+"/);
+        expect(markup).not.toContain("--cor-primaria");
+      } else {
+        // Futebol = cor do clube (--cor-primaria), com fallback laranja da marca.
+        expect(markup).toContain("var(--cor-primaria, #F0531E)");
+      }
     }
+  });
+
+  it("futsal: o fundo referencia o padrão de madeira da própria instância", () => {
+    const markup = renderToStaticMarkup(
+      createElement(LinhasCampo, { formato: FormatoJogo.FUTSAL_5 }),
+    );
+    const id = /<pattern id="([^"]+)"/.exec(markup)?.[1];
+    expect(id).toBeDefined();
+    expect(markup).toContain(`fill="url(#${id})"`);
+  });
+
+  it("futsal: ids do padrão de madeira são únicos entre instâncias na mesma página", () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        "div",
+        null,
+        createElement(MiniaturaCampo, { diagrama: diagramaVazio }),
+        createElement(MiniaturaCampo, { diagrama: diagramaVazio }),
+      ),
+    );
+    const ids = [...markup.matchAll(/<pattern id="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it("retrocompatível: sem formato === FUTSAL_5", () => {
