@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EditorCampo } from "@/components/campo/EditorCampo";
+import { EcraInteiroCampo } from "@/components/campo/EcraInteiroCampo";
 import { DiagramaReproduzivel } from "@/components/campo/DiagramaReproduzivel";
 import { ImportarSituacaoDialog } from "@/components/jogos/ImportarSituacaoDialog";
 import { rotuloCampoMaiuscula } from "@/components/modelo-jogo/SituacaoJogoForm";
@@ -108,6 +109,7 @@ function CartaoSituacao({
   const [erroVariante, setErroVariante] = useState<string | null>(null);
 
   // Formato diferente (§24.7): desenha sempre o campo da situação.
+  const diagramaGravado = quadro.diagrama;
   const campo = quadro.diagrama?.campo;
   const campoDiferente = campo !== undefined && formato !== null && campo !== formato;
 
@@ -240,24 +242,31 @@ function CartaoSituacao({
             />
           </div>
         </div>
-        <EditorCampo
-          valor={diagrama}
-          onChange={setDiagrama}
-          formato={formato ?? undefined}
-          permitirAdversario
-        />
-        {erroEdicao && <p className="text-corpo-sec text-vermelho-600">{erroEdicao}</p>}
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={guardarNesteJogo} disabled={pending}>
-            {pending ? "A guardar…" : "Só neste jogo"}
-          </Button>
-          <Button variant="outline" onClick={abrirGuardarComoNova} disabled={pending}>
-            Guardar como nova situação
-          </Button>
-          <Button variant="ghost" onClick={() => setEditar(false)} disabled={pending}>
-            Cancelar
-          </Button>
-        </div>
+        {/* §8.10/§24.7: ecrã inteiro para mostrar aos jogadores no tablet. */}
+        <EcraInteiroCampo titulo={nome || quadro.nome}>
+          {() => (
+            <div className="space-y-4">
+              <EditorCampo
+                valor={diagrama}
+                onChange={setDiagrama}
+                formato={formato ?? undefined}
+                permitirAdversario
+              />
+              {erroEdicao && <p className="text-corpo-sec text-vermelho-600">{erroEdicao}</p>}
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={guardarNesteJogo} disabled={pending}>
+                  {pending ? "A guardar…" : "Só neste jogo"}
+                </Button>
+                <Button variant="outline" onClick={abrirGuardarComoNova} disabled={pending}>
+                  Guardar como nova situação
+                </Button>
+                <Button variant="ghost" onClick={() => setEditar(false)} disabled={pending}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+        </EcraInteiroCampo>
 
         <Dialog open={novaAberta} onOpenChange={setNovaAberta}>
           <DialogContent>
@@ -319,13 +328,23 @@ function CartaoSituacao({
         {badgeBiblioteca}
       </div>
 
-      {quadro.diagrama && (
-        <div className="max-w-2xl">
-          <DiagramaReproduzivel
-            diagrama={quadro.diagrama}
-            formato={quadro.diagrama.campo ?? formato ?? undefined}
-          />
-        </div>
+      {diagramaGravado && (
+        // §8.10/§24.7: ecrã inteiro para mostrar aos jogadores no tablet. No
+        // overlay, a largura é limitada pela altura livre (campo 2:1) para o
+        // campo inteiro caber sem scroll.
+        <EcraInteiroCampo titulo={quadro.nome}>
+          {(ecraInteiro) => (
+            <div
+              className={ecraInteiro ? "mx-auto w-full" : "max-w-2xl"}
+              style={ecraInteiro ? { maxWidth: "calc((100dvh - 9rem) * 2)" } : undefined}
+            >
+              <DiagramaReproduzivel
+                diagrama={diagramaGravado}
+                formato={diagramaGravado.campo ?? formato ?? undefined}
+              />
+            </div>
+          )}
+        </EcraInteiroCampo>
       )}
       {campoDiferente && campo && (
         <p className="text-legenda text-cinza-500">

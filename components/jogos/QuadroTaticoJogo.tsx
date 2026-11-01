@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Check, Pencil, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EditorCampo } from "@/components/campo/EditorCampo";
+import { EcraInteiroCampo } from "@/components/campo/EcraInteiroCampo";
 import { CampoDesenho } from "@/components/campo/CampoDesenho";
 import { criarQuadroTatico, atualizarQuadroTatico } from "@/lib/actions/modeloJogo";
 import { NOME_QUADRO_PLANO_JOGO } from "@/lib/schemas/modeloJogo";
@@ -32,12 +33,16 @@ export function QuadroTaticoJogo({
   quadroInicial,
   diagramaFormacao,
   podeGerir,
+  cabecalho,
 }: {
   jogoId: string;
   formato: FormatoJogo | null;
   quadroInicial: { id: string; diagrama: DiagramaCampo | null } | null;
   diagramaFormacao: DiagramaCampo;
   podeGerir: boolean;
+  // Título do bloco (no PlanoTatico, «Quadro tático (x/N titulares)»): partilha a
+  // linha com o botão «Ecrã inteiro».
+  cabecalho: ReactNode;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -138,72 +143,107 @@ export function QuadroTaticoJogo({
     setEditar(false);
   }
 
-  // Leitura (sem permissão de gerir o quadro tático — §8.10 MODELO_JOGO_GERIR).
-  if (!podeGerir) {
-    return temElementos ? (
-      <div className="mx-auto max-w-xl">
-        <CampoDesenho diagrama={baseVisivel} formato={formato ?? undefined} />
+  // Campo só de leitura: em ecrã inteiro ocupa toda a área livre (o SVG mantém a
+  // proporção — `preserveAspectRatio` por omissão); fora dele, largura limitada.
+  function campoLeitura(ecraInteiro: boolean) {
+    return (
+      <div className={ecraInteiro ? "min-h-0 flex-1" : "mx-auto max-w-xl"}>
+        <CampoDesenho
+          diagrama={baseVisivel}
+          formato={formato ?? undefined}
+          className={ecraInteiro ? "h-full w-full rounded-md" : undefined}
+        />
       </div>
-    ) : (
-      <p className="text-corpo-sec text-cinza-500">
-        Marca os titulares e atribui-lhes posição para veres a formação.
-      </p>
     );
   }
 
+  // Leitura (sem permissão de gerir o quadro tático — §8.10 MODELO_JOGO_GERIR).
+  if (!podeGerir) {
+    return temElementos ? (
+      <EcraInteiroCampo titulo="Quadro tático" cabecalho={cabecalho}>
+        {(ecraInteiro) => campoLeitura(ecraInteiro)}
+      </EcraInteiroCampo>
+    ) : (
+      <div className="space-y-3">
+        {cabecalho}
+        <p className="text-corpo-sec text-cinza-500">
+          Marca os titulares e atribui-lhes posição para veres a formação.
+        </p>
+      </div>
+    );
+  }
+
+  // §8.10: ecrã inteiro para mostrar o quadro aos jogadores no tablet — em
+  // leitura (com elementos) e em edição (o editor continua utilizável).
   if (editar) {
     return (
-      <div className="space-y-4">
-        <EditorCampo
-          valor={diagrama}
-          onChange={setDiagrama}
-          formato={formato ?? undefined}
-          permitirAdversario
-        />
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={guardar} disabled={pending}>
-            <Check className="h-4 w-4" />
-            {pending ? "A guardar…" : "Guardar quadro"}
-          </Button>
-          <Button variant="outline" onClick={reporFormacao} disabled={pending}>
-            <RotateCcw className="h-4 w-4" />
-            Repor formação
-          </Button>
-          <Button variant="ghost" onClick={cancelar} disabled={pending}>
-            Cancelar
-          </Button>
-        </div>
+      <EcraInteiroCampo titulo="Quadro tático" cabecalho={cabecalho}>
+        {() => (
+          <div className="space-y-4">
+            <EditorCampo
+              valor={diagrama}
+              onChange={setDiagrama}
+              formato={formato ?? undefined}
+              permitirAdversario
+            />
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={guardar} disabled={pending}>
+                <Check className="h-4 w-4" />
+                {pending ? "A guardar…" : "Guardar quadro"}
+              </Button>
+              <Button variant="outline" onClick={reporFormacao} disabled={pending}>
+                <RotateCcw className="h-4 w-4" />
+                Repor formação
+              </Button>
+              <Button variant="ghost" onClick={cancelar} disabled={pending}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+      </EcraInteiroCampo>
+    );
+  }
+
+  const botaoEditar = (
+    <div className="flex justify-end">
+      <Button variant="outline" size="sm" onClick={abrirEditor}>
+        {temElementos ? (
+          <>
+            <Pencil className="h-4 w-4" />
+            Editar quadro tático
+          </>
+        ) : (
+          <>
+            <Plus className="h-4 w-4" />
+            Criar quadro tático
+          </>
+        )}
+      </Button>
+    </div>
+  );
+
+  if (!temElementos) {
+    return (
+      <div className="space-y-3">
+        {cabecalho}
+        <p className="text-corpo-sec text-cinza-500">
+          Sem quadro tático. Parte da formação dos titulares e ajusta as posições,
+          adiciona adversários e desenha jogadas.
+        </p>
+        {botaoEditar}
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {temElementos ? (
-        <div className="mx-auto max-w-xl">
-          <CampoDesenho diagrama={baseVisivel} formato={formato ?? undefined} />
+    <EcraInteiroCampo titulo="Quadro tático" cabecalho={cabecalho}>
+      {(ecraInteiro) => (
+        <div className={ecraInteiro ? "flex min-h-0 flex-1 flex-col gap-3" : "space-y-3"}>
+          {campoLeitura(ecraInteiro)}
+          {botaoEditar}
         </div>
-      ) : (
-        <p className="text-corpo-sec text-cinza-500">
-          Sem quadro tático. Parte da formação dos titulares e ajusta as posições,
-          adiciona adversários e desenha jogadas.
-        </p>
       )}
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={abrirEditor}>
-          {temElementos ? (
-            <>
-              <Pencil className="h-4 w-4" />
-              Editar quadro tático
-            </>
-          ) : (
-            <>
-              <Plus className="h-4 w-4" />
-              Criar quadro tático
-            </>
-          )}
-        </Button>
-      </div>
-    </div>
+    </EcraInteiroCampo>
   );
 }
